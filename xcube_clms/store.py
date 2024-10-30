@@ -46,7 +46,7 @@ class CLMSDataStore(DataStore, ABC):
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
         params = dict(
             url=JsonStringSchema(
-                title="CLMS URL",
+                title="URL of CLMS API",
             )
         )
         return JsonObjectSchema(
