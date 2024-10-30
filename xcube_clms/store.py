@@ -47,7 +47,6 @@ class CLMSDataStore(DataStore, ABC):
         params = dict(
             url=JsonStringSchema(
                 title="CMEMS Username",
-                description="Preferably set by environment variable CMEMS_USERNAME ",
             )
         )
         return JsonObjectSchema(
