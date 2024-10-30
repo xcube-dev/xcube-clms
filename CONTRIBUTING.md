@@ -40,4 +40,4 @@ line:
 
 1. Python standard library imports, e.g., `os`, `typing`, etc
 2. 3rd-party imports, e.g., `xarray`, `zarr`, etc
-3. Relative `xcube_stac` module imports using `.` prefix.
+3. Relative `xcube_clms` module imports using `.` prefix.
