@@ -6,30 +6,30 @@ build-backend = "setuptools.build_meta"
 name = "xcube_clms"
 dynamic = ["version"]
 authors = [
-  {name = "Yogesh Kumar Baljeet Singh", email = "yogesh.baljeetsingh@brockmann-consult.de"}
+    { name = "Yogesh Kumar Baljeet Singh", email = "yogesh.baljeetsingh@brockmann-consult.de" }
 ]
 description = """\
   xcube datastore for accessing datasets through the CLMS API\
   """
 keywords = [
-  "analysis ready data", "data science", "datacube", "xarray", "zarr", "xcube", "clms"
+    "analysis ready data", "data science", "datacube", "xarray", "zarr", "xcube", "clms"
 ]
-readme = {file = "README.md", content-type = "text/markdown"}
-license = {text = "MIT"}
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { text = "MIT" }
 requires-python = ">=3.8"
 dependencies = [
 ]
 
 [tool.setuptools.dynamic]
-version = {attr = "xcube_clms.__version__"}
+version = { attr = "xcube_clms.__version__" }
 
 [tool.setuptools.packages.find]
-exclude = [ "test*", "doc*" ]
+exclude = ["test*", "doc*"]
 
 [project.optional-dependencies]
 dev = [
-  "pytest",
-  "flake8"
+    "pytest",
+    "flake8"
 ]
 
 [project.urls]
