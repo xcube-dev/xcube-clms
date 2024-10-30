@@ -27,7 +27,7 @@ checklist are addressed in your PR.
   `pytest` must run without errors.
 * Add unit tests for any new code not yet covered by tests.
 * Make sure test coverage is close to 100% for any change.
-  Use `pytest --cov=xcube_stac --cov-report=html` to verify.
+  Use `pytest --cov=xcube_clms --cov-report=html` to verify.
 
 ## Code style <a name="code-style"></a>
 
