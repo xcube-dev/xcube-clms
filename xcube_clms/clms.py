@@ -28,6 +28,6 @@ class CLMS:
         self._url = url
 
     def open_dataset(
-        self, data_id: str, open_params: dict
+        self, data_id: str, **open_params
     ) -> xr.Dataset:
         raise NotImplementedError

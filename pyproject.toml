@@ -9,7 +9,7 @@ authors = [
   {name = "Yogesh Kumar Baljeet Singh", email = "yogesh.baljeetsingh@brockmann-consult.de"}
 ]
 description = """\
-  xcube datastore for accessing CLMS datastore\
+  xcube datastore for accessing datasets through the CLMS API\
   """
 keywords = [
   "analysis ready data", "data science", "datacube", "xarray", "zarr", "xcube", "clms"

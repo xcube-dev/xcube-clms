@@ -62,13 +62,17 @@ class CLMSDataStore(DataStore, ABC):
     def get_data_types_for_data(self, data_id: str) -> Tuple[str, ...]:
         raise NotImplementedError
 
-    def get_data_ids(self):
+    def get_data_ids(
+        self, data_type: DataTypeLike = None, include_attrs: Container[str] = None
+    ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
         raise NotImplementedError
 
     def has_data(self, data_id: str, data_type: str = None) -> bool:
         raise NotImplementedError
 
-    def describe_data(self, data_id: str) -> DataDescriptor:
+    def describe_data(
+        self, data_id: str, data_type: DataTypeLike = None
+    ) -> DataDescriptor:
         raise NotImplementedError
 
     def get_data_opener_ids(
