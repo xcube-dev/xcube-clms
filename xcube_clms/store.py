@@ -21,16 +21,13 @@
 
 import logging
 from abc import ABC
-from typing import Tuple
+from typing import Tuple, Iterator, Container, Any, Union
 
 import xarray as xr
-from xcube.core.store import (
-    DataDescriptor,
-    DataStore,
-    DataTypeLike
-)
+from xcube.core.store import DataDescriptor, DataStore, DataTypeLike
 from xcube.util.jsonschema import (
     JsonObjectSchema,
+    JsonStringSchema,
 )
 
 from .clms import CLMS
@@ -39,21 +36,23 @@ _LOG = logging.getLogger("xcube")
 
 
 class CLMSDataStore(DataStore, ABC):
-    """ CLMS implementation of the data store.
-    Args:
-        DataStore (xcube.core.store.DataStore): data store defined
-            in the xcube data store framework.
-    Returns:
-        CLMSDataStore: data store defined in the ``xcube_clms`` plugin.
-    """
+    """CLMS implementation of the data store defined in the ``xcube_clms``
+    plugin."""
 
     def __init__(self, **clms_kwargs):
         self.clms = CLMS(**clms_kwargs)
 
-
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
-        raise NotImplementedError
+        params = dict(
+            url=JsonStringSchema(
+                title="CMEMS Username",
+                description="Preferably set by environment variable CMEMS_USERNAME ",
+            )
+        )
+        return JsonObjectSchema(
+            properties=dict(**params), required=None, additional_properties=False
+        )
 
     @classmethod
     def get_data_types(cls) -> Tuple[str, ...]:
@@ -89,3 +88,14 @@ class CLMSDataStore(DataStore, ABC):
         self, data_id: str, opener_id: str = None, **open_params
     ) -> xr.Dataset:
         return self.clms.open_dataset(data_id, **open_params)
+
+    def search_data(
+        self, data_type: DataTypeLike = None, **search_params
+    ) -> Iterator[DataDescriptor]:
+        raise NotImplementedError("search_data() operation is not supported yet")
+
+    @classmethod
+    def get_search_params_schema(
+        cls, data_type: DataTypeLike = None
+    ) -> JsonObjectSchema:
+        pass
