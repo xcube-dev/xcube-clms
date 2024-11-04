@@ -18,5 +18,17 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import logging
 
 DATA_STORE_ID = "clms"
+
+# CLMS API Constants
+SEARCH_ENDPOINT = "@search"
+DOWNLOAD_ENDPOINT = "@datarequest_post"
+TASK_STATUS_ENDPOINT = "@datarequest_search"
+PORTAL_TYPE = "DataSet"
+HEADERS = {"Accept": "application/json"}
+
+# Logging
+logging.basicConfig(level=logging.DEBUG)
+LOG = logging.getLogger("xcube.clms")
