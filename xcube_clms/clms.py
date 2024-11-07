@@ -133,6 +133,16 @@ class CLMS:
     def _convert_list_dict_to_list_str(data: list[dict[str, Any]]) -> list[str]:
         return [list(d.values())[0] for d in data]
 
+    def access_item(self, data_id) -> dict:
+        datasets = [
+            item for item in self._datasets_info if data_id == item[CLMS_DATA_ID]
+        ]
+        if len(datasets) != 1:
+            raise Exception(
+                f"Expected one item for data_id: {data_id}, found {len(datasets)}."
+            )
+        return datasets[0]
+
     def get_data_ids(self) -> list[str]:
         self._fetch_all_datasets()
         data_ids_with_keys = self._filter_dataset_attrs([CLMS_DATA_ID])
@@ -143,14 +153,8 @@ class CLMS:
     ) -> tuple[str, dict[str, Any]]:
         """Extracts the desired attributes based on the data_id from the list of datasets."""
         self._fetch_all_datasets()
-        datasets = [
-            item for item in self._datasets_info if data_id == item[CLMS_DATA_ID]
-        ]
-        dataset = self._filter_dataset_attrs(attrs, datasets)
-        if len(dataset) != 1:
-            raise Exception(
-                f"Expected one item for data_id: {data_id}, found {len(dataset)}."
-            )
+        item = self.access_item(data_id)
+        dataset = self._filter_dataset_attrs(attrs, [item])
         return data_id, dataset[0]
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
@@ -163,3 +167,12 @@ class CLMS:
                 return False
             return True
         return False
+
+    def get_extent(self, data_id: str) -> dict:
+        self._fetch_all_datasets()
+        item = self.access_item(data_id)
+        bbox = item.get("geographicBoundingBox")
+        crs = item.get("coordinateReferenceSystemList")
+        time_range = (item.get("temporalExtentStart"), item.get("temporalExtentEnd"))
+
+        return dict(bbox=bbox, time_range=time_range, crs=crs)

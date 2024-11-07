@@ -24,8 +24,13 @@ from abc import ABC
 from typing import Tuple, Iterator, Container, Any, Union
 
 import xarray as xr
-from xcube.core.store import DataDescriptor, DataStore, DataTypeLike, \
-    DATASET_TYPE
+from xcube.core.store import (
+    DataDescriptor,
+    DataStore,
+    DataTypeLike,
+    DATASET_TYPE,
+    DatasetDescriptor,
+)
 from xcube.util.jsonschema import (
     JsonObjectSchema,
     JsonStringSchema,
@@ -78,7 +83,9 @@ class CLMSDataStore(DataStore, ABC):
     def describe_data(
         self, data_id: str, data_type: DataTypeLike = None
     ) -> DataDescriptor:
-        raise NotImplementedError
+        assert_valid_data_type(data_type)
+        metadata = self.clms.get_extent(data_id)
+        return DatasetDescriptor(data_id, **metadata)
 
     def get_data_opener_ids(
         self, data_id: str = None, data_type: DataTypeLike = None
