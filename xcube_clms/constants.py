@@ -30,5 +30,5 @@ PORTAL_TYPE = "DataSet"
 HEADERS = {"Accept": "application/json"}
 
 # Logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("xcube.clms")

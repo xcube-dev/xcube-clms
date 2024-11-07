@@ -18,7 +18,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from typing import Optional, List, Dict
+import inspect
+from typing import Optional, List, Dict, Union, Iterator, Any, get_args
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 
@@ -26,67 +27,75 @@ import requests
 import xarray as xr
 from requests import RequestException
 
-from xcube_clms.constants import SEARCH_ENDPOINT, PORTAL_TYPE, HEADERS
+from xcube_clms.constants import SEARCH_ENDPOINT, PORTAL_TYPE, HEADERS, LOG
 
 
 class CLMS:
 
     def __init__(self, url: str):
         self.url = url
-        self.datasets_info: List[Dict] = []
-        self.metadata_fields: List[str] = []
-        self.filtered_dataset_info: List[Dict] = []
+        self._datasets_info: List[Dict] = []
+        self._metadata_fields: List[str] = []
+        self._filtered_dataset_info: List[Dict] = []
+        self._metadata: List[str] = []
 
     def open_dataset(self, data_id: str, **open_params) -> xr.Dataset:
         raise NotImplementedError
 
-    def search_datasets(self, metadata_fields: List[str]) -> List[Dict]:
-        if (len(self.datasets_info) == 0) | (self.metadata_fields != metadata_fields):
-            self.datasets_info = self._get_all_datasets(metadata_fields)
+    def search_datasets(
+        self, metadata_fields: Optional[List[str] | None] = None
+    ) -> List[Dict]:
+        if len(self._datasets_info) == 0:
+            self._datasets_info = self._get_all_datasets()
 
-            self.filtered_dataset_info = self._filter_dataset_metadata_fields()
+        signature = inspect.signature(self.search_datasets)
+        if metadata_fields is not None and not isinstance(metadata_fields, List):
+            raise TypeError(
+                f"Expected instance {get_args(signature.parameters.get('metadata_fields').annotation)}, got {type(metadata_fields).__name__}"
+            )
 
-        return self.filtered_dataset_info
+        if self._metadata_fields != metadata_fields:
+            self._metadata_fields = metadata_fields
+            self._filtered_dataset_info = self._filter_dataset_metadata_fields()
+
+        return self._filtered_dataset_info
 
     def _filter_dataset_metadata_fields(self) -> List[Dict]:
-        if self.metadata_fields:
+        if self._metadata_fields:
             return [
-                {key: item[key] for key in self.metadata_fields if key in item}
-                for item in self.datasets_info
+                {key: item[key] for key in self._metadata_fields if key in item}
+                for item in self._datasets_info
             ]
         else:
-            return self.datasets_info
+            return self._datasets_info
 
-    def _get_all_datasets(self, metadata_fields: List[str]) -> List[Dict]:
-        self.datasets_info = []
-        self.metadata_fields = metadata_fields
+    def _get_all_datasets(self) -> List[Dict]:
+        self._datasets_info = []
 
-        api_url = self.build_api_url(SEARCH_ENDPOINT, self.metadata_fields)
-        b_start = 0
-        b_size = 25
-
-        while True:
-            response = self._make_api_request(
-                f"{api_url}&b_start={b_start}&b_size={b_size}"
-            )
-            items = response.get("items", [])
-            self.datasets_info.extend(items)
-
-            if len(items) < b_size:
-                break
-
-            b_start += b_size
-
-        return self.datasets_info
-
-    def get_api_metadata(self):
         api_url = self.build_api_url(SEARCH_ENDPOINT)
         response = self._make_api_request(api_url)
-        items = response.get("items", [])
+        self._datasets_info.extend(response.get("items", []))
 
-        if len(items) > 0:
-            return list(items[0])
-        return []
+        while True:
+            if not "next" in response["batching"]:
+                break
+            response = requests.get(
+                response["batching"]["next"], headers={"Accept": "application/json"}
+            ).json()
+
+            self._datasets_info.extend(response.get("items", []))
+
+        return self._datasets_info
+
+    def get_api_metadata(self):
+        if not self._metadata:
+            api_url = self.build_api_url(SEARCH_ENDPOINT)
+            response = self._make_api_request(api_url)
+            items = response.get("items", [])
+
+            if len(items) > 0:
+                self._metadata = list(items[0])
+        return self._metadata
 
     @staticmethod
     def _make_api_request(url: str) -> dict:
@@ -95,7 +104,7 @@ class CLMS:
             response.raise_for_status()
             return response.json()
         except (HTTPError, RequestException, ValueError) as err:
-            print(f"API error: {err}")
+            LOG.error(f"API error: {err}")
             return {}
 
     def build_api_url(
@@ -110,3 +119,8 @@ class CLMS:
         query_params = urlencode(params)
 
         return f"{self.url}/{api_endpoint}/?portal_type={PORTAL_TYPE}&{query_params}"
+
+    def get_data_ids(
+        self,
+    ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
+        pass
