@@ -26,9 +26,11 @@ DATA_STORE_ID = "clms"
 SEARCH_ENDPOINT = "@search"
 DOWNLOAD_ENDPOINT = "@datarequest_post"
 TASK_STATUS_ENDPOINT = "@datarequest_search"
-PORTAL_TYPE = "DataSet"
+PORTAL_TYPE = {"portal_type": "DataSet"}
 HEADERS = {"Accept": "application/json"}
+METADATA_FIELDS = "metadata_fields"
+FULL_SCHEMA = "fullobjects"
+CLMS_DATA_ID = "id"
 
 # Logging
-logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("xcube.clms")

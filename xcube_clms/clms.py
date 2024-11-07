@@ -19,7 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import inspect
-from typing import Optional, List, Dict, Union, Iterator, Any, get_args
+from typing import Optional, Any, get_args, Container
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 
@@ -27,66 +27,78 @@ import requests
 import xarray as xr
 from requests import RequestException
 
-from xcube_clms.constants import SEARCH_ENDPOINT, PORTAL_TYPE, HEADERS, LOG
+from xcube_clms.constants import (
+    SEARCH_ENDPOINT,
+    PORTAL_TYPE,
+    HEADERS,
+    LOG,
+    CLMS_DATA_ID,
+    METADATA_FIELDS,
+    FULL_SCHEMA,
+)
 
 
 class CLMS:
 
     def __init__(self, url: str):
         self._url = url
-        self._datasets_info: List[Dict[str, Any]] = []
-        self._metadata_fields: List[str] = []
-        self._filtered_dataset_info: List[Dict[str, Any]] = []
-        self._metadata: List[str] = []
+        self._datasets_info: list[dict[str, Any]] = []
+        self._attrs: list[str] = []
+        self._metadata: list[str] = []
 
     def open_dataset(self, data_id: str, **open_params) -> xr.Dataset:
         raise NotImplementedError
 
-    def search_datasets(
-        self, metadata_fields: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
-        if len(self._datasets_info) == 0:
-            self._datasets_info = self._fetch_all_datasets()
+    def _filter_dataset_attrs(
+        self, attrs: Container[str], datasets: list[dict[str, Any]] = None
+    ) -> list[dict[str, Any]]:
+        """
+        Filter datasets based on specified attributes.
 
-        signature = inspect.signature(self.search_datasets)
-        if metadata_fields is not None and not isinstance(metadata_fields, List):
+        Args:
+            attrs: A container of attribute names to filter for in each dataset.
+
+        Returns:
+           A list of dictionaries with filtered datasets.
+        """
+        datasets = datasets or self._fetch_all_datasets()
+
+        supported_keys = self._get_metadata_fields()
+
+        signature = inspect.signature(self._filter_dataset_attrs)
+        if (attrs is not None and not isinstance(attrs, (list, set, tuple))) | (
+            attrs is None
+        ):
             raise TypeError(
-                f"Expected instance {get_args(signature.parameters.get('metadata_fields').annotation)}, got {type(metadata_fields).__name__}"
+                f"Expected instance "
+                f"{get_args(signature.parameters.get('attrs').annotation)}, "
+                f"got {type(attrs).__name__}"
             )
 
-        if self._metadata_fields != metadata_fields:
-            self._metadata_fields = metadata_fields
-            self._filtered_dataset_info = self._filter_dataset_metadata_fields()
+        return [
+            {key: item[key] for key in supported_keys if key in attrs}
+            for item in datasets
+        ]
 
-        return self._filtered_dataset_info
+    def _fetch_all_datasets(self) -> list[dict[str, Any]]:
+        if not self._datasets_info:
+            LOG.info(f"Fetching all datasets from {self._url}")
 
-    def _filter_dataset_metadata_fields(self) -> List[Dict[str, Any]]:
-        if self._metadata_fields:
-            return [
-                {key: item[key] for key in self._metadata_fields if key in item}
-                for item in self._datasets_info
-            ]
-        else:
-            return self._datasets_info
+            api_url = self._build_api_url(SEARCH_ENDPOINT)
+            response = self._make_api_request(api_url)
 
-    def _fetch_all_datasets(self) -> List[Dict[str, Any]]:
-        self._datasets_info = []
-
-        api_url = self.build_api_url(SEARCH_ENDPOINT)
-        response = self._make_api_request(api_url)
-
-        while True:
-            self._datasets_info.extend(response.get("items", []))
-            next_page = response.get("batching", {}).get("next")
-            if not next_page:
-                break
-            response = self._make_api_request(next_page)
+            while True:
+                self._datasets_info.extend(response.get("items", []))
+                next_page = response.get("batching", {}).get("next")
+                if not next_page:
+                    break
+                response = self._make_api_request(next_page)
 
         return self._datasets_info
 
-    def get_metadata_fields(self):
+    def _get_metadata_fields(self):
         if not self._metadata:
-            api_url = self.build_api_url(SEARCH_ENDPOINT)
+            api_url = self._build_api_url(SEARCH_ENDPOINT)
             response = self._make_api_request(api_url)
             items = response.get("items", [])
 
@@ -104,21 +116,41 @@ class CLMS:
             LOG.error(f"API error: {err}")
             return {}
 
-    def build_api_url(
+    def _build_api_url(
         self, api_endpoint: str, metadata_fields: Optional[list] = None
     ) -> str:
-        params = {"portal_type": PORTAL_TYPE}
+        params = PORTAL_TYPE
         if metadata_fields:
-            params["metadata_fields"] = ",".join(metadata_fields)
+            params[METADATA_FIELDS] = ",".join(metadata_fields)
         else:
-            params["fullobjects"] = "1"
+            params[FULL_SCHEMA] = "1"
 
         query_params = urlencode(params)
 
         return f"{self._url}/{api_endpoint}/?{query_params}"
 
-    def get_data_ids(
-        self,
-    ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
-        if len(self._datasets_info) == 0:
-            self.search_datasets()
+    @staticmethod
+    def _convert_list_dict_to_list_str(data: list[dict[str, Any]]) -> list[str]:
+        return [list(d.values())[0] for d in data]
+
+    def get_data_ids(self) -> list[str]:
+        if self._datasets_info:
+            self._fetch_all_datasets()
+        data_ids_with_keys = self._filter_dataset_attrs([CLMS_DATA_ID])
+        return self._convert_list_dict_to_list_str(data_ids_with_keys)
+
+    def get_data_ids_with_attrs(
+        self, attrs: Container[str], data_id: str
+    ) -> tuple[str, dict[str, Any]]:
+        """Extracts the desired attributes based on the data_id from the list of datasets."""
+        if self._datasets_info:
+            self._fetch_all_datasets()
+        datasets = [
+            item for item in self._datasets_info if data_id == item[CLMS_DATA_ID]
+        ]
+        dataset = self._filter_dataset_attrs(attrs, datasets)
+        if len(dataset) > 1:
+            raise Exception(
+                f"More than one item found for data_id: {data_id} provided."
+            )
+        return data_id, dataset[0]

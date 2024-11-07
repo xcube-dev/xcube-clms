@@ -34,8 +34,6 @@ from xcube.util.jsonschema import (
 from .clms import CLMS
 from .utils import assert_valid_data_type
 
-_LOG = logging.getLogger("xcube")
-
 
 class CLMSDataStore(DataStore, ABC):
     """CLMS implementation of the data store defined in the ``xcube_clms``
@@ -43,6 +41,7 @@ class CLMSDataStore(DataStore, ABC):
 
     def __init__(self, **clms_kwargs):
         self.clms = CLMS(**clms_kwargs)
+        logging.basicConfig(level=logging.INFO)
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -67,10 +66,11 @@ class CLMSDataStore(DataStore, ABC):
     ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
         assert_valid_data_type(data_type)
         data_ids = self.clms.get_data_ids()
-        if include_attrs is None:
-            pass
-        else:
-            pass
+        for data_id in data_ids:
+            if include_attrs is None:
+                yield data_id
+            else:
+                yield self.clms.get_data_ids_with_attrs(include_attrs, data_id)
 
     def has_data(self, data_id: str, data_type: str = None) -> bool:
         raise NotImplementedError
