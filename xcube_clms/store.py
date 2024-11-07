@@ -59,7 +59,7 @@ class CLMSDataStore(DataStore, ABC):
         return (DATASET_TYPE.alias,)
 
     def get_data_types_for_data(self, data_id: str) -> Tuple[str, ...]:
-        raise self.get_data_types()
+        return self.get_data_types()
 
     def get_data_ids(
         self, data_type: DataTypeLike = None, include_attrs: Container[str] = None
