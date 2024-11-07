@@ -72,8 +72,8 @@ class CLMSDataStore(DataStore, ABC):
             else:
                 yield self.clms.get_data_ids_with_attrs(include_attrs, data_id)
 
-    def has_data(self, data_id: str, data_type: str = None) -> bool:
-        raise NotImplementedError
+    def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
+        return self.clms.has_data(data_id, data_type)
 
     def describe_data(
         self, data_id: str, data_type: DataTypeLike = None

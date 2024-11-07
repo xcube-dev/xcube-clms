@@ -1,5 +1,7 @@
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
+# Using the functions below from xcube-stac
+
 
 def assert_valid_data_type(data_type: DataTypeLike):
     """Auxiliary function to assert if data type is supported

@@ -26,6 +26,7 @@ from urllib.parse import urlencode
 import requests
 import xarray as xr
 from requests import RequestException
+from xcube.core.store import DataTypeLike
 
 from xcube_clms.constants import (
     SEARCH_ENDPOINT,
@@ -36,6 +37,7 @@ from xcube_clms.constants import (
     METADATA_FIELDS,
     FULL_SCHEMA,
 )
+from xcube_clms.utils import is_valid_data_type
 
 
 class CLMS:
@@ -43,7 +45,6 @@ class CLMS:
     def __init__(self, url: str):
         self._url = url
         self._datasets_info: list[dict[str, Any]] = []
-        self._attrs: list[str] = []
         self._metadata: list[str] = []
 
     def open_dataset(self, data_id: str, **open_params) -> xr.Dataset:
@@ -82,10 +83,11 @@ class CLMS:
 
     def _fetch_all_datasets(self) -> list[dict[str, Any]]:
         if not self._datasets_info:
-            LOG.info(f"Fetching all datasets from {self._url}")
+            LOG.info(
+                f"Datasets not fetched yet. Fetching all datasets now from {self._url}"
+            )
 
-            api_url = self._build_api_url(SEARCH_ENDPOINT)
-            response = self._make_api_request(api_url)
+            response = self._make_api_request(self._build_api_url(SEARCH_ENDPOINT))
 
             while True:
                 self._datasets_info.extend(response.get("items", []))
@@ -98,12 +100,11 @@ class CLMS:
 
     def _get_metadata_fields(self):
         if not self._metadata:
-            api_url = self._build_api_url(SEARCH_ENDPOINT)
-            response = self._make_api_request(api_url)
+            response = self._make_api_request(self._build_api_url(SEARCH_ENDPOINT))
             items = response.get("items", [])
 
             if len(items) > 0:
-                self._metadata = list(items[0])
+                self._metadata = list(items[0].keys())
         return self._metadata
 
     @staticmethod
@@ -120,10 +121,9 @@ class CLMS:
         self, api_endpoint: str, metadata_fields: Optional[list] = None
     ) -> str:
         params = PORTAL_TYPE
+        params[FULL_SCHEMA] = "1"
         if metadata_fields:
             params[METADATA_FIELDS] = ",".join(metadata_fields)
-        else:
-            params[FULL_SCHEMA] = "1"
 
         query_params = urlencode(params)
 
@@ -134,8 +134,7 @@ class CLMS:
         return [list(d.values())[0] for d in data]
 
     def get_data_ids(self) -> list[str]:
-        if self._datasets_info:
-            self._fetch_all_datasets()
+        self._fetch_all_datasets()
         data_ids_with_keys = self._filter_dataset_attrs([CLMS_DATA_ID])
         return self._convert_list_dict_to_list_str(data_ids_with_keys)
 
@@ -143,14 +142,24 @@ class CLMS:
         self, attrs: Container[str], data_id: str
     ) -> tuple[str, dict[str, Any]]:
         """Extracts the desired attributes based on the data_id from the list of datasets."""
-        if self._datasets_info:
-            self._fetch_all_datasets()
+        self._fetch_all_datasets()
         datasets = [
             item for item in self._datasets_info if data_id == item[CLMS_DATA_ID]
         ]
         dataset = self._filter_dataset_attrs(attrs, datasets)
-        if len(dataset) > 1:
+        if len(dataset) != 1:
             raise Exception(
-                f"More than one item found for data_id: {data_id} provided."
+                f"Expected one item for data_id: {data_id}, found {len(dataset)}."
             )
         return data_id, dataset[0]
+
+    def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
+        if is_valid_data_type(data_type):
+            self._fetch_all_datasets()
+            datasets = [
+                item for item in self._datasets_info if data_id == item[CLMS_DATA_ID]
+            ]
+            if len(datasets) == 0:
+                return False
+            return True
+        return False
