@@ -33,20 +33,20 @@ from xcube_clms.constants import SEARCH_ENDPOINT, PORTAL_TYPE, HEADERS, LOG
 class CLMS:
 
     def __init__(self, url: str):
-        self.url = url
-        self._datasets_info: List[Dict] = []
+        self._url = url
+        self._datasets_info: List[Dict[str, Any]] = []
         self._metadata_fields: List[str] = []
-        self._filtered_dataset_info: List[Dict] = []
+        self._filtered_dataset_info: List[Dict[str, Any]] = []
         self._metadata: List[str] = []
 
     def open_dataset(self, data_id: str, **open_params) -> xr.Dataset:
         raise NotImplementedError
 
     def search_datasets(
-        self, metadata_fields: Optional[List[str] | None] = None
-    ) -> List[Dict]:
+        self, metadata_fields: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         if len(self._datasets_info) == 0:
-            self._datasets_info = self._get_all_datasets()
+            self._datasets_info = self._fetch_all_datasets()
 
         signature = inspect.signature(self.search_datasets)
         if metadata_fields is not None and not isinstance(metadata_fields, List):
@@ -60,7 +60,7 @@ class CLMS:
 
         return self._filtered_dataset_info
 
-    def _filter_dataset_metadata_fields(self) -> List[Dict]:
+    def _filter_dataset_metadata_fields(self) -> List[Dict[str, Any]]:
         if self._metadata_fields:
             return [
                 {key: item[key] for key in self._metadata_fields if key in item}
@@ -69,25 +69,22 @@ class CLMS:
         else:
             return self._datasets_info
 
-    def _get_all_datasets(self) -> List[Dict]:
+    def _fetch_all_datasets(self) -> List[Dict[str, Any]]:
         self._datasets_info = []
 
         api_url = self.build_api_url(SEARCH_ENDPOINT)
         response = self._make_api_request(api_url)
-        self._datasets_info.extend(response.get("items", []))
 
         while True:
-            if not "next" in response["batching"]:
-                break
-            response = requests.get(
-                response["batching"]["next"], headers={"Accept": "application/json"}
-            ).json()
-
             self._datasets_info.extend(response.get("items", []))
+            next_page = response.get("batching", {}).get("next")
+            if not next_page:
+                break
+            response = self._make_api_request(next_page)
 
         return self._datasets_info
 
-    def get_api_metadata(self):
+    def get_metadata_fields(self):
         if not self._metadata:
             api_url = self.build_api_url(SEARCH_ENDPOINT)
             response = self._make_api_request(api_url)
@@ -118,9 +115,10 @@ class CLMS:
 
         query_params = urlencode(params)
 
-        return f"{self.url}/{api_endpoint}/?portal_type={PORTAL_TYPE}&{query_params}"
+        return f"{self._url}/{api_endpoint}/?{query_params}"
 
     def get_data_ids(
         self,
     ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
-        pass
+        if len(self._datasets_info) == 0:
+            self.search_datasets()
