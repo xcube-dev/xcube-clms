@@ -36,6 +36,7 @@ from xcube_clms.constants import (
     CLMS_DATA_ID,
     METADATA_FIELDS,
     FULL_SCHEMA,
+    DATASET_FORMAT,
 )
 from xcube_clms.utils import is_valid_data_type
 
@@ -188,3 +189,9 @@ class CLMS:
         ]
 
         return dict(bbox=bbox, time_range=time_range, crs=crs[0])
+
+    def get_data_id_format(self, data_id: str) -> str:
+        self._fetch_all_datasets()
+        item = self.access_item(data_id)
+        format_list = self._filter_dataset_attrs([DATASET_FORMAT], [item])
+        return format_list[0].get(DATASET_FORMAT)[0]

@@ -31,6 +31,13 @@ HEADERS = {"Accept": "application/json"}
 METADATA_FIELDS = "metadata_fields"
 FULL_SCHEMA = "fullobjects"
 CLMS_DATA_ID = "id"
+DATASET_FORMAT = "distribution_format_list"
 
 # Logging
 LOG = logging.getLogger("xcube.clms")
+
+# DataOpener IDs
+DATA_OPENER_IDS = (
+    f"dataset:netcdf:{DATA_STORE_ID}",
+    f"dataset:geotiff:{DATA_STORE_ID}",
+)

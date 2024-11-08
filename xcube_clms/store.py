@@ -30,6 +30,7 @@ from xcube.core.store import (
     DataTypeLike,
     DATASET_TYPE,
     DatasetDescriptor,
+    new_data_store,
 )
 from xcube.util.jsonschema import (
     JsonObjectSchema,
@@ -37,6 +38,7 @@ from xcube.util.jsonschema import (
 )
 
 from .clms import CLMS
+from .constants import DATA_OPENER_IDS
 from .utils import assert_valid_data_type
 
 
@@ -46,6 +48,7 @@ class CLMSDataStore(DataStore, ABC):
 
     def __init__(self, **clms_kwargs):
         self.clms = CLMS(**clms_kwargs)
+        self._file_store = new_data_store("file")
         logging.basicConfig(level=logging.INFO)
 
     @classmethod
@@ -90,12 +93,15 @@ class CLMSDataStore(DataStore, ABC):
     def get_data_opener_ids(
         self, data_id: str = None, data_type: DataTypeLike = None
     ) -> Tuple[str, ...]:
-        raise NotImplementedError
+        return DATA_OPENER_IDS
 
     def get_open_data_params_schema(
         self, data_id: str = None, opener_id: str = None
     ) -> JsonObjectSchema:
-        raise NotImplementedError
+        if data_id and not opener_id:
+            data_id_format = self.clms.get_data_id_format(data_id).lower()
+            opener_id = f"dataset:{data_id_format}:file"
+        return self._file_store.get_open_data_params_schema(opener_id=opener_id)
 
     def open_data(
         self, data_id: str, opener_id: str = None, **open_params
