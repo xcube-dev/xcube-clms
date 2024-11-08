@@ -171,8 +171,20 @@ class CLMS:
     def get_extent(self, data_id: str) -> dict:
         self._fetch_all_datasets()
         item = self.access_item(data_id)
-        bbox = item.get("geographicBoundingBox")
+        geographic_bounding_box = item.get("geographicBoundingBox").get("items")
         crs = item.get("coordinateReferenceSystemList")
         time_range = (item.get("temporalExtentStart"), item.get("temporalExtentEnd"))
 
-        return dict(bbox=bbox, time_range=time_range, crs=crs)
+        assert (
+            len(geographic_bounding_box) == 1
+        ), f"Expected 1 bbox, got {len(geographic_bounding_box)}"
+        assert len(crs) == 1, f"Expected 1 crs, got {len(crs)}"
+
+        bbox = [
+            float(geographic_bounding_box[0]["west"]),  # x1
+            float(geographic_bounding_box[0]["south"]),  # y1
+            float(geographic_bounding_box[0]["east"]),  # x2
+            float(geographic_bounding_box[0]["north"]),  # y2
+        ]
+
+        return dict(bbox=bbox, time_range=time_range, crs=crs[0])
