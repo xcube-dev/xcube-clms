@@ -33,6 +33,9 @@ FULL_SCHEMA = "fullobjects"
 CLMS_DATA_ID = "id"
 DATASET_FORMAT = "distribution_format_list"
 
+# CLMS API URLS
+CLMS_API_AUTH = "https://land.copernicus.eu/@@oauth2-token"
+
 # Logging
 LOG = logging.getLogger("xcube.clms")
 

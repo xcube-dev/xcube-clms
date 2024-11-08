@@ -19,10 +19,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import inspect
+import time
 from typing import Optional, Any, get_args, Container
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 
+import jwt
 import requests
 import xarray as xr
 from requests import RequestException
@@ -37,16 +39,22 @@ from xcube_clms.constants import (
     METADATA_FIELDS,
     FULL_SCHEMA,
     DATASET_FORMAT,
+    CLMS_API_AUTH,
 )
 from xcube_clms.utils import is_valid_data_type
 
 
 class CLMS:
 
-    def __init__(self, url: str):
+    def __init__(
+        self,
+        url: str,
+        credentials: dict,
+    ):
         self._url = url
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
+        self._api_token = CLMSAPIToken(credentials=credentials).access_token
 
     def open_dataset(self, data_id: str, **open_params) -> xr.Dataset:
         raise NotImplementedError
@@ -109,9 +117,13 @@ class CLMS:
         return self._metadata
 
     @staticmethod
-    def _make_api_request(url: str) -> dict:
+    def _make_api_request(url: str, headers: dict = HEADERS, data: dict = None) -> dict:
         try:
-            response = requests.get(url, headers=HEADERS)
+            if data:
+                response = requests.get(url, headers=headers, data=data)
+            else:
+                response = requests.get(url, headers=headers)
+
             response.raise_for_status()
             return response.json()
         except (HTTPError, RequestException, ValueError) as err:
@@ -195,3 +207,37 @@ class CLMS:
         item = self.access_item(data_id)
         format_list = self._filter_dataset_attrs([DATASET_FORMAT], [item])
         return format_list[0].get(DATASET_FORMAT)[0]
+
+
+class CLMSAPIToken:
+    def __init__(
+        self,
+        credentials: dict,
+    ):
+        self._credentials = credentials
+        self._grant = self._create_JWT_grant()
+        self.access_token = self._request_access_token()
+
+    def _create_JWT_grant(self):
+        private_key = self._credentials["private_key"].encode("utf-8")
+
+        claim_set = {
+            "iss": self._credentials["client_id"],
+            "sub": self._credentials["user_id"],
+            "aud": self._credentials["token_uri"],
+            "iat": int(time.time()),
+            "exp": int(time.time() + (60 * 60)),
+        }
+        return jwt.encode(claim_set, private_key, algorithm="RS256")
+
+    def _request_access_token(self) -> str:
+        headers = HEADERS
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+
+        data = {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": self._grant,
+        }
+        response = self._make_api_request(CLMS_API_AUTH, headers=headers, data=data)
+
+        return response["access_token"]
