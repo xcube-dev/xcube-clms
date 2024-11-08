@@ -21,13 +21,11 @@
 import inspect
 import time
 from typing import Optional, Any, get_args, Container
-from urllib.error import HTTPError
 from urllib.parse import urlencode
 
 import jwt
 import requests
 import xarray as xr
-from requests import RequestException
 from xcube.core.store import DataTypeLike
 
 from xcube_clms.constants import (
@@ -41,7 +39,7 @@ from xcube_clms.constants import (
     DATASET_FORMAT,
     CLMS_API_AUTH,
 )
-from xcube_clms.utils import is_valid_data_type
+from xcube_clms.utils import is_valid_data_type, make_api_request
 
 
 class CLMS:
@@ -54,7 +52,17 @@ class CLMS:
         self._url = url
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
-        self._api_token = CLMSAPIToken(credentials=credentials).access_token
+        self.clms_api_token_instance = CLMSAPIToken(credentials=credentials)
+        self._api_token = self.clms_api_token_instance.access_token
+
+    def refresh_token(self):
+        if not self._api_token or self.clms_api_token_instance.is_token_expired():
+            LOG.info("Token expired or not present. Refreshing token.")
+            try:
+                self._api_token = self.clms_api_token_instance.refresh_token()
+            except requests.exceptions.RequestException as e:
+                LOG.info("Token refresh failed:", e)
+                raise e
 
     def open_dataset(self, data_id: str, **open_params) -> xr.Dataset:
         raise NotImplementedError
@@ -96,39 +104,25 @@ class CLMS:
                 f"Datasets not fetched yet. Fetching all datasets now from {self._url}"
             )
 
-            response = self._make_api_request(self._build_api_url(SEARCH_ENDPOINT))
+            response = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
 
             while True:
                 self._datasets_info.extend(response.get("items", []))
                 next_page = response.get("batching", {}).get("next")
                 if not next_page:
                     break
-                response = self._make_api_request(next_page)
+                response = make_api_request(next_page)
 
         return self._datasets_info
 
     def _get_metadata_fields(self):
         if not self._metadata:
-            response = self._make_api_request(self._build_api_url(SEARCH_ENDPOINT))
+            response = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
             items = response.get("items", [])
 
             if len(items) > 0:
                 self._metadata = list(items[0].keys())
         return self._metadata
-
-    @staticmethod
-    def _make_api_request(url: str, headers: dict = HEADERS, data: dict = None) -> dict:
-        try:
-            if data:
-                response = requests.get(url, headers=headers, data=data)
-            else:
-                response = requests.get(url, headers=headers)
-
-            response.raise_for_status()
-            return response.json()
-        except (HTTPError, RequestException, ValueError) as err:
-            LOG.error(f"API error: {err}")
-            return {}
 
     def _build_api_url(
         self, api_endpoint: str, metadata_fields: Optional[list] = None
@@ -214,9 +208,12 @@ class CLMSAPIToken:
         self,
         credentials: dict,
     ):
-        self._credentials = credentials
-        self._grant = self._create_JWT_grant()
-        self.access_token = self._request_access_token()
+        self._credentials: dict = credentials
+        self._grant: str = self._create_JWT_grant()
+        self.access_token: str = self.refresh_token()
+        self._token_expiry: int = 0
+        self._token_lifetime: int = 3600  # Token lifetime in seconds
+        self._expiry_margin: int = 300  # Refresh 5 minutes before expiration
 
     def _create_JWT_grant(self):
         private_key = self._credentials["private_key"].encode("utf-8")
@@ -226,7 +223,7 @@ class CLMSAPIToken:
             "sub": self._credentials["user_id"],
             "aud": self._credentials["token_uri"],
             "iat": int(time.time()),
-            "exp": int(time.time() + (60 * 60)),
+            "exp": int(time.time() + self._token_lifetime),
         }
         return jwt.encode(claim_set, private_key, algorithm="RS256")
 
@@ -238,6 +235,19 @@ class CLMSAPIToken:
             "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "assertion": self._grant,
         }
-        response = self._make_api_request(CLMS_API_AUTH, headers=headers, data=data)
+        response = make_api_request(CLMS_API_AUTH, headers=headers, data=data)
 
         return response["access_token"]
+
+    def is_token_expired(self) -> bool:
+        return time.time() > (self._token_expiry - self._expiry_margin)
+
+    def refresh_token(self) -> str:
+        try:
+            self.access_token = self._request_access_token()
+            self._token_expiry = time.time() + self._token_lifetime
+            LOG.info("Token refreshed successfully.")
+        except requests.exceptions.RequestException as e:
+            LOG.info("Token refresh failed:", e)
+            raise e
+        return self.access_token

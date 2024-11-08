@@ -1,4 +1,11 @@
+from urllib.error import HTTPError
+
+import requests
+from requests import RequestException
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
+
+from build.lib.xcube_clms.constants import HEADERS, LOG
+
 
 # Using the auxiliary functions below from xcube-stac
 
@@ -31,3 +38,17 @@ def is_valid_data_type(data_type: DataTypeLike) -> bool:
         True if *data_type* is supported by the store, otherwise False
     """
     return data_type is None or DATASET_TYPE.is_super_type_of(data_type)
+
+
+def make_api_request(url: str, headers: dict = HEADERS, data: dict = None) -> dict:
+    try:
+        if data:
+            response = requests.get(url, headers=headers, data=data)
+        else:
+            response = requests.get(url, headers=headers)
+
+        response.raise_for_status()
+        return response.json()
+    except (HTTPError, RequestException, ValueError) as err:
+        LOG.error(f"API error: {err}")
+        return {}
