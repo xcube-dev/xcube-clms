@@ -38,6 +38,12 @@ from xcube_clms.constants import (
     FULL_SCHEMA,
     DATASET_FORMAT,
     CLMS_API_AUTH,
+    UID,
+    DOWNLOADABLE_FILES,
+    ITEMS,
+    SPATIAL_COVERAGE,
+    RESOLUTION,
+    FILE_ID,
 )
 from xcube_clms.utils import is_valid_data_type, make_api_request
 
@@ -47,13 +53,15 @@ class CLMS:
     def __init__(
         self,
         url: str,
-        credentials: dict,
+        credentials: dict = None,
     ):
         self._url = url
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
         self.clms_api_token_instance = CLMSAPIToken(credentials=credentials)
-        self._api_token = self.clms_api_token_instance.access_token
+        self._api_token: str = self.clms_api_token_instance.access_token
+        self._resolution: str | None = None
+        self._spatial_coverage: str | None = None
 
     def refresh_token(self):
         if not self._api_token or self.clms_api_token_instance.is_token_expired():
@@ -64,8 +72,32 @@ class CLMS:
                 LOG.info("Token refresh failed:", e)
                 raise e
 
+    def set_resolution(self, res):
+        self._resolution = res
+
+    def set_spatial_coverage(self, cov):
+        self._spatial_coverage = cov
+
     def open_dataset(self, data_id: str, **open_params) -> xr.Dataset:
-        raise NotImplementedError
+        self.refresh_token()
+        self._fetch_all_datasets()
+        item = self.access_item(data_id)
+        download_url, header, json = self._prepare_download_url(item)
+
+    def _prepare_download_url(self, item):
+        dataset_id = self._filter_dataset_attrs([UID], [item])[0][UID]
+        prepackaged_items = item[DOWNLOADABLE_FILES][ITEMS]
+        item_to_download = [
+            item
+            for item in prepackaged_items
+            if (
+                (item[SPATIAL_COVERAGE] == self._spatial_coverage)
+                & (item[RESOLUTION] == self._resolution)
+            )
+        ]
+        print(item_to_download)
+        file_id = item_to_download[0][FILE_ID]
+        print(dataset_id, file_id)
 
     def _filter_dataset_attrs(
         self, attrs: Container[str], datasets: list[dict[str, Any]] = None
@@ -202,6 +234,22 @@ class CLMS:
         format_list = self._filter_dataset_attrs([DATASET_FORMAT], [item])
         return format_list[0].get(DATASET_FORMAT)[0]
 
+    def get_spatial_coverage_and_resolution(
+        self, data_id: str
+    ) -> dict[str : str | None]:
+        self._fetch_all_datasets()
+        download_info = [
+            data[DOWNLOADABLE_FILES][ITEMS]
+            for data in self._datasets_info
+            if data["id"] == data_id
+        ]
+        spatial_cov_res_list = [{}]
+        for info in download_info[0]:
+            spatial_cov_res_list.append(
+                {SPATIAL_COVERAGE: info[SPATIAL_COVERAGE], RESOLUTION: info[RESOLUTION]}
+            )
+        return spatial_cov_res_list
+
 
 class CLMSAPIToken:
     def __init__(
@@ -209,11 +257,11 @@ class CLMSAPIToken:
         credentials: dict,
     ):
         self._credentials: dict = credentials
-        self._grant: str = self._create_JWT_grant()
-        self.access_token: str = self.refresh_token()
         self._token_expiry: int = 0
         self._token_lifetime: int = 3600  # Token lifetime in seconds
         self._expiry_margin: int = 300  # Refresh 5 minutes before expiration
+        self._grant: str = self._create_JWT_grant()
+        self.access_token: str = self.refresh_token()
 
     def _create_JWT_grant(self):
         private_key = self._credentials["private_key"].encode("utf-8")
@@ -235,7 +283,9 @@ class CLMSAPIToken:
             "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "assertion": self._grant,
         }
-        response = make_api_request(CLMS_API_AUTH, headers=headers, data=data)
+        response = make_api_request(
+            CLMS_API_AUTH, headers=headers, data=data, method="POST"
+        )
 
         return response["access_token"]
 

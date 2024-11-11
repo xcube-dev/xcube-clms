@@ -32,6 +32,21 @@ METADATA_FIELDS = "metadata_fields"
 FULL_SCHEMA = "fullobjects"
 CLMS_DATA_ID = "id"
 DATASET_FORMAT = "distribution_format_list"
+UID = "UID"
+DATASET_DOWNLOAD_INFO = {
+    "Datasets": [
+        {
+            "DatasetID": "{datasetID}",
+            "FileID": "{fileID}",
+        }
+    ]
+}
+DOWNLOADABLE_FILES = "downloadable_files"
+ITEMS = "items"
+SPATIAL_COVERAGE = "area"
+RESOLUTION = "resolution"
+FILE_ID = "@id"
+
 
 # CLMS API URLS
 CLMS_API_AUTH = "https://land.copernicus.eu/@@oauth2-token"

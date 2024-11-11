@@ -104,8 +104,17 @@ class CLMSDataStore(DataStore, ABC):
         return self._file_store.get_open_data_params_schema(opener_id=opener_id)
 
     def open_data(
-        self, data_id: str, opener_id: str = None, **open_params
+        self,
+        data_id: str,
+        opener_id: str = None,
+        spatial_coverage: str = None,
+        resolution: str = None,
+        **open_params,
     ) -> xr.Dataset:
+        if spatial_coverage:
+            self.clms.set_spatial_coverage(spatial_coverage)
+        if resolution:
+            self.clms.set_resolution(resolution)
         return self.clms.open_dataset(data_id, **open_params)
 
     def search_data(

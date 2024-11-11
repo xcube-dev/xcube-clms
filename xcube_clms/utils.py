@@ -1,7 +1,4 @@
-from urllib.error import HTTPError
-
 import requests
-from requests import RequestException
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
 from build.lib.xcube_clms.constants import HEADERS, LOG
@@ -40,15 +37,37 @@ def is_valid_data_type(data_type: DataTypeLike) -> bool:
     return data_type is None or DATASET_TYPE.is_super_type_of(data_type)
 
 
-def make_api_request(url: str, headers: dict = HEADERS, data: dict = None) -> dict:
-    try:
-        if data:
-            response = requests.get(url, headers=headers, data=data)
-        else:
-            response = requests.get(url, headers=headers)
+def make_api_request(
+    url: str,
+    headers: dict = HEADERS,
+    data: dict = None,
+    json: dict = None,
+    retries: int = 3,
+    method: str = "GET",
+) -> dict:
+    session = requests.Session()
+    attempt = 0
 
-        response.raise_for_status()
-        return response.json()
-    except (HTTPError, RequestException, ValueError) as err:
-        LOG.error(f"API error: {err}")
-        return {}
+    while attempt <= retries:
+        try:
+            response = session.request(
+                method=method,
+                url=url,
+                headers=headers,
+                data=data,
+                json=json,
+            )
+
+            response.raise_for_status()
+
+            return response.json()
+
+        except Exception as e:
+            LOG.error(f"Failed to parse JSON response: {e}")
+
+        attempt += 1
+        if attempt <= retries:
+            LOG.warning(f"Retrying request with attempt no. {attempt})...")
+
+    LOG.error(f"All retries exhausted for URL: {url}")
+    return {}
