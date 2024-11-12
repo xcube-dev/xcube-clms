@@ -18,8 +18,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-import logging
 from abc import ABC
 from typing import Tuple, Iterator, Container, Any, Union
 
@@ -49,7 +47,6 @@ class CLMSDataStore(DataStore, ABC):
     def __init__(self, **clms_kwargs):
         self.clms = CLMS(**clms_kwargs)
         self._file_store = new_data_store("file")
-        logging.basicConfig(level=logging.INFO)
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -107,15 +104,13 @@ class CLMSDataStore(DataStore, ABC):
         self,
         data_id: str,
         opener_id: str = None,
-        spatial_coverage: str = None,
-        resolution: str = None,
+        spatial_coverage: str = "",
+        resolution: str = "",
         **open_params,
     ) -> xr.Dataset:
-        if spatial_coverage:
-            self.clms.set_spatial_coverage(spatial_coverage)
-        if resolution:
-            self.clms.set_resolution(resolution)
-        return self.clms.open_dataset(data_id, **open_params)
+        return self.clms.open_dataset(
+            data_id, spatial_coverage, resolution, **open_params
+        )
 
     def search_data(
         self, data_type: DataTypeLike = None, **search_params
@@ -127,3 +122,8 @@ class CLMSDataStore(DataStore, ABC):
         cls, data_type: DataTypeLike = None
     ) -> JsonObjectSchema:
         pass
+
+    def get_spatial_coverage_and_resolution(
+        self, data_id: str
+    ) -> dict[str : str | None]:
+        return self.clms.get_spatial_coverage_and_resolution(data_id)

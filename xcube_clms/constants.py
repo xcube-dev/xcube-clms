@@ -27,20 +27,12 @@ SEARCH_ENDPOINT = "@search"
 DOWNLOAD_ENDPOINT = "@datarequest_post"
 TASK_STATUS_ENDPOINT = "@datarequest_search"
 PORTAL_TYPE = {"portal_type": "DataSet"}
-HEADERS = {"Accept": "application/json"}
+ACCEPT_HEADER = {"Accept": "application/json"}
 METADATA_FIELDS = "metadata_fields"
 FULL_SCHEMA = "fullobjects"
 CLMS_DATA_ID = "id"
 DATASET_FORMAT = "distribution_format_list"
 UID = "UID"
-DATASET_DOWNLOAD_INFO = {
-    "Datasets": [
-        {
-            "DatasetID": "{datasetID}",
-            "FileID": "{fileID}",
-        }
-    ]
-}
 DOWNLOADABLE_FILES = "downloadable_files"
 ITEMS = "items"
 SPATIAL_COVERAGE = "area"
@@ -53,6 +45,16 @@ CLMS_API_AUTH = "https://land.copernicus.eu/@@oauth2-token"
 
 # Logging
 LOG = logging.getLogger("xcube.clms")
+LEVEL = logging.INFO
+LOG.setLevel(LEVEL)
+if not LOG.hasHandlers():
+    handler = logging.StreamHandler()
+    handler.setLevel(LEVEL)
+    formatter = logging.Formatter(
+        "%(name)s - %(asctime)s -  %(levelname)s - %(message)s"
+    )
+    handler.setFormatter(formatter)
+    LOG.addHandler(handler)
 
 # DataOpener IDs
 DATA_OPENER_IDS = (

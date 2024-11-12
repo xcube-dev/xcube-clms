@@ -1,7 +1,7 @@
 import requests
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
-from build.lib.xcube_clms.constants import HEADERS, LOG
+from xcube_clms.constants import ACCEPT_HEADER, LOG
 
 
 # Using the auxiliary functions below from xcube-stac
@@ -39,7 +39,7 @@ def is_valid_data_type(data_type: DataTypeLike) -> bool:
 
 def make_api_request(
     url: str,
-    headers: dict = HEADERS,
+    headers: dict = ACCEPT_HEADER,
     data: dict = None,
     json: dict = None,
     retries: int = 3,
@@ -71,3 +71,18 @@ def make_api_request(
 
     LOG.error(f"All retries exhausted for URL: {url}")
     return {}
+
+
+def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
+    return {
+        "Datasets": [
+            {
+                "DatasetID": dataset_id,
+                "FileID": file_id,
+            }
+        ]
+    }
+
+
+def get_authorization_header(access_token: str) -> dict:
+    return {"Authorization": f"Bearer {access_token}"}

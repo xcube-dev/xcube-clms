@@ -28,10 +28,11 @@ import requests
 import xarray as xr
 from xcube.core.store import DataTypeLike
 
-from xcube_clms.constants import (
+from .constants import (
+    DOWNLOAD_ENDPOINT,
     SEARCH_ENDPOINT,
     PORTAL_TYPE,
-    HEADERS,
+    ACCEPT_HEADER,
     LOG,
     CLMS_DATA_ID,
     METADATA_FIELDS,
@@ -45,7 +46,12 @@ from xcube_clms.constants import (
     RESOLUTION,
     FILE_ID,
 )
-from xcube_clms.utils import is_valid_data_type, make_api_request
+from .utils import (
+    is_valid_data_type,
+    make_api_request,
+    get_dataset_download_info,
+    get_authorization_header,
+)
 
 
 class CLMS:
@@ -60,8 +66,6 @@ class CLMS:
         self._metadata: list[str] = []
         self.clms_api_token_instance = CLMSAPIToken(credentials=credentials)
         self._api_token: str = self.clms_api_token_instance.access_token
-        self._resolution: str | None = None
-        self._spatial_coverage: str | None = None
 
     def refresh_token(self):
         if not self._api_token or self.clms_api_token_instance.is_token_expired():
@@ -71,33 +75,72 @@ class CLMS:
             except requests.exceptions.RequestException as e:
                 LOG.info("Token refresh failed:", e)
                 raise e
+        else:
+            LOG.info("Current token valid. Reusing it.")
 
-    def set_resolution(self, res):
-        self._resolution = res
-
-    def set_spatial_coverage(self, cov):
-        self._spatial_coverage = cov
-
-    def open_dataset(self, data_id: str, **open_params) -> xr.Dataset:
+    def open_dataset(
+        self,
+        data_id: str,
+        spatial_coverage: str = "",
+        resolution: str = "",
+        **open_params,
+    ) -> xr.Dataset:
         self.refresh_token()
         self._fetch_all_datasets()
         item = self.access_item(data_id)
-        download_url, header, json = self._prepare_download_url(item)
 
-    def _prepare_download_url(self, item):
-        dataset_id = self._filter_dataset_attrs([UID], [item])[0][UID]
+        download_url, header, json = self._prepare_download_request(
+            item, data_id, spatial_coverage, resolution
+        )
+
+    def _prepare_download_request(
+        self,
+        item: dict,
+        data_id: str,
+        spatial_coverage: str = "",
+        resolution: str = "",
+    ) -> tuple[str, dict, dict]:
+        LOG.info(f"Preparing download request for {data_id}")
         prepackaged_items = item[DOWNLOADABLE_FILES][ITEMS]
+        if len(prepackaged_items) == 0:
+            raise Exception(f"No prepackaged item found for {data_id}.")
         item_to_download = [
             item
             for item in prepackaged_items
             if (
-                (item[SPATIAL_COVERAGE] == self._spatial_coverage)
-                & (item[RESOLUTION] == self._resolution)
+                (item[SPATIAL_COVERAGE] == spatial_coverage)
+                & (item[RESOLUTION] == resolution)
             )
         ]
-        print(item_to_download)
+
+        if len(item_to_download) == 0:
+            raise Exception(
+                f"No prepackaged item found for {data_id}. Please check resolution and spatial coverage."
+            )
+
+        elif len(item_to_download) > 1:
+            raise Exception(
+                f"Multiple prepackaged items found for {data_id}. "
+                f"Please specify the resolution and spatial coverage "
+                f"to select one dataset for download"
+            )
+
+        dataset_id = self._filter_dataset_attrs([UID], [item])[0][UID]
         file_id = item_to_download[0][FILE_ID]
-        print(dataset_id, file_id)
+        json = get_dataset_download_info(
+            dataset_id=dataset_id,
+            file_id=file_id,
+        )
+        url = self._build_api_url(DOWNLOAD_ENDPOINT, datasets_request=False)
+        if not self._api_token:
+            self.refresh_token()
+        header = ACCEPT_HEADER.copy()
+        header.update(get_authorization_header(self._api_token))
+
+        print(
+            url, header, json, ACCEPT_HEADER, get_authorization_header(self._api_token)
+        )
+        return url, header, json
 
     def _filter_dataset_attrs(
         self, attrs: Container[str], datasets: list[dict[str, Any]] = None
@@ -157,16 +200,21 @@ class CLMS:
         return self._metadata
 
     def _build_api_url(
-        self, api_endpoint: str, metadata_fields: Optional[list] = None
+        self,
+        api_endpoint: str,
+        metadata_fields: Optional[list] = None,
+        datasets_request: bool = True,
     ) -> str:
-        params = PORTAL_TYPE
-        params[FULL_SCHEMA] = "1"
+        params = {}
+        if datasets_request:
+            params = PORTAL_TYPE
+            params[FULL_SCHEMA] = "1"
         if metadata_fields:
             params[METADATA_FIELDS] = ",".join(metadata_fields)
-
-        query_params = urlencode(params)
-
-        return f"{self._url}/{api_endpoint}/?{query_params}"
+        if params:
+            query_params = urlencode(params)
+            return f"{self._url}/{api_endpoint}/?{query_params}"
+        return f"{self._url}/{api_endpoint}"
 
     @staticmethod
     def _convert_list_dict_to_list_str(data: list[dict[str, Any]]) -> list[str]:
@@ -176,10 +224,12 @@ class CLMS:
         datasets = [
             item for item in self._datasets_info if data_id == item[CLMS_DATA_ID]
         ]
-        if len(datasets) != 1:
+        if len(datasets) > 1:
             raise Exception(
                 f"Expected one item for data_id: {data_id}, found {len(datasets)}."
             )
+        if len(datasets) == 0:
+            raise Exception(f"Data id: {data_id} not found in the CLMS catalog")
         return datasets[0]
 
     def get_data_ids(self) -> list[str]:
@@ -219,6 +269,7 @@ class CLMS:
         ), f"Expected 1 bbox, got {len(geographic_bounding_box)}"
         assert len(crs) == 1, f"Expected 1 crs, got {len(crs)}"
 
+        # TODO: Handle multiple bounding boxes in the same item
         bbox = [
             float(geographic_bounding_box[0]["west"]),  # x1
             float(geographic_bounding_box[0]["south"]),  # y1
@@ -243,7 +294,7 @@ class CLMS:
             for data in self._datasets_info
             if data["id"] == data_id
         ]
-        spatial_cov_res_list = [{}]
+        spatial_cov_res_list = []
         for info in download_info[0]:
             spatial_cov_res_list.append(
                 {SPATIAL_COVERAGE: info[SPATIAL_COVERAGE], RESOLUTION: info[RESOLUTION]}
@@ -261,7 +312,8 @@ class CLMSAPIToken:
         self._token_lifetime: int = 3600  # Token lifetime in seconds
         self._expiry_margin: int = 300  # Refresh 5 minutes before expiration
         self._grant: str = self._create_JWT_grant()
-        self.access_token: str = self.refresh_token()
+        self.access_token: str = ""
+        self.refresh_token()
 
     def _create_JWT_grant(self):
         private_key = self._credentials["private_key"].encode("utf-8")
@@ -276,7 +328,7 @@ class CLMSAPIToken:
         return jwt.encode(claim_set, private_key, algorithm="RS256")
 
     def _request_access_token(self) -> str:
-        headers = HEADERS
+        headers = ACCEPT_HEADER.copy()
         headers["Content-Type"] = "application/x-www-form-urlencoded"
 
         data = {
@@ -300,4 +352,5 @@ class CLMSAPIToken:
         except requests.exceptions.RequestException as e:
             LOG.info("Token refresh failed:", e)
             raise e
+
         return self.access_token
