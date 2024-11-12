@@ -45,6 +45,13 @@ from .constants import (
     SPATIAL_COVERAGE,
     RESOLUTION,
     FILE_ID,
+    CONTENT_TYPE_HEADER,
+    TASK_STATUS_ENDPOINT,
+    STATUS_PENDING,
+    STATUS_COMPLETE,
+    PENDING,
+    COMPLETE,
+    UNDEFINED,
 )
 from .utils import (
     is_valid_data_type,
@@ -89,9 +96,54 @@ class CLMS:
         self._fetch_all_datasets()
         item = self.access_item(data_id)
 
-        download_url, header, json = self._prepare_download_request(
-            item, data_id, spatial_coverage, resolution
-        )
+        request_exists: bool = False
+        task_id: str = ""
+        while True:
+            status, task_id = self._current_requests(item[UID])
+            if status == COMPLETE:
+                LOG.info(
+                    f"Download request with task id {task_id} completed for data id: {data_id}"
+                )
+                request_exists = True
+                break
+            if status == UNDEFINED:
+                break
+            if status == PENDING:
+                LOG.info(
+                    f"Download request with task id {task_id} already exists for data id: {data_id}. Status check again in 60 seconds"
+                )
+                time.sleep(60)
+
+        if not request_exists:
+            download_url, headers, json = self._prepare_download_request(
+                item, data_id, spatial_coverage, resolution
+            )
+
+            response = make_api_request(
+                method="POST", url=download_url, headers=headers, json=json
+            )
+            LOG.info(f"Download Requested with Task ID : {response}")
+
+            while True:
+                status, task_id = self._current_requests(item[UID])
+                if status == COMPLETE:
+                    LOG.info(
+                        f"Download request with task id {task_id} completed for data id: {data_id}"
+                    )
+                    break
+                if status == PENDING:
+                    LOG.info(
+                        f"Download request with task id {task_id} for data id: {data_id}. Status check again in 60 seconds"
+                    )
+                    time.sleep(60)
+
+        # TODO:
+        #  Make sure we have the request successful here. Throw errors above if any
+        #  Get the downloadable link
+        #  Create temp folder
+        #  Download zip to the temp folder
+        #  Unzip
+        #  Load as xarray dataset
 
     def _prepare_download_request(
         self,
@@ -134,13 +186,11 @@ class CLMS:
         url = self._build_api_url(DOWNLOAD_ENDPOINT, datasets_request=False)
         if not self._api_token:
             self.refresh_token()
-        header = ACCEPT_HEADER.copy()
-        header.update(get_authorization_header(self._api_token))
+        headers = ACCEPT_HEADER.copy()
+        headers.update(CONTENT_TYPE_HEADER)
+        headers.update(get_authorization_header(self._api_token))
 
-        print(
-            url, header, json, ACCEPT_HEADER, get_authorization_header(self._api_token)
-        )
-        return url, header, json
+        return url, headers, json
 
     def _filter_dataset_attrs(
         self, attrs: Container[str], datasets: list[dict[str, Any]] = None
@@ -300,6 +350,23 @@ class CLMS:
                 {SPATIAL_COVERAGE: info[SPATIAL_COVERAGE], RESOLUTION: info[RESOLUTION]}
             )
         return spatial_cov_res_list
+
+    def _current_requests(self, dataset_id: str) -> tuple[str, str]:
+        if not self._api_token:
+            self.refresh_token()
+        headers = ACCEPT_HEADER.copy()
+        headers.update(get_authorization_header(self._api_token))
+        url = self._build_api_url(TASK_STATUS_ENDPOINT, datasets_request=False)
+        response = make_api_request(url=url, headers=headers)
+        for key in response:
+            status = response[key]["Status"]
+            requested_data_id = response[key]["Datasets"][0]["DatasetID"]
+            if status in STATUS_PENDING and dataset_id == requested_data_id:
+                return PENDING, key
+            if status in STATUS_COMPLETE and dataset_id == requested_data_id:
+                return COMPLETE, key
+
+        return UNDEFINED, ""
 
 
 class CLMSAPIToken:
