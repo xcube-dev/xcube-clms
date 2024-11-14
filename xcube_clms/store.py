@@ -28,7 +28,6 @@ from xcube.core.store import (
     DataTypeLike,
     DATASET_TYPE,
     DatasetDescriptor,
-    new_data_store,
 )
 from xcube.util.jsonschema import (
     JsonObjectSchema,
@@ -46,17 +45,32 @@ class CLMSDataStore(DataStore, ABC):
 
     def __init__(self, **clms_kwargs):
         self.clms = CLMS(**clms_kwargs)
-        self._file_store = new_data_store("file")
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
+        credentials_params = dict(
+            client_id=JsonStringSchema(),
+            issued=JsonStringSchema(),
+            private_key=JsonStringSchema(),
+            key_id=JsonStringSchema(),
+            title=JsonStringSchema(),
+            token_uri=JsonStringSchema(),
+            user_id=JsonStringSchema(),
+        )
+
         params = dict(
             url=JsonStringSchema(
                 title="URL of CLMS API",
-            )
+            ),
+            credentials=JsonObjectSchema(
+                dict(**credentials_params),
+                required=("client_id", "user_id", "token_uri", "private_key"),
+            ),
         )
         return JsonObjectSchema(
-            properties=dict(**params), required=None, additional_properties=False
+            properties=dict(**params),
+            required="url",
+            additional_properties=False,
         )
 
     @classmethod
@@ -95,10 +109,8 @@ class CLMSDataStore(DataStore, ABC):
     def get_open_data_params_schema(
         self, data_id: str = None, opener_id: str = None
     ) -> JsonObjectSchema:
-        if data_id and not opener_id:
-            data_id_format = self.clms.get_data_id_format(data_id).lower()
-            opener_id = f"dataset:{data_id_format}:file"
-        return self._file_store.get_open_data_params_schema(opener_id=opener_id)
+        # We do not support any open_data_params yet
+        return JsonObjectSchema()
 
     def open_data(
         self,

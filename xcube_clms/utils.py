@@ -44,10 +44,12 @@ def make_api_request(
     json: dict = None,
     retries: int = 3,
     method: str = "GET",
+    stream: bool = False,
+    to_json: bool = True,
 ) -> dict:
     session = requests.Session()
     attempt = 0
-
+    LOG.info(f"Making a request to {url}")
     while attempt <= retries:
         try:
             response = session.request(
@@ -56,21 +58,38 @@ def make_api_request(
                 headers=headers,
                 data=data,
                 json=json,
+                stream=stream,
             )
-
+            # try:
+            #     response_json = response.json()
+            #     print(f"response in json for {url}:::::", response_json)
+            #     if "status" in response_json:
+            #         if response_json.status == "error":
+            #             LOG.error(f"Error while making API request {response_json}")
+            # except JSONDecodeError:
+            #     print("response:", response, "response.content:", response.content)
+            #     LOG.info("Response not JSON parseable.")
+            #     print("response.text:", response.text)
+            #     print("response.header:", response.header)
+            # handle manually
             response.raise_for_status()
 
-            return response.json()
+            # change to_json name
+            if to_json:
+                return response.json()
+            return response
 
         except Exception as e:
+            last_error = e
             LOG.error(f"Failed to parse JSON response: {e}")
 
         attempt += 1
         if attempt <= retries:
-            LOG.warning(f"Retrying request with attempt no. {attempt})...")
+            LOG.warning(f"Retrying request with attempt no. {attempt}...")
 
-    LOG.error(f"All retries exhausted for URL: {url}")
-    return {}
+    e = Exception(f"All retries exhausted for URL: {url}")
+    raise e from last_error
+    # raise Exception(f"All retries exhausted for URL: {url}")
 
 
 def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:

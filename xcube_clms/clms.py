@@ -19,12 +19,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import inspect
+import io
 import time
 from typing import Optional, Any, get_args, Container
 from urllib.parse import urlencode
 
+import fsspec
 import jwt
 import requests
+import rioxarray
 import xarray as xr
 from xcube.core.store import DataTypeLike
 
@@ -52,6 +55,7 @@ from .constants import (
     PENDING,
     COMPLETE,
     UNDEFINED,
+    RESULTS,
 )
 from .utils import (
     is_valid_data_type,
@@ -71,17 +75,22 @@ class CLMS:
         self._url = url
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
-        self.clms_api_token_instance = CLMSAPIToken(credentials=credentials)
-        self._api_token: str = self.clms_api_token_instance.access_token
+        self._credentials: dict = {}
+        if credentials:
+            self._credentials = credentials
+            self._clms_api_token_instance = CLMSAPIToken(credentials=credentials)
+            self._api_token: str = self._clms_api_token_instance.access_token
+        self.download_url: str = ""
+
+    def set_credentials(self, credentials: dict):
+        self._credentials = credentials
+        self._clms_api_token_instance = CLMSAPIToken(credentials=credentials)
+        self._api_token: str = self._clms_api_token_instance.access_token
 
     def refresh_token(self):
-        if not self._api_token or self.clms_api_token_instance.is_token_expired():
+        if not self._api_token or self._clms_api_token_instance.is_token_expired():
             LOG.info("Token expired or not present. Refreshing token.")
-            try:
-                self._api_token = self.clms_api_token_instance.refresh_token()
-            except requests.exceptions.RequestException as e:
-                LOG.info("Token refresh failed:", e)
-                raise e
+            self._api_token = self._clms_api_token_instance.refresh_token()
         else:
             LOG.info("Current token valid. Reusing it.")
 
@@ -92,21 +101,25 @@ class CLMS:
         resolution: str = "",
         **open_params,
     ) -> xr.Dataset:
+        if not self._credentials:
+            raise Exception(
+                "You need credentials to open the data. Please provide credentials using set_credentials()."
+            )
         self.refresh_token()
         self._fetch_all_datasets()
         item = self.access_item(data_id)
 
         request_exists: bool = False
-        task_id: str = ""
         while True:
             status, task_id = self._current_requests(item[UID])
             if status == COMPLETE:
                 LOG.info(
-                    f"Download request with task id {task_id} completed for data id: {data_id}"
+                    f"Download request with task id {task_id} already completed for data id: {data_id}"
                 )
                 request_exists = True
                 break
             if status == UNDEFINED:
+                LOG.info(f"No download request exists for data id: {data_id}")
                 break
             if status == PENDING:
                 LOG.info(
@@ -115,12 +128,12 @@ class CLMS:
                 time.sleep(60)
 
         if not request_exists:
-            download_url, headers, json = self._prepare_download_request(
+            download_request_url, headers, json = self._prepare_download_request(
                 item, data_id, spatial_coverage, resolution
             )
 
             response = make_api_request(
-                method="POST", url=download_url, headers=headers, json=json
+                method="POST", url=download_request_url, headers=headers, json=json
             )
             LOG.info(f"Download Requested with Task ID : {response}")
 
@@ -137,13 +150,66 @@ class CLMS:
                     )
                     time.sleep(60)
 
-        # TODO:
-        #  Make sure we have the request successful here. Throw errors above if any
-        #  Get the downloadable link
-        #  Create temp folder
-        #  Download zip to the temp folder
-        #  Unzip
-        #  Load as xarray dataset
+        if self.download_url:
+            LOG.info(f"Downloading zip file from {self.download_url}")
+            headers = ACCEPT_HEADER.copy()
+            headers.update(CONTENT_TYPE_HEADER)
+            response = make_api_request(
+                self.download_url, headers=headers, to_json=False, stream=True
+            )
+            with io.BytesIO(response.content) as zip_file_in_memory:
+                fs = fsspec.filesystem("zip", fo=zip_file_in_memory)
+                zip_contents = fs.ls(RESULTS)
+                actual_zip_file = None
+                if len(zip_contents) == 1:
+                    if ".zip" in zip_contents[0]["filename"]:
+                        actual_zip_file = zip_contents[0]
+                elif len(zip_contents) > 1:
+                    LOG.warn("Cannot handle more than one zip files at the moment.")
+                else:
+                    LOG.info("No downloadable zip file found inside.")
+                if actual_zip_file:
+                    LOG.info(f"Found one zip file {actual_zip_file}.")
+                    with fs.open(actual_zip_file["name"], "rb") as f:
+                        zip_fs = fsspec.filesystem("zip", fo=f)
+                        geo_file = self._find_geo_in_dir(
+                            "/",
+                            zip_fs,
+                        )
+                        if geo_file:
+                            with zip_fs.open(geo_file, "rb") as geo_f:
+                                if "tif" in geo_file:
+                                    return rioxarray.open_rasterio(geo_f)
+                                else:
+                                    return xr.open_dataset(geo_f)
+                        else:
+                            raise Exception("No GeoTiff file found")
+
+        else:
+            raise Exception(f"No DownloadURL found for data_id {data_id}")
+
+    @staticmethod
+    def _find_geo_in_dir(path, zip_fs):
+        geo_file: str = ""
+        contents = zip_fs.ls(path)
+        for item in contents:
+            if zip_fs.isdir(item["name"]):
+                geo_file = CLMS._find_geo_in_dir(
+                    item["name"],
+                    zip_fs,
+                )
+                if geo_file:
+                    return geo_file
+            else:
+                if item["name"].endswith(".tif"):
+                    LOG.info(f"Found TIFF file: {item["name"]}")
+                    geo_file = item["name"]
+                    return geo_file
+                if item["name"].endswith(".nc"):
+                    LOG.info(f"Found NetCDF file: {item["name"]}")
+                    geo_file = item["name"]
+                    return geo_file
+        return geo_file
 
     def _prepare_download_request(
         self,
@@ -153,6 +219,7 @@ class CLMS:
         resolution: str = "",
     ) -> tuple[str, dict, dict]:
         LOG.info(f"Preparing download request for {data_id}")
+        print("item:::", item)
         prepackaged_items = item[DOWNLOADABLE_FILES][ITEMS]
         if len(prepackaged_items) == 0:
             raise Exception(f"No prepackaged item found for {data_id}.")
@@ -179,6 +246,8 @@ class CLMS:
 
         dataset_id = self._filter_dataset_attrs([UID], [item])[0][UID]
         file_id = item_to_download[0][FILE_ID]
+        print("item_to_download", item_to_download)
+        print("file_id", file_id)
         json = get_dataset_download_info(
             dataset_id=dataset_id,
             file_id=file_id,
@@ -351,19 +420,29 @@ class CLMS:
             )
         return spatial_cov_res_list
 
-    def _current_requests(self, dataset_id: str) -> tuple[str, str]:
-        if not self._api_token:
-            self.refresh_token()
+    def _current_requests(self, dataset_id: str) -> tuple:
+        self.refresh_token()
         headers = ACCEPT_HEADER.copy()
         headers.update(get_authorization_header(self._api_token))
         url = self._build_api_url(TASK_STATUS_ENDPOINT, datasets_request=False)
         response = make_api_request(url=url, headers=headers)
         for key in response:
             status = response[key]["Status"]
-            requested_data_id = response[key]["Datasets"][0]["DatasetID"]
+            datasets = response[key]["Datasets"]
+            requested_data_id = ""
+            if isinstance(datasets, list):
+                requested_data_id = datasets[0]["DatasetID"]
+            elif isinstance(datasets, dict):
+                requested_data_id = datasets["DatasetID"]
+            else:
+                LOG.warn(f"No DatasetID found in response {datasets}")
             if status in STATUS_PENDING and dataset_id == requested_data_id:
                 return PENDING, key
             if status in STATUS_COMPLETE and dataset_id == requested_data_id:
+                if isinstance(response[key], list):
+                    self.download_url = response[key][0]["DownloadURL"]
+                elif isinstance(response[key], dict):
+                    self.download_url = response[key]["DownloadURL"]
                 return COMPLETE, key
 
         return UNDEFINED, ""
