@@ -32,6 +32,7 @@ from xcube.core.store import (
 from xcube.util.jsonschema import (
     JsonObjectSchema,
     JsonStringSchema,
+    JsonArraySchema,
 )
 
 from .clms import CLMS
@@ -120,9 +121,7 @@ class CLMSDataStore(DataStore, ABC):
         resolution: str = "",
         **open_params,
     ) -> xr.Dataset:
-        return self.clms.open_dataset(
-            data_id, spatial_coverage, resolution, **open_params
-        )
+        raise NotImplementedError()
 
     def search_data(
         self, data_type: DataTypeLike = None, **search_params
@@ -139,3 +138,28 @@ class CLMSDataStore(DataStore, ABC):
         self, data_id: str
     ) -> dict[str : str | None]:
         return self.clms.get_spatial_coverage_and_resolution(data_id)
+
+    def preload_data(self, data_request: list[dict]):
+        for data in data_request:
+            ...
+
+    @classmethod
+    def get_preload_data_params_schema(cls) -> JsonArraySchema:
+        return JsonArraySchema(
+            items=JsonObjectSchema(
+                properties={
+                    "data_id": JsonStringSchema(
+                        title="ID of the data from the CLMS catalog"
+                    ),
+                    "spatial_coverage": JsonStringSchema(
+                        title="Spatial area of the data"
+                    ),
+                    "resolution": JsonStringSchema(
+                        title="Resolution of the data. e.g. 10 m"
+                    ),
+                    "format": JsonStringSchema(
+                        title="Format of the dataset requested."
+                    ),
+                }
+            )
+        )
