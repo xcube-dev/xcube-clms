@@ -56,6 +56,20 @@ from .constants import (
     COMPLETE,
     UNDEFINED,
     RESULTS,
+    BOUNDING_BOX,
+    CRS,
+    START_TIME,
+    END_TIME,
+    DOWNLOAD_URL,
+    STATUS,
+    DATASETS,
+    DATASET_ID,
+    JSON_TYPE,
+    BATCH,
+    NEXT,
+    BYTES_TYPE,
+    FILENAME,
+    NAME,
 )
 from .utils import (
     is_valid_data_type,
@@ -136,7 +150,7 @@ class CLMS:
             response_data = make_api_request(
                 method="POST", url=download_request_url, headers=headers, json=json
             )
-            response = get_response_of_type(response_data, "json")
+            response = get_response_of_type(response_data, JSON_TYPE)
             LOG.info(f"Download Requested with Task ID : {response}")
 
             while True:
@@ -159,14 +173,14 @@ class CLMS:
             response_data = make_api_request(
                 self.download_url, headers=headers, stream=True
             )
-            response = get_response_of_type(response_data, "bytes")
+            response = get_response_of_type(response_data, BYTES_TYPE)
 
             with io.BytesIO(response.content) as zip_file_in_memory:
                 fs = fsspec.filesystem("zip", fo=zip_file_in_memory)
                 zip_contents = fs.ls(RESULTS)
                 actual_zip_file = None
                 if len(zip_contents) == 1:
-                    if ".zip" in zip_contents[0]["filename"]:
+                    if ".zip" in zip_contents[0][FILENAME]:
                         actual_zip_file = zip_contents[0]
                 elif len(zip_contents) > 1:
                     LOG.warn("Cannot handle more than one zip files at the moment.")
@@ -174,7 +188,7 @@ class CLMS:
                     LOG.info("No downloadable zip file found inside.")
                 if actual_zip_file:
                     LOG.info(f"Found one zip file {actual_zip_file}.")
-                    with fs.open(actual_zip_file["name"], "rb") as f:
+                    with fs.open(actual_zip_file[NAME], "rb") as f:
                         zip_fs = fsspec.filesystem("zip", fo=f)
                         geo_file = self._find_geo_in_dir(
                             "/",
@@ -301,9 +315,9 @@ class CLMS:
 
             response_data = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
             while True:
-                response = get_response_of_type(response_data, "json")
-                self._datasets_info.extend(response.get("items", []))
-                next_page = response.get("batching", {}).get("next")
+                response = get_response_of_type(response_data, JSON_TYPE)
+                self._datasets_info.extend(response.get(ITEMS, []))
+                next_page = response.get(BATCH, {}).get(NEXT)
                 if not next_page:
                     break
                 response_data = make_api_request(next_page)
@@ -313,8 +327,8 @@ class CLMS:
     def _get_metadata_fields(self):
         if not self._metadata:
             response_data = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
-            response = get_response_of_type(response_data, "json")
-            items = response.get("items", [])
+            response = get_response_of_type(response_data, JSON_TYPE)
+            items = response.get(ITEMS, [])
             if len(items) > 0:
                 self._metadata = list(items[0].keys())
 
@@ -382,9 +396,9 @@ class CLMS:
     def get_extent(self, data_id: str) -> dict:
         self._fetch_all_datasets()
         item = self.access_item(data_id)
-        geographic_bounding_box = item.get("geographicBoundingBox").get("items")
-        crs = item.get("coordinateReferenceSystemList")
-        time_range = (item.get("temporalExtentStart"), item.get("temporalExtentEnd"))
+        geographic_bounding_box = item.get(BOUNDING_BOX).get(ITEMS)
+        crs = item.get(CRS)
+        time_range = (item.get(START_TIME), item.get(END_TIME))
 
         if len(geographic_bounding_box) > 1:
             LOG.warning(
@@ -418,7 +432,7 @@ class CLMS:
         download_info = [
             data[DOWNLOADABLE_FILES][ITEMS]
             for data in self._datasets_info
-            if data["id"] == data_id
+            if data[CLMS_DATA_ID] == data_id
         ]
         spatial_cov_res_list = []
         for info in download_info[0]:
@@ -433,24 +447,24 @@ class CLMS:
         headers.update(get_authorization_header(self._api_token))
         url = self._build_api_url(TASK_STATUS_ENDPOINT, datasets_request=False)
         response_data = make_api_request(url=url, headers=headers)
-        response = get_response_of_type(response_data, "json")
+        response = get_response_of_type(response_data, JSON_TYPE)
         for key in response:
-            status = response[key]["Status"]
-            datasets = response[key]["Datasets"]
+            status = response[key][STATUS]
+            datasets = response[key][DATASETS]
             requested_data_id = ""
             if isinstance(datasets, list):
-                requested_data_id = datasets[0]["DatasetID"]
+                requested_data_id = datasets[0][DATASET_ID]
             elif isinstance(datasets, dict):
-                requested_data_id = datasets["DatasetID"]
+                requested_data_id = datasets[DATASET_ID]
             else:
                 LOG.warn(f"No DatasetID found in response {datasets}")
             if status in STATUS_PENDING and dataset_id == requested_data_id:
                 return PENDING, key
             if status in STATUS_COMPLETE and dataset_id == requested_data_id:
                 if isinstance(response[key], list):
-                    self.download_url = response[key][0]["DownloadURL"]
+                    self.download_url = response[key][0][DOWNLOAD_URL]
                 elif isinstance(response[key], dict):
-                    self.download_url = response[key]["DownloadURL"]
+                    self.download_url = response[key][DOWNLOAD_URL]
                 return COMPLETE, key
 
         return UNDEFINED, ""
@@ -492,7 +506,7 @@ class CLMSAPIToken:
         response_data = make_api_request(
             CLMS_API_AUTH, headers=headers, data=data, method="POST"
         )
-        response = get_response_of_type(response_data, "json")
+        response = get_response_of_type(response_data, JSON_TYPE)
 
         return response["access_token"]
 

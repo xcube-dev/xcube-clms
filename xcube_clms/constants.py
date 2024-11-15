@@ -26,9 +26,14 @@ DATA_STORE_ID = "clms"
 SEARCH_ENDPOINT = "@search"
 DOWNLOAD_ENDPOINT = "@datarequest_post"
 TASK_STATUS_ENDPOINT = "@datarequest_search"
+
+BATCH = "batching"
+NEXT = "next"
+
 PORTAL_TYPE = {"portal_type": "DataSet"}
 ACCEPT_HEADER = {"Accept": "application/json"}
 CONTENT_TYPE_HEADER = {"Content-Type": "application/json"}
+
 METADATA_FIELDS = "metadata_fields"
 FULL_SCHEMA = "fullobjects"
 CLMS_DATA_ID = "id"
@@ -39,6 +44,17 @@ ITEMS = "items"
 SPATIAL_COVERAGE = "area"
 RESOLUTION = "resolution"
 FILE_ID = "@id"
+BOUNDING_BOX = "geographicBoundingBox"
+CRS = "coordinateReferenceSystemList"
+START_TIME = "temporalExtentStart"
+END_TIME = "temporalExtentEnd"
+DOWNLOAD_URL = "DownloadURL"
+STATUS = "Status"
+DATASETS = "Datasets"
+DATASET_ID = "DatasetID"
+FILENAME = "filename"
+NAME = "name"
+
 STATUS_PENDING = ["Queued", "In_progress"]
 STATUS_COMPLETE = ["Finished_ok"]
 PENDING = "PENDING"
@@ -68,3 +84,6 @@ DATA_OPENER_IDS = (
     f"dataset:netcdf:{DATA_STORE_ID}",
     f"dataset:geotiff:{DATA_STORE_ID}",
 )
+
+JSON_TYPE = "json"
+BYTES_TYPE = "bytes"
