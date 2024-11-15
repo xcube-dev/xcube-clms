@@ -68,6 +68,7 @@ from .constants import (
     BYTES_TYPE,
     FILENAME,
     NAME,
+    FORMAT,
 )
 from .utils import (
     is_valid_data_type,
@@ -424,8 +425,8 @@ class CLMS:
         format_list = self._filter_dataset_attrs([DATASET_FORMAT], [item])
         return format_list[0].get(DATASET_FORMAT)[0]
 
-    def get_spatial_coverage_and_resolution(
-        self, data_id: str
+    def get_metadata(
+        self, data_id: str, metadata_fields: list[str]
     ) -> dict[str : str | None]:
         self._fetch_all_datasets()
         download_info = [
@@ -433,12 +434,18 @@ class CLMS:
             for data in self._datasets_info
             if data[CLMS_DATA_ID] == data_id
         ]
-        spatial_cov_res_list = []
+        metadata_list = []
         for info in download_info[0]:
-            spatial_cov_res_list.append(
-                {SPATIAL_COVERAGE: info[SPATIAL_COVERAGE], RESOLUTION: info[RESOLUTION]}
-            )
-        return spatial_cov_res_list
+            metadata = {}
+            if "area" in metadata_fields and SPATIAL_COVERAGE in info:
+                metadata[SPATIAL_COVERAGE] = info[SPATIAL_COVERAGE]
+            if "resolution" in metadata_fields and RESOLUTION in info:
+                metadata[RESOLUTION] = info[RESOLUTION]
+            if "format" in metadata_fields and FORMAT in info:
+                metadata[FORMAT] = info[FORMAT]
+
+            metadata_list.append(metadata)
+        return metadata_list
 
     def _current_requests(self, dataset_id: str) -> tuple:
         self.refresh_token()

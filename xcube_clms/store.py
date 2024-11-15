@@ -134,14 +134,13 @@ class CLMSDataStore(DataStore, ABC):
     ) -> JsonObjectSchema:
         pass
 
-    def get_spatial_coverage_and_resolution(
-        self, data_id: str
+    def get_metadata(
+        self, data_id: str, metadata_fields: list[str]
     ) -> dict[str : str | None]:
-        return self.clms.get_spatial_coverage_and_resolution(data_id)
+        return self.clms.get_metadata(data_id, metadata_fields)
 
-    def preload_data(self, data_request: list[dict]):
-        for data in data_request:
-            ...
+    def preload_data(self, data_requests: list[dict]):
+        return self.clms.preload_data(data_requests)
 
     @classmethod
     def get_preload_data_params_schema(cls) -> JsonArraySchema:
