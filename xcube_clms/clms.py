@@ -25,12 +25,11 @@ from typing import Optional, Any, get_args, Container
 from urllib.parse import urlencode
 
 import fsspec
-import jwt
-import requests
 import rioxarray
 import xarray as xr
 from xcube.core.store import DataTypeLike
 
+from .api_token import CLMSAPIToken
 from .constants import (
     DOWNLOAD_ENDPOINT,
     SEARCH_ENDPOINT,
@@ -41,7 +40,6 @@ from .constants import (
     METADATA_FIELDS,
     FULL_SCHEMA,
     DATASET_FORMAT,
-    CLMS_API_AUTH,
     UID,
     DOWNLOADABLE_FILES,
     ITEMS,
@@ -77,6 +75,7 @@ from .utils import (
     get_dataset_download_info,
     get_authorization_header,
     get_response_of_type,
+    convert_list_dict_to_list,
 )
 
 
@@ -211,21 +210,21 @@ class CLMS:
         geo_file: str = ""
         contents = zip_fs.ls(path)
         for item in contents:
-            if zip_fs.isdir(item["name"]):
+            if zip_fs.isdir(item[NAME]):
                 geo_file = CLMS._find_geo_in_dir(
-                    item["name"],
+                    item[NAME],
                     zip_fs,
                 )
                 if geo_file:
                     return geo_file
             else:
-                if item["name"].endswith(".tif"):
-                    LOG.info(f"Found TIFF file: {item["name"]}")
+                if item[NAME].endswith(".tif"):
+                    LOG.info(f"Found TIFF file: {item[NAME]}")
                     geo_file = item["name"]
                     return geo_file
-                if item["name"].endswith(".nc"):
-                    LOG.info(f"Found NetCDF file: {item["name"]}")
-                    geo_file = item["name"]
+                if item[NAME].endswith(".nc"):
+                    LOG.info(f"Found NetCDF file: {item[NAME]}")
+                    geo_file = item[NAME]
                     return geo_file
         return geo_file
 
@@ -351,11 +350,6 @@ class CLMS:
             return f"{self._url}/{api_endpoint}/?{query_params}"
         return f"{self._url}/{api_endpoint}"
 
-    # TODO: Move this out to utils
-    @staticmethod
-    def _convert_list_dict_to_list_str(data: list[dict[str, Any]]) -> list[str]:
-        return [list(d.values())[0] for d in data]
-
     def access_item(self, data_id) -> dict:
         datasets = [
             item for item in self._datasets_info if data_id == item[CLMS_DATA_ID]
@@ -371,7 +365,12 @@ class CLMS:
     def get_data_ids(self) -> list[str]:
         self._fetch_all_datasets()
         data_ids_with_keys = self._filter_dataset_attrs([CLMS_DATA_ID])
-        return self._convert_list_dict_to_list_str(data_ids_with_keys)
+        print("data_ids_with_keys::", data_ids_with_keys)
+        print(
+            " convert_list_dict_to_list_str(data_ids_with_keys)::",
+            convert_list_dict_to_list(data_ids_with_keys, "id"),
+        )
+        return convert_list_dict_to_list(data_ids_with_keys, "id")
 
     def get_data_ids_with_attrs(
         self, attrs: Container[str], data_id: str
@@ -468,58 +467,3 @@ class CLMS:
                 return COMPLETE, key
 
         return UNDEFINED, ""
-
-
-class CLMSAPIToken:
-    def __init__(
-        self,
-        credentials: dict,
-    ):
-        self._credentials: dict = credentials
-        self._token_expiry: int = 0
-        self._token_lifetime: int = 3600  # Token lifetime in seconds
-        self._expiry_margin: int = 300  # Refresh 5 minutes before expiration
-        self._grant: str = self._create_JWT_grant()
-        self.access_token: str = ""
-        self.refresh_token()
-
-    def _create_JWT_grant(self):
-        private_key = self._credentials["private_key"].encode("utf-8")
-
-        claim_set = {
-            "iss": self._credentials["client_id"],
-            "sub": self._credentials["user_id"],
-            "aud": self._credentials["token_uri"],
-            "iat": int(time.time()),
-            "exp": int(time.time() + self._token_lifetime),
-        }
-        return jwt.encode(claim_set, private_key, algorithm="RS256")
-
-    def _request_access_token(self) -> str:
-        headers = ACCEPT_HEADER.copy()
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
-
-        data = {
-            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            "assertion": self._grant,
-        }
-        response_data = make_api_request(
-            CLMS_API_AUTH, headers=headers, data=data, method="POST"
-        )
-        response = get_response_of_type(response_data, JSON_TYPE)
-
-        return response["access_token"]
-
-    def is_token_expired(self) -> bool:
-        return time.time() > (self._token_expiry - self._expiry_margin)
-
-    def refresh_token(self) -> str:
-        try:
-            self.access_token = self._request_access_token()
-            self._token_expiry = time.time() + self._token_lifetime
-            LOG.info("Token refreshed successfully.")
-        except requests.exceptions.RequestException as e:
-            LOG.info("Token refresh failed:", e)
-            raise e
-
-        return self.access_token

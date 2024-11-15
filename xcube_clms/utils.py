@@ -1,3 +1,5 @@
+from typing import Any
+
 import requests
 from requests import JSONDecodeError, HTTPError, Timeout, RequestException
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
@@ -116,3 +118,7 @@ def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
 
 def get_authorization_header(access_token: str) -> dict:
     return {"Authorization": f"Bearer {access_token}"}
+
+
+def convert_list_dict_to_list(data: list[dict[str, Any]], key: str) -> list[str]:
+    return [d[key] for d in data if key in d]
