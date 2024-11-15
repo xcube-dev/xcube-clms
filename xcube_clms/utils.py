@@ -71,9 +71,7 @@ def make_api_request(
                 except JSONDecodeError as e:
                     raise JSONDecodeError(f"Unable to parse JSON. {e}")
 
-            raise HTTPError(
-                f"HTTP error {response.status_code}: {response.text[:300]} (truncated)"
-            )
+            raise HTTPError(f"HTTP error {response.status_code}: {response.text}")
         content_type = response.headers.get("Content-Type", "").lower()
         if "application/json" in content_type:
             try:
