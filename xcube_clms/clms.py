@@ -386,10 +386,14 @@ class CLMS:
         crs = item.get("coordinateReferenceSystemList")
         time_range = (item.get("temporalExtentStart"), item.get("temporalExtentEnd"))
 
-        if len(geographic_bounding_box) == 1:
-            LOG.warning(f"Expected 1 bbox, got {len(geographic_bounding_box)}. Outputting the first element.")
-        if len(crs) == 1:
-            LOG.warning(f"Expected 1 crs, got {len(crs)}. Outputting the first element.")
+        if len(geographic_bounding_box) > 1:
+            LOG.warning(
+                f"Expected 1 bbox, got {len(geographic_bounding_box)}. Outputting the first element."
+            )
+        if len(crs) > 1:
+            LOG.warning(
+                f"Expected 1 crs, got {len(crs)}. Outputting the first element."
+            )
 
         # TODO: Handle multiple bounding boxes in the same item
         bbox = [
