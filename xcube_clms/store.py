@@ -69,7 +69,7 @@ class CLMSDataStore(DataStore, ABC):
         )
         return JsonObjectSchema(
             properties=dict(**params),
-            required="url",
+            required=("url",),
             additional_properties=False,
         )
 
