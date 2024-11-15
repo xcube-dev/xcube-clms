@@ -62,6 +62,7 @@ from .utils import (
     make_api_request,
     get_dataset_download_info,
     get_authorization_header,
+    get_response_of_type,
 )
 
 
@@ -132,9 +133,10 @@ class CLMS:
                 item, data_id, spatial_coverage, resolution
             )
 
-            response = make_api_request(
+            response_data = make_api_request(
                 method="POST", url=download_request_url, headers=headers, json=json
             )
+            response = get_response_of_type(response_data, "json")
             LOG.info(f"Download Requested with Task ID : {response}")
 
             while True:
@@ -154,9 +156,11 @@ class CLMS:
             LOG.info(f"Downloading zip file from {self.download_url}")
             headers = ACCEPT_HEADER.copy()
             headers.update(CONTENT_TYPE_HEADER)
-            response = make_api_request(
-                self.download_url, headers=headers, to_json=False, stream=True
+            response_data = make_api_request(
+                self.download_url, headers=headers, stream=True
             )
+            response = get_response_of_type(response_data, "bytes")
+
             with io.BytesIO(response.content) as zip_file_in_memory:
                 fs = fsspec.filesystem("zip", fo=zip_file_in_memory)
                 zip_contents = fs.ls(RESULTS)
@@ -219,7 +223,6 @@ class CLMS:
         resolution: str = "",
     ) -> tuple[str, dict, dict]:
         LOG.info(f"Preparing download request for {data_id}")
-        print("item:::", item)
         prepackaged_items = item[DOWNLOADABLE_FILES][ITEMS]
         if len(prepackaged_items) == 0:
             raise Exception(f"No prepackaged item found for {data_id}.")
@@ -246,8 +249,6 @@ class CLMS:
 
         dataset_id = self._filter_dataset_attrs([UID], [item])[0][UID]
         file_id = item_to_download[0][FILE_ID]
-        print("item_to_download", item_to_download)
-        print("file_id", file_id)
         json = get_dataset_download_info(
             dataset_id=dataset_id,
             file_id=file_id,
@@ -298,24 +299,25 @@ class CLMS:
                 f"Datasets not fetched yet. Fetching all datasets now from {self._url}"
             )
 
-            response = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
-
+            response_data = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
             while True:
+                response = get_response_of_type(response_data, "json")
                 self._datasets_info.extend(response.get("items", []))
                 next_page = response.get("batching", {}).get("next")
                 if not next_page:
                     break
-                response = make_api_request(next_page)
+                response_data = make_api_request(next_page)
 
         return self._datasets_info
 
     def _get_metadata_fields(self):
         if not self._metadata:
-            response = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
+            response_data = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
+            response = get_response_of_type(response_data, "json")
             items = response.get("items", [])
-
             if len(items) > 0:
                 self._metadata = list(items[0].keys())
+
         return self._metadata
 
     def _build_api_url(
@@ -335,6 +337,7 @@ class CLMS:
             return f"{self._url}/{api_endpoint}/?{query_params}"
         return f"{self._url}/{api_endpoint}"
 
+    # TODO: Move this out to utils
     @staticmethod
     def _convert_list_dict_to_list_str(data: list[dict[str, Any]]) -> list[str]:
         return [list(d.values())[0] for d in data]
@@ -425,7 +428,8 @@ class CLMS:
         headers = ACCEPT_HEADER.copy()
         headers.update(get_authorization_header(self._api_token))
         url = self._build_api_url(TASK_STATUS_ENDPOINT, datasets_request=False)
-        response = make_api_request(url=url, headers=headers)
+        response_data = make_api_request(url=url, headers=headers)
+        response = get_response_of_type(response_data, "json")
         for key in response:
             status = response[key]["Status"]
             datasets = response[key]["Datasets"]
@@ -481,9 +485,10 @@ class CLMSAPIToken:
             "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "assertion": self._grant,
         }
-        response = make_api_request(
+        response_data = make_api_request(
             CLMS_API_AUTH, headers=headers, data=data, method="POST"
         )
+        response = get_response_of_type(response_data, "json")
 
         return response["access_token"]
 

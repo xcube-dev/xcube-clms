@@ -1,4 +1,5 @@
 import requests
+from requests import JSONDecodeError, HTTPError, Timeout, RequestException
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
 from xcube_clms.constants import ACCEPT_HEADER, LOG
@@ -42,54 +43,64 @@ def make_api_request(
     headers: dict = ACCEPT_HEADER,
     data: dict = None,
     json: dict = None,
-    retries: int = 3,
     method: str = "GET",
     stream: bool = False,
-    to_json: bool = True,
 ) -> dict:
     session = requests.Session()
-    attempt = 0
     LOG.info(f"Making a request to {url}")
-    while attempt <= retries:
+    try:
+        response = session.request(
+            method=method,
+            url=url,
+            headers=headers,
+            data=data,
+            json=json,
+            stream=stream,
+        )
         try:
-            response = session.request(
-                method=method,
-                url=url,
-                headers=headers,
-                data=data,
-                json=json,
-                stream=stream,
-            )
-            # try:
-            #     response_json = response.json()
-            #     print(f"response in json for {url}:::::", response_json)
-            #     if "status" in response_json:
-            #         if response_json.status == "error":
-            #             LOG.error(f"Error while making API request {response_json}")
-            # except JSONDecodeError:
-            #     print("response:", response, "response.content:", response.content)
-            #     LOG.info("Response not JSON parseable.")
-            #     print("response.text:", response.text)
-            #     print("response.header:", response.header)
-            # handle manually
             response.raise_for_status()
+        except HTTPError:
+            if "application/json" in response.headers.get("Content-Type", "").lower():
+                try:
+                    error_details = response.json()
+                    raise HTTPError(
+                        f"HTTP error {response.status_code}: {error_details}"
+                    )
+                except JSONDecodeError as e:
+                    raise JSONDecodeError(f"Unable to parse JSON. {e}")
 
-            # change to_json name
-            if to_json:
-                return response.json()
-            return response
+            raise HTTPError(
+                f"HTTP error {response.status_code}: {response.text[:300]} (truncated)"
+            )
+        content_type = response.headers.get("Content-Type", "").lower()
+        if "application/json" in content_type:
+            try:
+                return {"type": "json", "response": response.json()}
+            except JSONDecodeError as e:
+                raise JSONDecodeError("Invalid JSON in response", e)
+        elif "text/html" in content_type:
+            return {"type": "text", "response": response}
+        else:
+            return {"type": "bytes", "response": response}
 
-        except Exception as e:
-            last_error = e
-            LOG.error(f"Failed to parse JSON response: {e}")
+    except requests.exceptions.HTTPError as eh:
+        raise HTTPError(f"HTTP error occurred. {eh}")
+    except requests.exceptions.Timeout as et:
+        raise Timeout(f"Timeout error occurred: {et}")
+    except requests.exceptions.RequestException as e:
+        raise RequestException(f"Request error occurred: {e}")
 
-        attempt += 1
-        if attempt <= retries:
-            LOG.warning(f"Retrying request with attempt no. {attempt}...")
 
-    e = Exception(f"All retries exhausted for URL: {url}")
-    raise e from last_error
-    # raise Exception(f"All retries exhausted for URL: {url}")
+def get_response_of_type(response_data: dict, data_type: str):
+    try:
+        if data_type == "json":
+            return response_data.get("response", {})
+        if data_type == "text":
+            return response_data.get("response", "")
+        if data_type == "bytes":
+            return response_data.get("response", b"")
+    except TypeError:
+        raise TypeError(f"Expected {data_type}. Got {response_data.get("type", "")}")
 
 
 def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
