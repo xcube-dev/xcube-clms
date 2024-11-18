@@ -28,6 +28,8 @@ import fsspec
 import rioxarray
 import xarray as xr
 from xcube.core.store import DataTypeLike
+from xcube.util.jsonschema import JsonArraySchema, JsonObjectSchema, \
+    JsonStringSchema
 
 from .api_token import CLMSAPIToken
 from .constants import (
@@ -36,16 +38,16 @@ from .constants import (
     PORTAL_TYPE,
     ACCEPT_HEADER,
     LOG,
-    CLMS_DATA_ID,
+    CLMS_DATA_ID_KEY,
     METADATA_FIELDS,
     FULL_SCHEMA,
-    DATASET_FORMAT,
-    UID,
-    DOWNLOADABLE_FILES,
-    ITEMS,
-    SPATIAL_COVERAGE,
-    RESOLUTION,
-    FILE_ID,
+    DATASET_FORMAT_KEY,
+    UID_KEY,
+    DOWNLOADABLE_FILES_KEY,
+    ITEMS_KEY,
+    SPATIAL_COVERAGE_KEY,
+    RESOLUTION_KEY,
+    FILE_ID_KEY,
     CONTENT_TYPE_HEADER,
     TASK_STATUS_ENDPOINT,
     STATUS_PENDING,
@@ -54,21 +56,28 @@ from .constants import (
     COMPLETE,
     UNDEFINED,
     RESULTS,
-    BOUNDING_BOX,
-    CRS,
-    START_TIME,
-    END_TIME,
-    DOWNLOAD_URL,
-    STATUS,
-    DATASETS,
-    DATASET_ID,
+    BOUNDING_BOX_KEY,
+    CRS_KEY,
+    START_TIME_KEY,
+    END_TIME_KEY,
+    DOWNLOAD_URL_KEY,
+    STATUS_KEY,
+    DATASETS_KEY,
+    DATASET_ID_KEY,
     JSON_TYPE,
     BATCH,
     NEXT,
     BYTES_TYPE,
-    FILENAME,
-    NAME,
-    FORMAT,
+    FILENAME_KEY,
+    NAME_KEY,
+    NOT_SUPPORTED_LIST,
+    DATASET_DOWNLOAD_INFORMATION_KEY,
+    PATH_KEY,
+    SOURCE_KEY,
+    FULL_SOURCE_KEY,
+    TITLE_KEY,
+    SCHEMA_KEY,
+    PROPERTIES_KEY, ALLOWED_SCHEMA_PARAMS,
 )
 from .utils import (
     is_valid_data_type,
@@ -114,6 +123,7 @@ class CLMS:
         data_id: str,
         spatial_coverage: str = "",
         resolution: str = "",
+        title: str = "",
         **open_params,
     ) -> xr.Dataset:
         if not self._credentials:
@@ -123,17 +133,29 @@ class CLMS:
         self.refresh_token()
         self._fetch_all_datasets()
         item = self.access_item(data_id)
-        # TODO: Check for other unsupported datasets (non-EEA) for now.
-        path = item.get(DOWNLOADABLE_FILES).get(ITEMS)[0].get("path", "")
-        source = item.get(DOWNLOADABLE_FILES).get(ITEMS)[0].get("source", "")
 
-        assert (
-            path is not "" and source is not ""
-        ), f"This data product: {item["title"]} is not yet supported in this plugin yet."
+        downloadable_item = item.get(DOWNLOADABLE_FILES_KEY).get(ITEMS_KEY)[0]
+        path = ""
+        source = ""
+        full_source = ""
+        if PATH_KEY in downloadable_item:
+            path = downloadable_item.get(PATH_KEY, "")
+        if SOURCE_KEY in downloadable_item:
+            source = downloadable_item.get(SOURCE_KEY, "")
+        if FULL_SOURCE_KEY in downloadable_item:
+            full_source = (
+                item.get(DATASET_DOWNLOAD_INFORMATION_KEY)
+                .get(ITEMS_KEY)[0]
+                .get(FULL_SOURCE_KEY, "")
+            )
+
+        assert (path is not "" and source is not "") or (
+            full_source in NOT_SUPPORTED_LIST
+        ), f"This data product: {item[TITLE_KEY]} is not yet supported in this plugin yet."
 
         request_exists: bool = False
         while True:
-            status, task_id = self._current_requests(item[UID])
+            status, task_id = self._current_requests(item[UID_KEY])
             if status == COMPLETE:
                 LOG.info(
                     f"Download request with task id {task_id} already completed for data id: {data_id}"
@@ -151,7 +173,7 @@ class CLMS:
 
         if not request_exists:
             download_request_url, headers, json = self._prepare_download_request(
-                item, data_id, spatial_coverage, resolution
+                item, data_id, spatial_coverage, resolution, title
             )
 
             response_data = make_api_request(
@@ -161,7 +183,7 @@ class CLMS:
             LOG.info(f"Download Requested with Task ID : {response}")
 
             while True:
-                status, task_id = self._current_requests(item[UID])
+                status, task_id = self._current_requests(item[UID_KEY])
                 if status == COMPLETE:
                     LOG.info(
                         f"Download request with task id {task_id} completed for data id: {data_id}"
@@ -187,7 +209,7 @@ class CLMS:
                 zip_contents = fs.ls(RESULTS)
                 actual_zip_file = None
                 if len(zip_contents) == 1:
-                    if ".zip" in zip_contents[0][FILENAME]:
+                    if ".zip" in zip_contents[0][FILENAME_KEY]:
                         actual_zip_file = zip_contents[0]
                 elif len(zip_contents) > 1:
                     LOG.warn("Cannot handle more than one zip files at the moment.")
@@ -195,7 +217,7 @@ class CLMS:
                     LOG.info("No downloadable zip file found inside.")
                 if actual_zip_file:
                     LOG.info(f"Found one zip file {actual_zip_file}.")
-                    with fs.open(actual_zip_file[NAME], "rb") as f:
+                    with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
                         zip_fs = fsspec.filesystem("zip", fo=f)
                         geo_file = self._find_geo_in_dir(
                             "/",
@@ -218,21 +240,21 @@ class CLMS:
         geo_file: str = ""
         contents = zip_fs.ls(path)
         for item in contents:
-            if zip_fs.isdir(item[NAME]):
+            if zip_fs.isdir(item[NAME_KEY]):
                 geo_file = CLMS._find_geo_in_dir(
-                    item[NAME],
+                    item[NAME_KEY],
                     zip_fs,
                 )
                 if geo_file:
                     return geo_file
             else:
-                if item[NAME].endswith(".tif"):
-                    LOG.info(f"Found TIFF file: {item[NAME]}")
+                if item[NAME_KEY].endswith(".tif"):
+                    LOG.info(f"Found TIFF file: {item[NAME_KEY]}")
                     geo_file = item["name"]
                     return geo_file
-                if item[NAME].endswith(".nc"):
-                    LOG.info(f"Found NetCDF file: {item[NAME]}")
-                    geo_file = item[NAME]
+                if item[NAME_KEY].endswith(".nc"):
+                    LOG.info(f"Found NetCDF file: {item[NAME_KEY]}")
+                    geo_file = item[NAME_KEY]
                     return geo_file
         return geo_file
 
@@ -242,34 +264,35 @@ class CLMS:
         data_id: str,
         spatial_coverage: str = "",
         resolution: str = "",
+        title: str = "",
     ) -> tuple[str, dict, dict]:
         LOG.info(f"Preparing download request for {data_id}")
-        prepackaged_items = item[DOWNLOADABLE_FILES][ITEMS]
+        prepackaged_items = item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]
         if len(prepackaged_items) == 0:
             raise Exception(f"No prepackaged item found for {data_id}.")
         item_to_download = [
             item
             for item in prepackaged_items
             if (
-                (item[SPATIAL_COVERAGE] == spatial_coverage)
-                & (item[RESOLUTION] == resolution)
+                (item[SPATIAL_COVERAGE_KEY] == spatial_coverage)
+                & (item[RESOLUTION_KEY] == resolution)
             )
         ]
 
         if len(item_to_download) == 0:
             raise Exception(
-                f"No prepackaged item found for {data_id}. Please check resolution and spatial coverage."
+                f"No prepackaged item found for {data_id}. Please check preload parameters and/or data_id."
             )
 
         elif len(item_to_download) > 1:
             raise Exception(
                 f"Multiple prepackaged items found for {data_id}. "
-                f"Please specify the resolution and spatial coverage "
+                f"Please specify the preload parameters to "
                 f"to select one dataset for download"
             )
 
-        dataset_id = self._filter_dataset_attrs([UID], [item])[0][UID]
-        file_id = item_to_download[0][FILE_ID]
+        dataset_id = self._filter_dataset_attrs([UID_KEY], [item])[0][UID_KEY]
+        file_id = item_to_download[0][FILE_ID_KEY]
         json = get_dataset_download_info(
             dataset_id=dataset_id,
             file_id=file_id,
@@ -323,7 +346,7 @@ class CLMS:
             response_data = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
             while True:
                 response = get_response_of_type(response_data, JSON_TYPE)
-                self._datasets_info.extend(response.get(ITEMS, []))
+                self._datasets_info.extend(response.get(ITEMS_KEY, []))
                 next_page = response.get(BATCH, {}).get(NEXT)
                 if not next_page:
                     break
@@ -335,7 +358,7 @@ class CLMS:
         if not self._metadata:
             response_data = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
             response = get_response_of_type(response_data, JSON_TYPE)
-            items = response.get(ITEMS, [])
+            items = response.get(ITEMS_KEY, [])
             if len(items) > 0:
                 self._metadata = list(items[0].keys())
 
@@ -360,7 +383,7 @@ class CLMS:
 
     def access_item(self, data_id) -> dict:
         datasets = [
-            item for item in self._datasets_info if data_id == item[CLMS_DATA_ID]
+            item for item in self._datasets_info if data_id == item[CLMS_DATA_ID_KEY]
         ]
         if len(datasets) > 1:
             raise Exception(
@@ -372,12 +395,7 @@ class CLMS:
 
     def get_data_ids(self) -> list[str]:
         self._fetch_all_datasets()
-        data_ids_with_keys = self._filter_dataset_attrs([CLMS_DATA_ID])
-        print("data_ids_with_keys::", data_ids_with_keys)
-        print(
-            " convert_list_dict_to_list_str(data_ids_with_keys)::",
-            convert_list_dict_to_list(data_ids_with_keys, "id"),
-        )
+        data_ids_with_keys = self._filter_dataset_attrs([CLMS_DATA_ID_KEY])
         return convert_list_dict_to_list(data_ids_with_keys, "id")
 
     def get_data_ids_with_attrs(
@@ -393,7 +411,9 @@ class CLMS:
         if is_valid_data_type(data_type):
             self._fetch_all_datasets()
             datasets = [
-                item for item in self._datasets_info if data_id == item[CLMS_DATA_ID]
+                item
+                for item in self._datasets_info
+                if data_id == item[CLMS_DATA_ID_KEY]
             ]
             if len(datasets) == 0:
                 return False
@@ -403,9 +423,9 @@ class CLMS:
     def get_extent(self, data_id: str) -> dict:
         self._fetch_all_datasets()
         item = self.access_item(data_id)
-        geographic_bounding_box = item.get(BOUNDING_BOX).get(ITEMS)
-        crs = item.get(CRS)
-        time_range = (item.get(START_TIME), item.get(END_TIME))
+        geographic_bounding_box = item.get(BOUNDING_BOX_KEY).get(ITEMS_KEY)
+        crs = item.get(CRS_KEY)
+        time_range = (item.get(START_TIME_KEY), item.get(END_TIME_KEY))
 
         if len(geographic_bounding_box) > 1:
             LOG.warning(
@@ -429,30 +449,35 @@ class CLMS:
     def get_data_id_format(self, data_id: str) -> str:
         self._fetch_all_datasets()
         item = self.access_item(data_id)
-        format_list = self._filter_dataset_attrs([DATASET_FORMAT], [item])
-        return format_list[0].get(DATASET_FORMAT)[0]
+        format_list = self._filter_dataset_attrs([DATASET_FORMAT_KEY], [item])
+        return format_list[0].get(DATASET_FORMAT_KEY)[0]
 
-    def get_metadata(
-        self, data_id: str, metadata_fields: list[str]
-    ) -> dict[str : str | None]:
+    def get_preload_params(self, data_id: str) -> dict[str : str | None]:
         self._fetch_all_datasets()
-        download_info = [
-            data[DOWNLOADABLE_FILES][ITEMS]
+        preload_params = [
+            data[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]
             for data in self._datasets_info
-            if data[CLMS_DATA_ID] == data_id
-        ]
-        metadata_list = []
-        for info in download_info[0]:
-            metadata = {}
-            if "area" in metadata_fields and SPATIAL_COVERAGE in info:
-                metadata[SPATIAL_COVERAGE] = info[SPATIAL_COVERAGE]
-            if "resolution" in metadata_fields and RESOLUTION in info:
-                metadata[RESOLUTION] = info[RESOLUTION]
-            if "format" in metadata_fields and FORMAT in info:
-                metadata[FORMAT] = info[FORMAT]
+            if data[CLMS_DATA_ID_KEY] == data_id
+        ][0]
 
-            metadata_list.append(metadata)
-        return metadata_list
+        return preload_params
+
+    def get_preload_data_params_schema_for_data(self, data_id: str):
+        self._fetch_all_datasets()
+        raw_schema = [
+            data[DOWNLOADABLE_FILES_KEY][SCHEMA_KEY][PROPERTIES_KEY]
+            for data in self._datasets_info
+            if data[CLMS_DATA_ID_KEY] == data_id
+        ][0]
+        params = {}
+        for item, inner_dict in raw_schema.items():
+            param_data = {}
+            for inner_item, val in inner_dict.items():
+                if any(key in inner_item for key in [ALLOWED_SCHEMA_PARAMS]):
+                    param_data[inner_item] = val
+            params[item] = JsonStringSchema(**param_data)
+        schema = JsonArraySchema(items=JsonObjectSchema(properties=params))
+        return schema
 
     def _current_requests(self, dataset_id: str) -> tuple:
         self.refresh_token()
@@ -462,22 +487,22 @@ class CLMS:
         response_data = make_api_request(url=url, headers=headers)
         response = get_response_of_type(response_data, JSON_TYPE)
         for key in response:
-            status = response[key][STATUS]
-            datasets = response[key][DATASETS]
+            status = response[key][STATUS_KEY]
+            datasets = response[key][DATASETS_KEY]
             requested_data_id = ""
             if isinstance(datasets, list):
-                requested_data_id = datasets[0][DATASET_ID]
+                requested_data_id = datasets[0][DATASET_ID_KEY]
             elif isinstance(datasets, dict):
-                requested_data_id = datasets[DATASET_ID]
+                requested_data_id = datasets[DATASET_ID_KEY]
             else:
                 LOG.warn(f"No DatasetID found in response {datasets}")
             if status in STATUS_PENDING and dataset_id == requested_data_id:
                 return PENDING, key
             if status in STATUS_COMPLETE and dataset_id == requested_data_id:
                 if isinstance(response[key], list):
-                    self.download_url = response[key][0][DOWNLOAD_URL]
+                    self.download_url = response[key][0][DOWNLOAD_URL_KEY]
                 elif isinstance(response[key], dict):
-                    self.download_url = response[key][DOWNLOAD_URL]
+                    self.download_url = response[key][DOWNLOAD_URL_KEY]
                 return COMPLETE, key
 
         return UNDEFINED, ""
@@ -501,8 +526,8 @@ class CLMS:
         # We check for path and source based on the API code here:
         # https://github.com/eea/clms.downloadtool/blob/master/clms/downloadtool/api/services/datarequest_post/post.py#L177-L196
 
-        path = item.get(DOWNLOADABLE_FILES).get(ITEMS).get("path", "")
-        source = item.get(DOWNLOADABLE_FILES).get(ITEMS).get("source", "")
+        path = item.get(DOWNLOADABLE_FILES_KEY).get(ITEMS_KEY).get("path", "")
+        source = item.get(DOWNLOADABLE_FILES_KEY).get(ITEMS_KEY).get("source", "")
 
         assert (
             path is not "" and source is not ""
@@ -510,7 +535,7 @@ class CLMS:
 
         request_exists: bool = False
         while True:
-            status, task_id = self._current_requests(item[UID])
+            status, task_id = self._current_requests(item[UID_KEY])
             if status == COMPLETE:
                 LOG.info(
                     f"Download request with task id {task_id} already completed for data id: {data_id}"
@@ -538,7 +563,7 @@ class CLMS:
             LOG.info(f"Download Requested with Task ID : {response}")
 
             while True:
-                status, task_id = self._current_requests(item[UID])
+                status, task_id = self._current_requests(item[UID_KEY])
                 if status == COMPLETE:
                     LOG.info(
                         f"Download request with task id {task_id} completed for data id: {data_id}"
@@ -564,7 +589,7 @@ class CLMS:
                 zip_contents = fs.ls(RESULTS)
                 actual_zip_file = None
                 if len(zip_contents) == 1:
-                    if ".zip" in zip_contents[0][FILENAME]:
+                    if ".zip" in zip_contents[0][FILENAME_KEY]:
                         actual_zip_file = zip_contents[0]
                 elif len(zip_contents) > 1:
                     LOG.warn("Cannot handle more than one zip files at the moment.")
@@ -572,7 +597,7 @@ class CLMS:
                     LOG.info("No downloadable zip file found inside.")
                 if actual_zip_file:
                     LOG.info(f"Found one zip file {actual_zip_file}.")
-                    with fs.open(actual_zip_file[NAME], "rb") as f:
+                    with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
                         zip_fs = fsspec.filesystem("zip", fo=f)
                         geo_file = self._find_geo_in_dir(
                             "/",

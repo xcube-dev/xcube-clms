@@ -36,25 +36,37 @@ CONTENT_TYPE_HEADER = {"Content-Type": "application/json"}
 
 METADATA_FIELDS = "metadata_fields"
 FULL_SCHEMA = "fullobjects"
-CLMS_DATA_ID = "id"
-DATASET_FORMAT = "distribution_format_list"
-UID = "UID"
-DOWNLOADABLE_FILES = "downloadable_files"
-ITEMS = "items"
-SPATIAL_COVERAGE = "area"
-RESOLUTION = "resolution"
-FORMAT = "format"
-FILE_ID = "@id"
-BOUNDING_BOX = "geographicBoundingBox"
-CRS = "coordinateReferenceSystemList"
-START_TIME = "temporalExtentStart"
-END_TIME = "temporalExtentEnd"
-DOWNLOAD_URL = "DownloadURL"
-STATUS = "Status"
-DATASETS = "Datasets"
-DATASET_ID = "DatasetID"
-FILENAME = "filename"
-NAME = "name"
+
+# Dict keys
+
+CLMS_DATA_ID_KEY = "id"
+DATASET_FORMAT_KEY = "distribution_format_list"
+UID_KEY = "UID"
+DOWNLOADABLE_FILES_KEY = "downloadable_files"
+DATASET_DOWNLOAD_INFORMATION_KEY = "dataset_download_information"
+ITEMS_KEY = "items"
+SPATIAL_COVERAGE_KEY = "area"
+RESOLUTION_KEY = "resolution"
+FORMAT_KEY = "format"
+FILE_ID_KEY = "@id"
+BOUNDING_BOX_KEY = "geographicBoundingBox"
+CRS_KEY = "coordinateReferenceSystemList"
+START_TIME_KEY = "temporalExtentStart"
+END_TIME_KEY = "temporalExtentEnd"
+DOWNLOAD_URL_KEY = "DownloadURL"
+STATUS_KEY = "Status"
+DATASETS_KEY = "Datasets"
+DATASET_ID_KEY = "DatasetID"
+FILENAME_KEY = "filename"
+NAME_KEY = "name"
+TITLE_KEY = "title"
+SCHEMA_KEY = "schema"
+PROPERTIES_KEY = "properties"
+PATH_KEY = "path"
+SOURCE_KEY = "source"
+FULL_SOURCE_KEY = "full_source"
+DESCRIPTION_KEY = "description"
+ENUM_KEY = "enum"
 
 STATUS_PENDING = ["Queued", "In_progress"]
 STATUS_COMPLETE = ["Finished_ok"]
@@ -63,6 +75,8 @@ COMPLETE = "COMPLETE"
 UNDEFINED = "UNDEFINED"
 RESULTS = "Results/"
 
+NOT_SUPPORTED_LIST = ["WEKEO", "LEGACY", "LANDCOVER"]
+ALLOWED_SCHEMA_PARAMS = [TITLE_KEY, DESCRIPTION_KEY, ENUM_KEY]
 
 # CLMS API URLS
 CLMS_API_AUTH = "https://land.copernicus.eu/@@oauth2-token"

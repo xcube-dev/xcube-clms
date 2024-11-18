@@ -45,7 +45,7 @@ class CLMSDataStore(DataStore, ABC):
     plugin."""
 
     def __init__(self, **clms_kwargs):
-        self.clms = CLMS(**clms_kwargs)
+        self._clms = CLMS(**clms_kwargs)
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -85,21 +85,21 @@ class CLMSDataStore(DataStore, ABC):
         self, data_type: DataTypeLike = None, include_attrs: Container[str] = None
     ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
         assert_valid_data_type(data_type)
-        data_ids = self.clms.get_data_ids()
+        data_ids = self._clms.get_data_ids()
         for data_id in data_ids:
             if include_attrs is None:
                 yield data_id
             else:
-                yield self.clms.get_data_ids_with_attrs(include_attrs, data_id)
+                yield self._clms.get_data_ids_with_attrs(include_attrs, data_id)
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
-        return self.clms.has_data(data_id, data_type)
+        return self._clms.has_data(data_id, data_type)
 
     def describe_data(
         self, data_id: str, data_type: DataTypeLike = None
     ) -> DataDescriptor:
         assert_valid_data_type(data_type)
-        metadata = self.clms.get_extent(data_id)
+        metadata = self._clms.get_extent(data_id)
         return DatasetDescriptor(data_id, **metadata)
 
     def get_data_opener_ids(
@@ -134,31 +134,11 @@ class CLMSDataStore(DataStore, ABC):
     ) -> JsonObjectSchema:
         pass
 
-    def get_metadata(
-        self, data_id: str, metadata_fields: list[str]
-    ) -> dict[str : str | None]:
-        return self.clms.get_metadata(data_id, metadata_fields)
+    def get_preload_params(self, data_id: str) -> list[dict[str : str | None]]:
+        return self._clms.get_preload_params(data_id)
 
     def preload_data(self, data_requests: list[dict]):
-        return self.clms.preload_data(data_requests)
+        return self._clms.preload_data(data_requests)
 
-    @classmethod
-    def get_preload_data_params_schema(cls) -> JsonArraySchema:
-        return JsonArraySchema(
-            items=JsonObjectSchema(
-                properties={
-                    "data_id": JsonStringSchema(
-                        title="ID of the data from the CLMS catalog"
-                    ),
-                    "spatial_coverage": JsonStringSchema(
-                        title="Spatial area of the data"
-                    ),
-                    "resolution": JsonStringSchema(
-                        title="Resolution of the data. e.g. 10 m"
-                    ),
-                    "format": JsonStringSchema(
-                        title="Format of the dataset requested."
-                    ),
-                }
-            )
-        )
+    def get_preload_data_params_schema_for_data(self, data_id: str) -> JsonArraySchema:
+        return self._clms.get_preload_data_params_schema_for_data(data_id)
