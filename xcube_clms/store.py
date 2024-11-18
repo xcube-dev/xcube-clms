@@ -142,3 +142,18 @@ class CLMSDataStore(DataStore, ABC):
 
     def get_preload_data_params_schema_for_data(self, data_id: str) -> JsonArraySchema:
         return self._clms.get_preload_data_params_schema_for_data(data_id)
+
+    @classmethod
+    def get_preload_data_params_schema(cls, data_id: str) -> JsonArraySchema:
+        return JsonArraySchema(
+            items=JsonObjectSchema(
+                properties={
+                    "data_id": JsonStringSchema(
+                        title="Data id of the dataset from the CLMS catalog"
+                    ),
+                    "preload_params": JsonObjectSchema(
+                        title="Please use get_preload_data_params_schema_for_data() to get the schema for preload_params for the dataset that you are interested in."
+                    ),
+                }
+            )
+        )

@@ -28,8 +28,7 @@ import fsspec
 import rioxarray
 import xarray as xr
 from xcube.core.store import DataTypeLike
-from xcube.util.jsonschema import JsonArraySchema, JsonObjectSchema, \
-    JsonStringSchema
+from xcube.util.jsonschema import JsonObjectSchema, JsonStringSchema
 
 from .api_token import CLMSAPIToken
 from .constants import (
@@ -45,8 +44,6 @@ from .constants import (
     UID_KEY,
     DOWNLOADABLE_FILES_KEY,
     ITEMS_KEY,
-    SPATIAL_COVERAGE_KEY,
-    RESOLUTION_KEY,
     FILE_ID_KEY,
     CONTENT_TYPE_HEADER,
     TASK_STATUS_ENDPOINT,
@@ -77,7 +74,8 @@ from .constants import (
     FULL_SOURCE_KEY,
     TITLE_KEY,
     SCHEMA_KEY,
-    PROPERTIES_KEY, ALLOWED_SCHEMA_PARAMS,
+    PROPERTIES_KEY,
+    ALLOWED_SCHEMA_PARAMS,
 )
 from .utils import (
     is_valid_data_type,
@@ -259,12 +257,7 @@ class CLMS:
         return geo_file
 
     def _prepare_download_request(
-        self,
-        item: dict,
-        data_id: str,
-        spatial_coverage: str = "",
-        resolution: str = "",
-        title: str = "",
+        self, item: dict, data_id: str, params: dict
     ) -> tuple[str, dict, dict]:
         LOG.info(f"Preparing download request for {data_id}")
         prepackaged_items = item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]
@@ -272,11 +265,8 @@ class CLMS:
             raise Exception(f"No prepackaged item found for {data_id}.")
         item_to_download = [
             item
-            for item in prepackaged_items
-            if (
-                (item[SPATIAL_COVERAGE_KEY] == spatial_coverage)
-                & (item[RESOLUTION_KEY] == resolution)
-            )
+            for item in prepackaged_items[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]
+            if all(item.get(key) == value for key, value in params.items())
         ]
 
         if len(item_to_download) == 0:
@@ -473,10 +463,10 @@ class CLMS:
         for item, inner_dict in raw_schema.items():
             param_data = {}
             for inner_item, val in inner_dict.items():
-                if any(key in inner_item for key in [ALLOWED_SCHEMA_PARAMS]):
+                if any(key in inner_item for key in ALLOWED_SCHEMA_PARAMS):
                     param_data[inner_item] = val
             params[item] = JsonStringSchema(**param_data)
-        schema = JsonArraySchema(items=JsonObjectSchema(properties=params))
+        schema = JsonObjectSchema(properties=params)
         return schema
 
     def _current_requests(self, dataset_id: str) -> tuple:
@@ -515,9 +505,7 @@ class CLMS:
         self.refresh_token()
         self._fetch_all_datasets()
         data_id = data_request.get("data_id", "")
-        spatial_coverage = data_request.get("spatial_coverage", "")
-        resolution = data_request.get("resolution", "")
-        format = data_request.get("format", "")
+        preload_params = data_request.get("preload_params", {})
 
         item = self.access_item(data_id)
 
@@ -553,7 +541,7 @@ class CLMS:
 
         if not request_exists:
             download_request_url, headers, json = self._prepare_download_request(
-                item, data_id, spatial_coverage, resolution
+                item, data_id, preload_params
             )
 
             response_data = make_api_request(
