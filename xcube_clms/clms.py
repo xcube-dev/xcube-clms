@@ -40,7 +40,6 @@ from .constants import (
     CLMS_DATA_ID_KEY,
     METADATA_FIELDS,
     FULL_SCHEMA,
-    DATASET_FORMAT_KEY,
     UID_KEY,
     DOWNLOADABLE_FILES_KEY,
     ITEMS_KEY,
@@ -76,6 +75,7 @@ from .constants import (
     SCHEMA_KEY,
     PROPERTIES_KEY,
     ALLOWED_SCHEMA_PARAMS,
+    FILE_KEY,
 )
 from .utils import (
     is_valid_data_type,
@@ -83,13 +83,11 @@ from .utils import (
     get_dataset_download_info,
     get_authorization_header,
     get_response_of_type,
-    convert_list_dict_to_list,
 )
 
 
 class CLMS:
 
-    # TODO: change data_id to include the file name or other reasonable property
     # TODO: change get_data_id def and doc in the base class (ABC) to let the
     #  include_attrs kw arg be of type boolean (should be done in a diff PR)
     # TODO: preload_data should take in tuple of str
@@ -109,6 +107,7 @@ class CLMS:
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
         self._credentials: dict = {}
+        self._data_ids = []
         if credentials:
             self._credentials = credentials
             self._clms_api_token_instance = CLMSAPIToken(credentials=credentials)
@@ -308,20 +307,24 @@ class CLMS:
         return url, headers, json
 
     def _filter_dataset_attrs(
-        self, attrs: Container[str], datasets: list[dict[str, Any]] = None
+        self, attrs: Container[str], raw_datasets: list[dict[str, Any]] = None
     ) -> list[dict[str, Any]]:
         """
-        Filter datasets based on specified attributes.
+        Filters attributes of datasets in a list
 
         Args:
             attrs: A container of attribute names to filter for in each dataset.
+            raw_datasets: List of datasets metadata where each dataset contains the same keys
 
         Returns:
-           A list of dictionaries with filtered datasets.
+           A list of dictionaries with filtered keys.
         """
-        datasets = datasets or self._fetch_all_datasets()
+        if raw_datasets:
+            supported_keys = list(raw_datasets[0].keys())
+        else:
+            supported_keys = self._attrs
 
-        supported_keys = self._get_metadata_fields()
+        raw_datasets = raw_datasets or self._fetch_all_datasets()
 
         signature = inspect.signature(self._filter_dataset_attrs)
         if (attrs is not None and not isinstance(attrs, (list, set, tuple))) | (
@@ -335,7 +338,7 @@ class CLMS:
 
         return [
             {key: item[key] for key in supported_keys if key in attrs}
-            for item in datasets
+            for item in raw_datasets
         ]
 
     def _fetch_all_datasets(self) -> list[dict[str, Any]]:
@@ -352,18 +355,8 @@ class CLMS:
                 if not next_page:
                     break
                 response_data = make_api_request(next_page)
-
+            self._attrs = list(self._datasets_info[0].keys())
         return self._datasets_info
-
-    def _get_metadata_fields(self):
-        if not self._metadata:
-            response_data = make_api_request(self._build_api_url(SEARCH_ENDPOINT))
-            response = get_response_of_type(response_data, JSON_TYPE)
-            items = response.get(ITEMS_KEY, [])
-            if len(items) > 0:
-                self._metadata = list(items[0].keys())
-
-        return self._metadata
 
     def _build_api_url(
         self,
@@ -383,21 +376,43 @@ class CLMS:
         return f"{self._url}/{api_endpoint}"
 
     def access_item(self, data_id) -> dict:
-        datasets = [
-            item for item in self._datasets_info if data_id == item[CLMS_DATA_ID_KEY]
-        ]
-        if len(datasets) > 1:
+        products = self._filter_dataset_attrs(
+            [CLMS_DATA_ID_KEY, DOWNLOADABLE_FILES_KEY]
+        )
+        clms_data_product_id, dataset_filename = data_id.split(":")
+        dataset = []
+        for product in products:
+            for item in product.get(DOWNLOADABLE_FILES_KEY).get(ITEMS_KEY):
+                if (
+                    item.get("file") == dataset_filename
+                    and product.get(CLMS_DATA_ID_KEY) == clms_data_product_id
+                ):
+                    dataset.append(item)
+
+        if len(dataset) > 1:
             raise Exception(
-                f"Expected one item for data_id: {data_id}, found {len(datasets)}."
+                f"Expected one item for data_id: {data_id}, found {len(dataset)}."
             )
-        if len(datasets) == 0:
+        if len(dataset) == 0:
             raise Exception(f"Data id: {data_id} not found in the CLMS catalog")
-        return datasets[0]
+        return dataset[0]
 
     def get_data_ids(self) -> list[str]:
-        self._fetch_all_datasets()
-        data_ids_with_keys = self._filter_dataset_attrs([CLMS_DATA_ID_KEY])
-        return convert_list_dict_to_list(data_ids_with_keys, "id")
+        return self._create_data_ids()
+
+    def _create_data_ids(self) -> list[str]:
+        if not self._datasets_info:
+            self._fetch_all_datasets()
+        if self._data_ids:
+            return self._data_ids
+
+        self._data_ids = []
+        for item in self._datasets_info:
+            for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
+                if "file" in i and i[FILE_KEY] != "":
+                    self._data_ids.append(f"{item[CLMS_DATA_ID_KEY]}:{i[FILE_KEY]}")
+
+        return self._data_ids
 
     def get_data_ids_with_attrs(
         self, attrs: Container[str], data_id: str
@@ -446,12 +461,6 @@ class CLMS:
         ]
 
         return dict(bbox=bbox, time_range=time_range, crs=crs[0])
-
-    def get_data_id_format(self, data_id: str) -> str:
-        self._fetch_all_datasets()
-        item = self.access_item(data_id)
-        format_list = self._filter_dataset_attrs([DATASET_FORMAT_KEY], [item])
-        return format_list[0].get(DATASET_FORMAT_KEY)[0]
 
     def get_preload_params(self, data_id: str) -> dict[str : str | None]:
         self._fetch_all_datasets()
