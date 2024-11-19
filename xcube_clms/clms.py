@@ -52,7 +52,6 @@ from .constants import (
     COMPLETE,
     UNDEFINED,
     RESULTS,
-    BOUNDING_BOX_KEY,
     CRS_KEY,
     START_TIME_KEY,
     END_TIME_KEY,
@@ -376,19 +375,7 @@ class CLMS:
         return f"{self._url}/{api_endpoint}"
 
     def access_item(self, data_id) -> dict:
-        products = self._filter_dataset_attrs(
-            [CLMS_DATA_ID_KEY, DOWNLOADABLE_FILES_KEY]
-        )
-        clms_data_product_id, dataset_filename = data_id.split(":")
-        dataset = []
-        for product in products:
-            for item in product.get(DOWNLOADABLE_FILES_KEY).get(ITEMS_KEY):
-                if (
-                    item.get("file") == dataset_filename
-                    and product.get(CLMS_DATA_ID_KEY) == clms_data_product_id
-                ):
-                    dataset.append(item)
-
+        dataset = self._get_item(data_id)
         if len(dataset) > 1:
             raise Exception(
                 f"Expected one item for data_id: {data_id}, found {len(dataset)}."
@@ -396,6 +383,25 @@ class CLMS:
         if len(dataset) == 0:
             raise Exception(f"Data id: {data_id} not found in the CLMS catalog")
         return dataset[0]
+
+    def _get_item(self, data_id):
+        if len(data_id.split(":")) == 2:
+            clms_data_product_id, dataset_filename = data_id.split(":")
+            dataset = []
+            for product in self._datasets_info:
+                for item in product.get(DOWNLOADABLE_FILES_KEY).get(ITEMS_KEY):
+                    if (
+                        item.get("file") == dataset_filename
+                        and product.get(CLMS_DATA_ID_KEY) == clms_data_product_id
+                    ):
+                        dataset.append(item)
+        else:
+            dataset = [
+                item
+                for item in self._datasets_info
+                if data_id == item[CLMS_DATA_ID_KEY]
+            ]
+        return dataset
 
     def get_data_ids(
         self,
@@ -431,41 +437,24 @@ class CLMS:
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
         if is_valid_data_type(data_type):
             self._fetch_all_datasets()
-            datasets = [
-                item
-                for item in self._datasets_info
-                if data_id == item[CLMS_DATA_ID_KEY]
-            ]
-            if len(datasets) == 0:
+            dataset = self._get_item(data_id)
+            if len(dataset) == 0:
                 return False
             return True
         return False
 
     def get_extent(self, data_id: str) -> dict:
         self._fetch_all_datasets()
-        item = self.access_item(data_id)
-        geographic_bounding_box = item.get(BOUNDING_BOX_KEY).get(ITEMS_KEY)
+        item = self.access_item(data_id.split(":")[0])
         crs = item.get(CRS_KEY)
         time_range = (item.get(START_TIME_KEY), item.get(END_TIME_KEY))
 
-        if len(geographic_bounding_box) > 1:
-            LOG.warning(
-                f"Expected 1 bbox, got {len(geographic_bounding_box)}. Outputting the first element."
-            )
         if len(crs) > 1:
             LOG.warning(
                 f"Expected 1 crs, got {len(crs)}. Outputting the first element."
             )
 
-        # TODO: Handle multiple bounding boxes in the same item
-        bbox = [
-            float(geographic_bounding_box[0]["west"]),  # x1
-            float(geographic_bounding_box[0]["south"]),  # y1
-            float(geographic_bounding_box[0]["east"]),  # x2
-            float(geographic_bounding_box[0]["north"]),  # y2
-        ]
-
-        return dict(bbox=bbox, time_range=time_range, crs=crs[0])
+        return dict(time_range=time_range, crs=crs[0])
 
     def get_preload_params(self, data_id: str) -> dict[str : str | None]:
         self._fetch_all_datasets()
