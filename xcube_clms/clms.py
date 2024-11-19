@@ -397,31 +397,36 @@ class CLMS:
             raise Exception(f"Data id: {data_id} not found in the CLMS catalog")
         return dataset[0]
 
-    def get_data_ids(self) -> list[str]:
-        return self._create_data_ids()
+    def get_data_ids(
+        self,
+        include_attrs: Container[str] | bool | None = None,
+    ) -> list[str] | list[tuple[str, dict[str, Any]]]:
+        return self._create_data_ids(include_attrs)
 
-    def _create_data_ids(self) -> list[str]:
+    def _create_data_ids(
+        self,
+        include_attrs: Container[str] | bool | None = None,
+    ) -> list[str] | list[tuple[str, dict[str, Any]]]:
         if not self._datasets_info:
             self._fetch_all_datasets()
-        if self._data_ids:
-            return self._data_ids
 
-        self._data_ids = []
+        data_ids = []
         for item in self._datasets_info:
             for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
                 if "file" in i and i[FILE_KEY] != "":
-                    self._data_ids.append(f"{item[CLMS_DATA_ID_KEY]}:{i[FILE_KEY]}")
-
-        return self._data_ids
-
-    def get_data_ids_with_attrs(
-        self, attrs: Container[str], data_id: str
-    ) -> tuple[str, dict[str, Any]]:
-        """Extracts the desired attributes based on the data_id from the list of datasets."""
-        self._fetch_all_datasets()
-        item = self.access_item(data_id)
-        dataset = self._filter_dataset_attrs(attrs, [item])
-        return data_id, dataset[0]
+                    if not include_attrs:
+                        data_ids.append(f"{item[CLMS_DATA_ID_KEY]}:{i[FILE_KEY]}")
+                    elif isinstance(include_attrs, bool) and include_attrs:
+                        data_ids.append((f"{item[CLMS_DATA_ID_KEY]}:{i[FILE_KEY]}", i))
+                    elif isinstance(include_attrs, list):
+                        attrs = {}
+                        for attr in include_attrs:
+                            if attr in i:
+                                attrs[attr] = i[attr]
+                        data_ids.append(
+                            (f"{item[CLMS_DATA_ID_KEY]}:{i[FILE_KEY]}", attrs)
+                        )
+        return data_ids
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
         if is_valid_data_type(data_type):

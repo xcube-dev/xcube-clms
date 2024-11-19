@@ -80,22 +80,20 @@ class CLMSDataStore(DataStore, ABC):
     def get_data_types_for_data(self, data_id: str) -> Tuple[str, ...]:
         return self.get_data_types()
 
-    # TODO: If include_attrs is an empty container, it return all attrs.
     def get_data_ids(
         self,
         data_type: DataTypeLike = None,
         include_attrs: Container[str] | bool | None = None,
     ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
         assert_valid_data_type(data_type)
-        data_ids = self._clms.get_data_ids()
+        data_ids = self._clms.get_data_ids(include_attrs)
         for data_id in data_ids:
-            if include_attrs is None:
-                yield data_id
-            elif include_attrs is not None or include_attrs == True:
-                # Do something here - include all attrs
-                ...
+            if ((include_attrs is not None) and (include_attrs != False)) or (
+                include_attrs == True
+            ):
+                yield data_id[0], data_id[1]
             else:
-                yield self._clms.get_data_ids_with_attrs(include_attrs, data_id)
+                yield data_id
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
         return self._clms.has_data(data_id, data_type)
