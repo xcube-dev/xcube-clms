@@ -266,32 +266,13 @@ class CLMS:
         return geo_file
 
     def _prepare_download_request(
-        self, item: dict, data_id: str, params: dict
+        self, product: dict, data_id: str
     ) -> tuple[str, dict, dict]:
         LOG.info(f"Preparing download request for {data_id}")
-        prepackaged_items = item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]
-        if len(prepackaged_items) == 0:
-            raise Exception(f"No prepackaged item found for {data_id}.")
-        item_to_download = [
-            item
-            for item in prepackaged_items[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]
-            if all(item.get(key) == value for key, value in params.items())
-        ]
+        item_to_download = self.access_item(data_id)
 
-        if len(item_to_download) == 0:
-            raise Exception(
-                f"No prepackaged item found for {data_id}. Please check preload parameters and/or data_id."
-            )
-
-        elif len(item_to_download) > 1:
-            raise Exception(
-                f"Multiple prepackaged items found for {data_id}. "
-                f"Please specify the preload parameters to "
-                f"to select one dataset for download"
-            )
-
-        dataset_id = self._filter_dataset_attrs([UID_KEY], [item])[0][UID_KEY]
-        file_id = item_to_download[0][FILE_ID_KEY]
+        dataset_id = self._filter_dataset_attrs([UID_KEY], [product])[0][UID_KEY]
+        file_id = item_to_download[FILE_ID_KEY]
         json = get_dataset_download_info(
             dataset_id=dataset_id,
             file_id=file_id,
@@ -511,114 +492,103 @@ class CLMS:
 
         return UNDEFINED, ""
 
-    def _queue_download(self, data_request: dict) -> str:
+    def _queue_download(self, data_id: str) -> str:
         if not self._credentials:
             raise Exception(
                 "You need credentials to open the data. Please provide credentials using set_credentials()."
             )
         self.refresh_token()
         self._fetch_all_datasets()
-        data_id = data_request.get("data_id", "")
-        preload_params = data_request.get("preload_params", {})
 
         item = self.access_item(data_id)
+        product = self.access_item(data_id.split(":")[0])
 
         # This is to make sure that there are pre-packaged files available for download.
         # Without this, the API throws the following error: Error, the FileID is not valid.
         # We check for path and source based on the API code here:
         # https://github.com/eea/clms.downloadtool/blob/master/clms/downloadtool/api/services/datarequest_post/post.py#L177-L196
 
-        path = item.get(DOWNLOADABLE_FILES_KEY).get(ITEMS_KEY).get("path", "")
-        source = item.get(DOWNLOADABLE_FILES_KEY).get(ITEMS_KEY).get("source", "")
+        path = item.get("path", "")
+        source = item.get("source", "")
 
         assert (
             path is not "" and source is not ""
         ), f"This data product: {item["title"]} is not yet supported in this plugin yet."
 
-        request_exists: bool = False
-        while True:
-            status, task_id = self._current_requests(item[UID_KEY])
-            if status == COMPLETE:
-                LOG.info(
-                    f"Download request with task id {task_id} already completed for data id: {data_id}"
-                )
-                request_exists = True
-                break
-            if status == UNDEFINED:
-                LOG.info(f"No download request exists for data id: {data_id}")
-                break
-            if status == PENDING:
-                LOG.info(
-                    f"Download request with task id {task_id} already exists for data id: {data_id}. Status check again in 60 seconds"
-                )
-                time.sleep(60)
-
-        if not request_exists:
-            download_request_url, headers, json = self._prepare_download_request(
-                item, data_id, preload_params
+        status, task_id = self._current_requests(product[UID_KEY])
+        if status == COMPLETE:
+            LOG.info(
+                f"Download request with task id {task_id} already completed for data id: {data_id}"
             )
+            return task_id
+        if status == UNDEFINED:
+            LOG.info(f"No download request exists for data id: {data_id}")
 
-            response_data = make_api_request(
-                method="POST", url=download_request_url, headers=headers, json=json
-            )
-            response = get_response_of_type(response_data, JSON_TYPE)
-            LOG.info(f"Download Requested with Task ID : {response}")
+        download_request_url, headers, json = self._prepare_download_request(
+            product, data_id
+        )
 
-            while True:
-                status, task_id = self._current_requests(item[UID_KEY])
-                if status == COMPLETE:
-                    LOG.info(
-                        f"Download request with task id {task_id} completed for data id: {data_id}"
-                    )
-                    break
-                if status == PENDING:
-                    LOG.info(
-                        f"Download request with task id {task_id} for data id: {data_id}. Status check again in 60 seconds"
-                    )
-                    time.sleep(60)
+        print(download_request_url, headers, json)
 
-        if self.download_url:
-            LOG.info(f"Downloading zip file from {self.download_url}")
-            headers = ACCEPT_HEADER.copy()
-            headers.update(CONTENT_TYPE_HEADER)
-            response_data = make_api_request(
-                self.download_url, headers=headers, stream=True
-            )
-            response = get_response_of_type(response_data, BYTES_TYPE)
+        # response_data = make_api_request(
+        #     method="POST", url=download_request_url, headers=headers, json=json
+        # )
+        # response = get_response_of_type(response_data, JSON_TYPE)
+        # LOG.info(f"Download Requested with Task ID : {response}")
 
-            with io.BytesIO(response.content) as zip_file_in_memory:
-                fs = fsspec.filesystem("zip", fo=zip_file_in_memory)
-                zip_contents = fs.ls(RESULTS)
-                actual_zip_file = None
-                if len(zip_contents) == 1:
-                    if ".zip" in zip_contents[0][FILENAME_KEY]:
-                        actual_zip_file = zip_contents[0]
-                elif len(zip_contents) > 1:
-                    LOG.warn("Cannot handle more than one zip files at the moment.")
-                else:
-                    LOG.info("No downloadable zip file found inside.")
-                if actual_zip_file:
-                    LOG.info(f"Found one zip file {actual_zip_file}.")
-                    with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
-                        zip_fs = fsspec.filesystem("zip", fo=f)
-                        geo_file = self._find_geo_in_dir(
-                            "/",
-                            zip_fs,
-                        )
-                        if geo_file:
-                            with zip_fs.open(geo_file, "rb") as geo_f:
-                                if "tif" in geo_file:
-                                    return rioxarray.open_rasterio(geo_f)
-                                else:
-                                    return xr.open_dataset(geo_f)
-                        else:
-                            raise Exception("No GeoTiff file found")
+        # while True:
+        #     status, task_id = self._current_requests(item[UID_KEY])
+        #     if status == COMPLETE:
+        #         LOG.info(
+        #             f"Download request with task id {task_id} completed for data id: {data_id}"
+        #         )
+        #         break
+        #     if status == PENDING:
+        #         LOG.info(
+        #             f"Download request with task id {task_id} for data id: {data_id}. Status check again in 60 seconds"
+        #         )
+        #         time.sleep(60)
 
-        else:
-            raise Exception(f"No DownloadURL found for data_id {data_id}")
-
-    def preload_data(self, data_requests: list[dict]):
+    def preload_data(self, *data_ids: str, **preload_params):
         task_ids = []
-        for data_request in data_requests:
-            task_id = self._queue_download(data_request)
+        for data_id in data_ids:
+            task_id = self._queue_download(data_id)
             task_ids.append(task_id)
+        # TODO: Check for queued datasets if they are available for download
+        #  If they are, create one filestore in a location provided by preload_params and use it as the dir to store the downloaded dataset
+        #  Create a progress bar that indicates the queued downloads, download process, and postprocess to create the cube
+
+    def _request_download(self, download_url):
+        LOG.info(f"Downloading zip file from {download_url}")
+        headers = ACCEPT_HEADER.copy()
+        headers.update(CONTENT_TYPE_HEADER)
+        response_data = make_api_request(download_url, headers=headers, stream=True)
+        response = get_response_of_type(response_data, BYTES_TYPE)
+
+        with io.BytesIO(response.content) as zip_file_in_memory:
+            fs = fsspec.filesystem("zip", fo=zip_file_in_memory)
+            zip_contents = fs.ls(RESULTS)
+            actual_zip_file = None
+            if len(zip_contents) == 1:
+                if ".zip" in zip_contents[0][FILENAME_KEY]:
+                    actual_zip_file = zip_contents[0]
+            elif len(zip_contents) > 1:
+                LOG.warn("Cannot handle more than one zip files at the moment.")
+            else:
+                LOG.info("No downloadable zip file found inside.")
+            if actual_zip_file:
+                LOG.info(f"Found one zip file {actual_zip_file}.")
+                with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
+                    zip_fs = fsspec.filesystem("zip", fo=f)
+                    geo_file = self._find_geo_in_dir(
+                        "/",
+                        zip_fs,
+                    )
+                    if geo_file:
+                        with zip_fs.open(geo_file, "rb") as geo_f:
+                            if "tif" in geo_file:
+                                return rioxarray.open_rasterio(geo_f)
+                            elif "nc" in geo_file:
+                                return xr.open_dataset(geo_f)
+                    else:
+                        raise Exception("No file found in the download to load")

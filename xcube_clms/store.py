@@ -138,7 +138,7 @@ class CLMSDataStore(DataStore, ABC):
         pass
 
     def preload_data(self, *data_ids: str, **preload_params):
-        return self._clms.preload_data(data_ids, **preload_params)
+        return self._clms.preload_data(*data_ids, **preload_params)
 
     @classmethod
     def get_preload_params_schema(cls) -> JsonObjectSchema:
