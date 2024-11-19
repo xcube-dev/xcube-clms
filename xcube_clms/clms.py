@@ -89,6 +89,17 @@ from .utils import (
 
 class CLMS:
 
+    # TODO: change data_id to include the file name or other reasonable property
+    # TODO: change get_data_id def and doc in the base class (ABC) to let the
+    #  include_attrs kw arg be of type boolean (should be done in a diff PR)
+    # TODO: preload_data should take in tuple of str
+    #  It should return a preload handle. It can be used to cancel the preloading,
+    #  - check the progress,
+    #  - initiate the download,
+    #  - it should have a progress bar for download. Its representation should be a progress bar in JN, (indeterminate Progress Bar)
+    #  Create new store, init new file store ("filesystem")
+    #  preload_data(..., non_blocking=True) => this should not go into ABC
+
     def __init__(
         self,
         url: str,

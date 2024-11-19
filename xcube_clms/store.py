@@ -32,7 +32,6 @@ from xcube.core.store import (
 from xcube.util.jsonschema import (
     JsonObjectSchema,
     JsonStringSchema,
-    JsonArraySchema,
 )
 
 from .clms import CLMS
@@ -81,14 +80,20 @@ class CLMSDataStore(DataStore, ABC):
     def get_data_types_for_data(self, data_id: str) -> Tuple[str, ...]:
         return self.get_data_types()
 
+    # TODO: If include_attrs is an empty container, it return all attrs.
     def get_data_ids(
-        self, data_type: DataTypeLike = None, include_attrs: Container[str] = None
+        self,
+        data_type: DataTypeLike = None,
+        include_attrs: Container[str] | bool | None = None,
     ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
         assert_valid_data_type(data_type)
         data_ids = self._clms.get_data_ids()
         for data_id in data_ids:
             if include_attrs is None:
                 yield data_id
+            elif include_attrs is not None or include_attrs == True:
+                # Do something here - include all attrs
+                ...
             else:
                 yield self._clms.get_data_ids_with_attrs(include_attrs, data_id)
 
@@ -134,26 +139,9 @@ class CLMSDataStore(DataStore, ABC):
     ) -> JsonObjectSchema:
         pass
 
-    def get_preload_params(self, data_id: str) -> list[dict[str : str | None]]:
-        return self._clms.get_preload_params(data_id)
-
-    def preload_data(self, data_requests: list[dict]):
-        return self._clms.preload_data(data_requests)
-
-    def get_preload_data_params_schema_for_data(self, data_id: str) -> JsonArraySchema:
-        return self._clms.get_preload_data_params_schema_for_data(data_id)
+    def preload_data(self, *data_ids: str, **preload_params):
+        return self._clms.preload_data(data_ids, **preload_params)
 
     @classmethod
-    def get_preload_data_params_schema(cls, data_id: str) -> JsonArraySchema:
-        return JsonArraySchema(
-            items=JsonObjectSchema(
-                properties={
-                    "data_id": JsonStringSchema(
-                        title="Data id of the dataset from the CLMS catalog"
-                    ),
-                    "preload_params": JsonObjectSchema(
-                        title="Please use get_preload_data_params_schema_for_data() to get the schema for preload_params for the dataset that you are interested in."
-                    ),
-                }
-            )
-        )
+    def get_preload_params_schema(cls) -> JsonObjectSchema:
+        return JsonObjectSchema(additional_properties=True)
