@@ -1,10 +1,17 @@
-from typing import Any
+from typing import Any, Optional
+from urllib.parse import urlencode
 
 import requests
 from requests import JSONDecodeError, HTTPError, Timeout, RequestException
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
-from xcube_clms.constants import ACCEPT_HEADER, LOG
+from xcube_clms.constants import (
+    ACCEPT_HEADER,
+    LOG,
+    PORTAL_TYPE,
+    FULL_SCHEMA,
+    METADATA_FIELDS,
+)
 
 
 # Using the auxiliary functions below from xcube-stac
@@ -89,6 +96,24 @@ def make_api_request(
         raise Timeout(f"Timeout error occurred: {et}")
     except requests.exceptions.RequestException as e:
         raise RequestException(f"Request error occurred: {e}")
+
+
+def build_api_url(
+    url: str,
+    api_endpoint: str,
+    metadata_fields: Optional[list] = None,
+    datasets_request: bool = True,
+) -> str:
+    params = {}
+    if datasets_request:
+        params = PORTAL_TYPE
+        params[FULL_SCHEMA] = "1"
+    if metadata_fields:
+        params[METADATA_FIELDS] = ",".join(metadata_fields)
+    if params:
+        query_params = urlencode(params)
+        return f"{url}/{api_endpoint}/?{query_params}"
+    return f"{url}/{api_endpoint}"
 
 
 def get_response_of_type(response_data: dict, data_type: str):

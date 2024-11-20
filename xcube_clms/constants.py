@@ -68,6 +68,8 @@ SOURCE_KEY = "source"
 FULL_SOURCE_KEY = "full_source"
 DESCRIPTION_KEY = "description"
 ENUM_KEY = "enum"
+TASK_IDS_KEY = "TaskIds"
+TASK_ID_KEY = "TaskID"
 
 STATUS_PENDING = ["Queued", "In_progress"]
 STATUS_COMPLETE = ["Finished_ok"]
