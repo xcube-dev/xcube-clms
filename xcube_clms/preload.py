@@ -34,6 +34,8 @@ from xcube_clms.constants import (
     FILENAME_KEY,
     NAME_KEY,
     BYTES_TYPE,
+    TASK_IDS_KEY,
+    TASK_ID_KEY,
 )
 from xcube_clms.utils import (
     make_api_request,
@@ -67,9 +69,7 @@ class PreloadData:
         else:
             LOG.info("Current token valid. Reusing it.")
 
-    def queue_download(
-        self, data_id: str, item: dict, product: dict
-    ) -> tuple[str, str]:
+    def queue_download(self, data_id: str, item: dict, product: dict) -> str:
         self._refresh_token()
 
         # This is to make sure that there are pre-packaged files available for download.
@@ -84,21 +84,24 @@ class PreloadData:
             LOG.warning(f"No prepackaged downloadable items available for {data_id}")
 
         full_source = (
-            item.get(DATASET_DOWNLOAD_INFORMATION_KEY)
+            product.get(DATASET_DOWNLOAD_INFORMATION_KEY)
             .get(ITEMS_KEY)[0]
             .get(FULL_SOURCE_KEY, "")
         )
 
-        assert (
-            full_source in NOT_SUPPORTED_LIST
-        ), f"This data product: {item[TITLE_KEY]} is not yet supported in this plugin yet."
+        assert full_source not in NOT_SUPPORTED_LIST, (
+            f"This data product: {product[TITLE_KEY]} is not yet supported in "
+            f"this plugin yet."
+        )
 
         status, task_id = self._get_current_requests_status(product[UID_KEY])
-        if status == COMPLETE:
+        if status == COMPLETE or status == PENDING:
             LOG.info(
-                f"Download request with task id {task_id} already completed for data id: {data_id}"
+                f"Download request with task id {task_id} "
+                f"{'already completed' if status == 'COMPLETE' 
+                else 'is in queue'} for data id: {data_id}"
             )
-            return task_id, self.download_url
+            return task_id
         if status == UNDEFINED:
             LOG.info(f"No download request exists for data id: {data_id}")
 
@@ -106,19 +109,17 @@ class PreloadData:
             data_id, item, product
         )
 
-        print(download_request_url, headers, json)
-
-        # response_data = make_api_request(
-        #     method="POST", url=download_request_url, headers=headers, json=json
-        # )
-        # response = get_response_of_type(response_data, JSON_TYPE)
-        # task_ids = response.get(TASK_IDS_KEY)
-        # assert (
-        #     len(task_ids) == 1
-        # ), f"Expected API response with 1 task_id, got {len(task_ids)}"
-        # task_id = task_ids[0].get(TASK_ID_KEY)
-        # LOG.info(f"Download Requested with Task ID : {task_id}")
-        # return task_id
+        response_data = make_api_request(
+            method="POST", url=download_request_url, headers=headers, json=json
+        )
+        response = get_response_of_type(response_data, JSON_TYPE)
+        task_ids = response.get(TASK_IDS_KEY)
+        assert (
+            len(task_ids) == 1
+        ), f"Expected API response with 1 task_id, got {len(task_ids)}"
+        task_id = task_ids[0].get(TASK_ID_KEY)
+        LOG.info(f"Download Requested with Task ID : {task_id}")
+        return task_id
 
     def _prepare_download_request(
         self, data_id: str, item: dict, product: dict
@@ -158,7 +159,7 @@ class PreloadData:
             if status in STATUS_PENDING and dataset_id == requested_data_id:
                 return PENDING, key
             if status in STATUS_COMPLETE and dataset_id == requested_data_id:
-                self.download_url = response[key][0][DOWNLOAD_URL_KEY]
+                self.download_url = response[key][DOWNLOAD_URL_KEY]
                 return COMPLETE, key
 
         return UNDEFINED, ""

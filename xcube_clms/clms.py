@@ -25,6 +25,7 @@ import xarray as xr
 from xcube.core.store import DataTypeLike
 from xcube.util.jsonschema import JsonObjectSchema, JsonStringSchema
 
+from build.lib.xcube_clms.constants import TASK_ID_KEY
 from .constants import (
     SEARCH_ENDPOINT,
     LOG,
@@ -41,8 +42,6 @@ from .constants import (
     PROPERTIES_KEY,
     ALLOWED_SCHEMA_PARAMS,
     FILE_KEY,
-    TASK_IDS_KEY,
-    DOWNLOAD_URL_KEY,
 )
 from .preload import PreloadData
 from .utils import (
@@ -77,7 +76,7 @@ class CLMS:
         self._metadata: list[str] = []
         self._data_ids = []
         self._preload_data = PreloadData(self._url, credentials)
-        self.download_url: str = ""
+        self._fetch_all_datasets()
 
     def open_dataset(
         self,
@@ -149,11 +148,9 @@ class CLMS:
         for data_id in data_ids:
             item = self._access_item(data_id)
             product = self._access_item(data_id.split(":")[0])
-            task_id, download_url = self._preload_data.queue_download(
-                data_id, item, product
-            )
-            task_ids[TASK_IDS_KEY] = task_id
-            task_ids[DOWNLOAD_URL_KEY] = download_url
+            task_id = self._preload_data.queue_download(data_id, item, product)
+            task_ids[data_id] = {TASK_ID_KEY: task_id}
+            # task_ids[DOWNLOAD_URL_KEY] = download_url
         print(task_ids)
         # TODO: Check for queued datasets if they are available for download
         #  If they are, create one filestore in a location provided by preload_params and use it as the dir to store the downloaded dataset
