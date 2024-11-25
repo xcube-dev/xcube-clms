@@ -1,8 +1,12 @@
 import io
+import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from itertools import cycle
 
 import fsspec
-import rioxarray
-import xarray as xr
+from tqdm.notebook import tqdm
 
 from xcube_clms.api_token import CLMSAPIToken
 from xcube_clms.constants import (
@@ -47,11 +51,13 @@ from xcube_clms.utils import (
 
 
 class PreloadData:
-    def __init__(self, url, credentials):
+    def __init__(self, url, credentials, path):
         self._credentials: dict = {}
         self._api_token = None
         self._clms_api_token_instance = None
         self._url = url
+        self.cancel_event = threading.Event()
+        self.path = path
         if credentials:
             self._credentials = credentials
             self._clms_api_token_instance = CLMSAPIToken(credentials=credentials)
@@ -69,11 +75,12 @@ class PreloadData:
         else:
             LOG.info("Current token valid. Reusing it.")
 
-    def queue_download(self, data_id: str, item: dict, product: dict) -> str:
+    def request_download(self, data_id: str, item: dict, product: dict) -> str:
         self._refresh_token()
 
-        # This is to make sure that there are pre-packaged files available for download.
-        # Without this, the API throws the following error: Error, the FileID is not valid.
+        # This is to make sure that there are pre-packaged files available for
+        # download. Without this, the API throws the following error: Error,
+        # the FileID is not valid.
         # We check for path and source based on the API code here:
         # https://github.com/eea/clms.downloadtool/blob/master/clms/downloadtool/api/services/datarequest_post/post.py#L177-L196
 
@@ -82,6 +89,9 @@ class PreloadData:
 
         if (path is not "") and (source is not ""):
             LOG.warning(f"No prepackaged downloadable items available for {data_id}")
+
+        # This is to make sure that we do not send requests for currently for
+        # unsupported datasets.
 
         full_source = (
             product.get(DATASET_DOWNLOAD_INFORMATION_KEY)
@@ -94,7 +104,7 @@ class PreloadData:
             f"this plugin yet."
         )
 
-        status, task_id = self._get_current_requests_status(product[UID_KEY])
+        status, task_id = self._get_current_requests_status(dataset_id=product[UID_KEY])
         if status == COMPLETE or status == PENDING:
             LOG.info(
                 f"Download request with task id {task_id} "
@@ -121,6 +131,71 @@ class PreloadData:
         LOG.info(f"Download Requested with Task ID : {task_id}")
         return task_id
 
+    def process_tasks(self, task_ids):
+        progress_bars = {
+            task_id: tqdm(total=100, desc=f"Task {task_id}") for task_id in task_ids
+        }
+        with ThreadPoolExecutor() as executor:
+            futures = {
+                executor.submit(
+                    self._check_status_and_download,
+                    task_id,
+                    self.path,
+                    progress_bars[task_id],
+                ): task_id
+                for task_id in task_ids
+            }
+
+            for future in futures:
+                task_id = futures[future]
+                try:
+                    result = future.result()
+                except Exception as e:
+                    """Handle it"""
+                finally:
+                    progress_bars[task_id].close()
+
+    def _check_status_and_download(self, task_id, path, progress_bar):
+        status_event = threading.Event()
+        spinner_thread = threading.Thread(
+            target=self.spinner, args=(status_event, task_id)
+        )
+        spinner_thread.start()
+        spinner_thread.join()
+
+        while True:
+            status = self._get_current_requests_status(task_id=task_id)
+            if status == "COMPLETE":
+                status_event.set()
+                download_url = self._get_download_url(task_id)
+                # Use the path used to create a filestore.
+                self._download_data(download_url, self.path, progress_bar)
+            time.sleep(60)
+
+    def _get_download_url(self, task_id):
+        """
+        Implement me!
+        :param task_id:
+        :return:
+        """
+
+    @staticmethod
+    def spinner(event, task_id):
+        """
+        Displays a spinner with elapsed time for a single task until the event is set.
+        """
+        spinner = cycle(["◐", "◓", "◑", "◒"])
+        start_time = time.time()
+        while not event.is_set():
+            elapsed = int(time.time() - start_time)
+            print(
+                f"\rTask {task_id}: {next(spinner)} Elapsed time: {elapsed}s",
+                end="",
+                flush=True,
+            )
+            time.sleep(0.1)
+        print(f"\rTask {task_id}: Done!{' ' * 20}")
+
     def _prepare_download_request(
         self, data_id: str, item: dict, product: dict
     ) -> tuple[str, dict, dict]:
@@ -141,7 +216,12 @@ class PreloadData:
 
         return url, headers, json
 
-    def _get_current_requests_status(self, dataset_id: str) -> tuple[str, str]:
+    def _get_current_requests_status(
+        self, dataset_id: str | None = None, task_id: str | None = None
+    ) -> tuple[str, str]:
+        """
+        If both dataset_id and task_id are provided, task_id is ignored.
+        """
         self._refresh_token()
 
         headers = ACCEPT_HEADER.copy()
@@ -152,28 +232,43 @@ class PreloadData:
         response = get_response_of_type(response_data, JSON_TYPE)
 
         for key in response:
+            print("key:::", key)
             status = response[key][STATUS_KEY]
             datasets = response[key][DATASETS_KEY]
             requested_data_id = datasets[0][DATASET_ID_KEY]
-
-            if status in STATUS_PENDING and dataset_id == requested_data_id:
+            condition = (
+                (dataset_id == requested_data_id) if dataset_id else (key == task_id)
+            )
+            if status in STATUS_PENDING and condition:
                 return PENDING, key
-            if status in STATUS_COMPLETE and dataset_id == requested_data_id:
+            if status in STATUS_COMPLETE and condition:
                 self.download_url = response[key][DOWNLOAD_URL_KEY]
                 return COMPLETE, key
 
         return UNDEFINED, ""
 
-    def request_download(self):
-        LOG.info(f"Downloading zip file from {self.download_url}")
+    @staticmethod
+    def _download_data(download_url, path, progress_bar):
+        LOG.info(f"Downloading zip file from {download_url}")
         headers = ACCEPT_HEADER.copy()
         headers.update(CONTENT_TYPE_HEADER)
-        response_data = make_api_request(
-            self.download_url, headers=headers, stream=True
-        )
+        response_data = make_api_request(download_url, headers=headers, stream=True)
         response = get_response_of_type(response_data, BYTES_TYPE)
 
+        total_size = int(
+            response.headers.get("content-length", 0)
+        )
+        chunk_size = 1024 * 1024
+        downloaded_size = 0
+
         with io.BytesIO(response.content) as zip_file_in_memory:
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                zip_file_in_memory.write(chunk)
+                downloaded_size += len(chunk)
+                progress_bar.update(len(chunk) / total_size * 100)
+
+            zip_file_in_memory.seek(0)
+
             fs = fsspec.filesystem("zip", fo=zip_file_in_memory)
             zip_contents = fs.ls(RESULTS)
             actual_zip_file = None
@@ -188,18 +283,25 @@ class PreloadData:
                 LOG.info(f"Found one zip file {actual_zip_file}.")
                 with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
                     zip_fs = fsspec.filesystem("zip", fo=f)
-                    geo_file = self._find_geo_in_dir(
-                        "/",
-                        zip_fs,
-                    )
-                    if geo_file:
-                        with zip_fs.open(geo_file, "rb") as geo_f:
-                            if "tif" in geo_file:
-                                return rioxarray.open_rasterio(geo_f)
-                            elif "nc" in geo_file:
-                                return xr.open_dataset(geo_f)
-                    else:
-                        raise Exception("No file found in the download to load")
+                    for file_name in zip_fs.ls("/"):
+                        target_file_path = os.path.join(path, file_name)
+                        os.makedirs(os.path.dirname(target_file_path), exist_ok=True)
+                        with zip_fs.open(file_name, "rb") as source_file:
+                            with open(target_file_path, "wb") as dest_file:
+                                dest_file.write(source_file.read())
+                    LOG.info(f"All files extracted to {path}.")
+                    # geo_file = self._find_geo_in_dir(
+                    #     "/",
+                    #     zip_fs,
+                    # )
+                    # if geo_file:
+                    #     with zip_fs.open(geo_file, "rb") as geo_f:
+                    #         if "tif" in geo_file:
+                    #             return rioxarray.open_rasterio(geo_f)
+                    #         elif "nc" in geo_file:
+                    #             return xr.open_dataset(geo_f)
+                    # else:
+                    #     raise Exception("No file found in the download to load")
 
     @staticmethod
     def _find_geo_in_dir(path, zip_fs):
