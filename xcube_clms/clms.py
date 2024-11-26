@@ -64,18 +64,14 @@ class CLMS:
     #  Create new store, init new file store ("filesystem")
     #  preload_data(..., non_blocking=True) => this should not go into ABC
 
-    def __init__(
-        self,
-        url: str,
-        credentials: dict,
-    ):
+    def __init__(self, url: str, credentials: dict, path: str | None = None):
         self._api_token = None
         self._clms_api_token_instance = None
         self._url = url
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
         self._data_ids = []
-        self._preload_data = PreloadData(self._url, credentials)
+        self._preload_data = PreloadData(self._url, credentials, path)
         self._fetch_all_datasets()
 
     def open_dataset(
@@ -151,7 +147,7 @@ class CLMS:
             task_id = self._preload_data.request_download(data_id, item, product)
             task_ids[data_id] = {TASK_ID_KEY: task_id}
             # task_ids[DOWNLOAD_URL_KEY] = download_url
-        print(task_ids)
+        # print(task_ids)
         self._preload_data.process_tasks(task_ids)
         # TODO: Check for queued datasets if they are available for download
         #  If they are, create one filestore in a location provided by preload_params and use it as the dir to store the downloaded dataset

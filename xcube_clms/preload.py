@@ -57,7 +57,10 @@ class PreloadData:
         self._clms_api_token_instance = None
         self._url = url
         self.cancel_event = threading.Event()
-        self.path = path
+        if path is None:
+            self.path = ""
+        else:
+            self.path = path
         if credentials:
             self._credentials = credentials
             self._clms_api_token_instance = CLMSAPIToken(credentials=credentials)
@@ -139,7 +142,7 @@ class PreloadData:
             futures = {
                 executor.submit(
                     self._check_status_and_download,
-                    task_id,
+                    task_ids[task_id][TASK_ID_KEY],
                     self.path,
                     progress_bars[task_id],
                 ): task_id
@@ -162,14 +165,15 @@ class PreloadData:
         )
         spinner_thread.start()
         spinner_thread.join()
+        status_event.set()
 
-        while True:
-            status = self._get_current_requests_status(task_id=task_id)
-            if status == "COMPLETE":
-                status_event.set()
+        while status_event.is_set():
+            status, _ = self._get_current_requests_status(task_id=task_id)
+            if status == COMPLETE:
+                status_event.clear()
                 download_url = self._get_download_url(task_id)
                 # Use the path used to create a filestore.
-                self._download_data(download_url, self.path, progress_bar)
+                self._download_data(download_url, path, progress_bar)
             time.sleep(60)
 
     def _get_download_url(self, task_id):
@@ -178,6 +182,24 @@ class PreloadData:
         :param task_id:
         :return:
         """
+        self._refresh_token()
+
+        headers = ACCEPT_HEADER.copy()
+        headers.update(get_authorization_header(self._api_token))
+
+        url = build_api_url(self._url, TASK_STATUS_ENDPOINT, datasets_request=False)
+        response_data = make_api_request(url=url, headers=headers)
+        response = get_response_of_type(response_data, JSON_TYPE)
+
+        for key in response:
+            if key == task_id:
+                status = response[key][STATUS_KEY]
+                if status in STATUS_COMPLETE:
+                    return response[key][DOWNLOAD_URL_KEY]
+                else:
+                    raise Exception(
+                        f"Task ID {task_id} has not yet finished. No download url available yet."
+                    )
 
     @staticmethod
     def spinner(event, task_id):
@@ -186,7 +208,7 @@ class PreloadData:
         """
         spinner = cycle(["◐", "◓", "◑", "◒"])
         start_time = time.time()
-        while not event.is_set():
+        while event.is_set():
             elapsed = int(time.time() - start_time)
             print(
                 f"\rTask {task_id}: {next(spinner)} Elapsed time: {elapsed}s",
@@ -232,17 +254,16 @@ class PreloadData:
         response = get_response_of_type(response_data, JSON_TYPE)
 
         for key in response:
-            print("key:::", key)
             status = response[key][STATUS_KEY]
             datasets = response[key][DATASETS_KEY]
             requested_data_id = datasets[0][DATASET_ID_KEY]
             condition = (
                 (dataset_id == requested_data_id) if dataset_id else (key == task_id)
             )
+
             if status in STATUS_PENDING and condition:
                 return PENDING, key
             if status in STATUS_COMPLETE and condition:
-                self.download_url = response[key][DOWNLOAD_URL_KEY]
                 return COMPLETE, key
 
         return UNDEFINED, ""
@@ -255,9 +276,7 @@ class PreloadData:
         response_data = make_api_request(download_url, headers=headers, stream=True)
         response = get_response_of_type(response_data, BYTES_TYPE)
 
-        total_size = int(
-            response.headers.get("content-length", 0)
-        )
+        total_size = int(response.headers.get("content-length", 0))
         chunk_size = 1024 * 1024
         downloaded_size = 0
 
@@ -281,13 +300,21 @@ class PreloadData:
                 LOG.info("No downloadable zip file found inside.")
             if actual_zip_file:
                 LOG.info(f"Found one zip file {actual_zip_file}.")
-                with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
+                with fs.open(actual_zip_file[NAME_KEY], "r") as f:
+                    print("here::", f)
                     zip_fs = fsspec.filesystem("zip", fo=f)
+                    print("here 1.5::", zip_fs)
+                    print(zip_fs.ls(""))
+                    print(zip_fs.ls("/"))
+                    print(zip_fs.ls())
                     for file_name in zip_fs.ls("/"):
                         target_file_path = os.path.join(path, file_name)
                         os.makedirs(os.path.dirname(target_file_path), exist_ok=True)
+                        print("here 2 ::", target_file_path)
                         with zip_fs.open(file_name, "rb") as source_file:
                             with open(target_file_path, "wb") as dest_file:
+                                print("source:", source_file)
+                                print("dest", dest_file)
                                 dest_file.write(source_file.read())
                     LOG.info(f"All files extracted to {path}.")
                     # geo_file = self._find_geo_in_dir(

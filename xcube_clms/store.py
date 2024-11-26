@@ -66,6 +66,9 @@ class CLMSDataStore(DataStore, ABC):
                 dict(**credentials_params),
                 required=("client_id", "user_id", "token_uri", "private_key"),
             ),
+            path=JsonStringSchema(
+                title="Temporary path to store the downloaded data.",
+            ),
         )
         return JsonObjectSchema(
             properties=dict(**params),

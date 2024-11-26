@@ -1,3 +1,5 @@
+import time
+from itertools import cycle
 from typing import Any, Optional
 from urllib.parse import urlencode
 
@@ -145,3 +147,23 @@ def get_authorization_header(access_token: str) -> dict:
 
 def convert_list_dict_to_list(data: list[dict[str, Any]], key: str) -> list[str]:
     return [d[key] for d in data if key in d]
+
+
+def progress_spinner_with_timer(running_event):
+    """
+    Display a spinner and elapsed time while the task is in progress.
+
+    Args:
+        running_event (threading.Event): A flag indicating if the task is still running.
+    """
+    spinner = cycle(["◐", "◓", "◑", "◒"])  # Spinner characters
+    start_time = time.time()  # Record the start time
+    while running_event.is_set():
+        elapsed = time.time() - start_time  # Calculate elapsed time
+        print(
+            f"\rWaiting in queue... {next(spinner)} "
+            f"Time elapsed: {elapsed:.2f} seconds",
+            end="",
+            flush=True,
+        )
+        time.sleep(0.25)
