@@ -20,6 +20,9 @@
 # SOFTWARE.
 import logging
 
+# Configuration constants
+TIME_TO_EXPIRE = 48  # (in hours)
+
 DATA_STORE_ID = "clms"
 
 # CLMS API Constants
@@ -70,6 +73,7 @@ DESCRIPTION_KEY = "description"
 ENUM_KEY = "enum"
 TASK_IDS_KEY = "TaskIds"
 TASK_ID_KEY = "TaskID"
+DOWNLOAD_AVAILABLE_TIME_KEY = "FinalizationDateTime"
 
 STATUS_PENDING = ["Queued", "In_progress"]
 STATUS_COMPLETE = ["Finished_ok"]
