@@ -152,7 +152,7 @@ def convert_list_dict_to_list(data: list[dict[str, Any]], key: str) -> list[str]
 def has_expired(download_available_time):
     given_time = datetime.fromisoformat(download_available_time)
     current_time = datetime.now()
-    if current_time - given_time > timedelta(hours=TIME_TO_EXPIRE):
+    if (current_time - given_time) > timedelta(hours=TIME_TO_EXPIRE):
         return True
     else:
         return False

@@ -16,7 +16,6 @@ class CLMSAPIToken:
         self._token_expiry: int = 0
         self._token_lifetime: int = 3600  # Token lifetime in seconds
         self._expiry_margin: int = 300  # Refresh 5 minutes before expiration
-        self._grant: str = self._create_JWT_grant()
         self.access_token: str = ""
         self.refresh_token()
 
@@ -38,7 +37,7 @@ class CLMSAPIToken:
 
         data = {
             "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            "assertion": self._grant,
+            "assertion": self._create_JWT_grant(),
         }
         response_data = make_api_request(
             CLMS_API_AUTH, headers=headers, data=data, method="POST"

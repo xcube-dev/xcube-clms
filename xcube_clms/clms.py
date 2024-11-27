@@ -146,7 +146,8 @@ class CLMS:
             product = self._access_item(data_id.split(":")[0])
             task_id = self._preload_data.request_download(data_id, item, product)
             task_ids[data_id] = {TASK_ID_KEY: task_id}
-        self._preload_data.process_tasks(task_ids)
+        cancel_handler = self._preload_data.process_tasks(task_ids)
+        return cancel_handler, task_ids
 
     def _create_data_ids(
         self,

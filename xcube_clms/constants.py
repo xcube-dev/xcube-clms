@@ -51,7 +51,8 @@ ITEMS_KEY = "items"
 SPATIAL_COVERAGE_KEY = "area"
 RESOLUTION_KEY = "resolution"
 FORMAT_KEY = "format"
-FILE_ID_KEY = "@id"
+ID_KEY = "@id"
+FILE_ID_KEY = "FileID"
 FILE_KEY = "file"
 BOUNDING_BOX_KEY = "geographicBoundingBox"
 CRS_KEY = "coordinateReferenceSystemList"
@@ -74,6 +75,7 @@ ENUM_KEY = "enum"
 TASK_IDS_KEY = "TaskIds"
 TASK_ID_KEY = "TaskID"
 DOWNLOAD_AVAILABLE_TIME_KEY = "FinalizationDateTime"
+ORIGINAL_FILENAME_KEY = "orig_filename"
 
 STATUS_PENDING = ["Queued", "In_progress"]
 STATUS_COMPLETE = ["Finished_ok"]
