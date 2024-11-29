@@ -2,6 +2,7 @@ import time
 from itertools import cycle
 
 from IPython.core.display_functions import display
+from ipywidgets import widgets
 
 from xcube_clms.constants import ACCEPT_HEADER, CANCEL_ENDPOINT, JSON_TYPE, LOG
 from xcube_clms.event import Event
@@ -20,13 +21,13 @@ class Task:
     """
 
     def __init__(self, task_id, data_id, url, api_token):
-        self.html_output = None
+        self.html_output = widgets.HTML()
         self.task_id = task_id
         self.data_id = data_id
         self.url = url
         self.api_token = api_token
-        self.queue_status = "Not started"
-        self.download_status = "Not started"
+        self._queue_status = "Not started"
+        self._download_status = "Not started"
         self.events = Task.get_events()
 
     @staticmethod
@@ -89,6 +90,24 @@ class Task:
 
     def display(self):
         display(self.html_output)
+
+    @property
+    def queue_status(self):
+        return self._queue_status
+
+    @queue_status.setter
+    def queue_status(self, status):
+        self._queue_status = status
+        self.update_html()
+
+    @property
+    def download_status(self):
+        return self._download_status
+
+    @download_status.setter
+    def download_status(self, status):
+        self._download_status = status
+        self.update_html()
 
     def update_html(self):
         status_colors = {

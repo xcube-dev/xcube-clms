@@ -1,6 +1,7 @@
 import glob
 import io
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures._base import CANCELLED
@@ -153,7 +154,21 @@ class PreloadData:
         for data_id_map in data_id_maps.items():
             executor.submit(self._initiate_preload, self.path, data_id_map)
 
-        return PreloadHandle(self.tasks)
+        preload_handle = PreloadHandle(self.tasks)
+
+        # TODO: Update the status of various steps in the process and check
+        #  for the right thing here.
+        def update_ui_periodically():
+            while any(task.download_status != "Success" for task in self.tasks):
+                preload_handle.update_html()
+                time.sleep(1)
+
+        # Start the UI update thread
+        ui_thread = threading.Thread(target=update_ui_periodically)
+        ui_thread.daemon = True
+        ui_thread.start()
+
+        return preload_handle
 
     @staticmethod
     def _is_data_cached(data_id, path):
