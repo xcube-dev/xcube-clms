@@ -105,7 +105,7 @@ class CLMSDataStore(DataStore, ABC):
         self, data_id: str, data_type: DataTypeLike = None
     ) -> DataDescriptor:
         assert_valid_data_type(data_type)
-        metadata = self._clms.get_extent(data_id)
+        metadata = self._clms._get_extent(data_id)
         return DatasetDescriptor(data_id, **metadata)
 
     def get_data_opener_ids(

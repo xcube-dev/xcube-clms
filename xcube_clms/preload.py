@@ -5,7 +5,6 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures._base import CANCELLED
-from itertools import cycle
 
 import fsspec
 from tqdm.notebook import tqdm
@@ -47,16 +46,16 @@ from xcube_clms.constants import (
     FILE_ID_KEY,
     RETRY_TIMEOUT,
     DATA_ID_KEY,
-    CANCEL_ENDPOINT,
     STATUS_CANCELLED,
 )
+from xcube_clms.preload_handle import PreloadHandle
 from xcube_clms.utils import (
     make_api_request,
     get_response_of_type,
     get_authorization_header,
     get_dataset_download_info,
     build_api_url,
-    has_expired,
+    has_expired, find_geo_in_dir,
 )
 
 
@@ -67,13 +66,9 @@ class PreloadData:
         self._clms_api_token_instance = None
         self._url = url
         self._task_control = {}
-        if path is None:
-            self.path = os.getcwd()
-        else:
-            self.path = os.path.join(os.getcwd(), path)
+        self.path = path
 
-        if credentials:
-            self._set_credentials(credentials)
+        self._set_credentials(credentials)
 
     def _set_credentials(self, credentials: dict):
         self._credentials = credentials
@@ -149,29 +144,6 @@ class PreloadData:
         LOG.info(f"Download Requested with Task ID : {task_id}")
         return task_id
 
-    def cancel(self, task_id: str):
-        """
-        Cancels the task by setting the cancel_event for the given task.
-        If the task is already complete or does not exist, prints a message.
-        """
-        if task_id in self._task_control:
-            cancel_event = self._task_control[task_id]["cancel_event"]
-
-            # If task has already completed or canceled, we cannot cancel it
-            if cancel_event.is_set():
-                print(
-                    f"Task {task_id} has already been completed or canceled and cannot be canceled again."
-                )
-            else:
-                cancel_event.set()  # Set the cancel event
-                print(
-                    f"Cancel requested for Task {task_id}. The task is being canceled."
-                )
-        else:
-            print(
-                f"Task {task_id} cannot be canceled because it is not in the queue or does not exist."
-            )
-
     def process_tasks(self, task_ids):
         for task_id in task_ids:
             self._task_control[task_id] = {
@@ -194,7 +166,7 @@ class PreloadData:
                 self._task_control[task_id]["status_event"],
             )
 
-        return self.cancel
+        return PreloadHandle()
 
     @staticmethod
     def _is_data_cached(data_id, path):
@@ -236,9 +208,8 @@ class PreloadData:
 
     def _get_download_url(self, task_id):
         """
-        Implement me!
-        :param task_id:
-        :return:
+        :param task_id: ID of the task that is requested for the dataset
+        :return: Download URL string
         """
         self._refresh_token()
 
@@ -258,39 +229,6 @@ class PreloadData:
                     raise Exception(
                         f"Task ID {task_id} has not yet finished. No download url available yet."
                     )
-
-    def spinner(self, status_event, task_id, cancel_event):
-        """
-        Displays a spinner with elapsed time for a single task until the event is set.
-        """
-        spinner = cycle(["◐", "◓", "◑", "◒"])
-        start_time = time.time()
-
-        while status_event.is_set():
-            elapsed = int(time.time() - start_time)
-            print(
-                f"\rTask {task_id}: {next(spinner)} Elapsed time: {elapsed}s",
-                end="",
-                flush=True,
-            )
-            time.sleep(0.3)
-        if cancel_event.is_set():
-            print(f"\rTask {task_id}: Task cancellation requested!{' ' * 20}")
-            headers = ACCEPT_HEADER.copy()
-            headers.update(get_authorization_header(self._api_token))
-
-            url = build_api_url(self._url, CANCEL_ENDPOINT, datasets_request=False)
-            json = {"TaskID": task_id}
-            response_data = make_api_request(
-                url=url, headers=headers, json=json, method="DELETE"
-            )
-            response = get_response_of_type(response_data, JSON_TYPE)
-
-            if not response.ok:
-                LOG.warn(f"Cancel request not successful. {response.content}")
-
-        else:
-            print(f"\rTask {task_id}: Done!{' ' * 20}")
 
     def _prepare_download_request(
         self, data_id: str, item: dict, product: dict
@@ -393,7 +331,7 @@ class PreloadData:
                 with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
                     zip_fs = fsspec.filesystem("zip", fo=f)
 
-                    geo_file = PreloadData._find_geo_in_dir(
+                    geo_file = find_geo_in_dir(
                         "/",
                         zip_fs,
                     )
@@ -422,26 +360,3 @@ class PreloadData:
                         raise FileNotFoundError(
                             "No file found in the downloaded zip file to load"
                         )
-
-    @staticmethod
-    def _find_geo_in_dir(path, zip_fs):
-        geo_file: str = ""
-        contents = zip_fs.ls(path)
-        for item in contents:
-            if zip_fs.isdir(item[NAME_KEY]):
-                geo_file = PreloadData._find_geo_in_dir(
-                    item[NAME_KEY],
-                    zip_fs,
-                )
-                if geo_file:
-                    return geo_file
-            else:
-                if item[NAME_KEY].endswith(".tif"):
-                    LOG.info(f"Found TIFF file: {item[NAME_KEY]}")
-                    geo_file = item["name"]
-                    return geo_file
-                if item[NAME_KEY].endswith(".nc"):
-                    LOG.info(f"Found NetCDF file: {item[NAME_KEY]}")
-                    geo_file = item[NAME_KEY]
-                    return geo_file
-        return geo_file

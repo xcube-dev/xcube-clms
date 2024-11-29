@@ -18,9 +18,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import inspect
 import os
-from typing import Any, get_args, Container
+from typing import Any, Container
 
 import xarray as xr
 from xcube.core.store import DataTypeLike, new_data_store
@@ -72,11 +71,11 @@ class CLMS:
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
         self._data_ids = []
-        self._preload_data = PreloadData(self._url, credentials, path)
         if path is None:
             self.path = os.getcwd()
         else:
             self.path = os.path.join(os.getcwd(), path)
+        self._preload_data = PreloadData(self._url, credentials, self.path)
 
         self._file_store = None
         self._fetch_all_datasets()
@@ -109,15 +108,13 @@ class CLMS:
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
         if is_valid_data_type(data_type):
-            self._fetch_all_datasets()
-            dataset = self._get_item(data_id)
+            dataset = self._access_item(data_id)
             if len(dataset) == 0:
                 return False
             return True
         return False
 
-    def get_extent(self, data_id: str) -> dict:
-        self._fetch_all_datasets()
+    def _get_extent(self, data_id: str) -> dict:
         item = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
         crs = item.get(CRS_KEY)
         time_range = (item.get(START_TIME_KEY), item.get(END_TIME_KEY))
@@ -129,18 +126,7 @@ class CLMS:
 
         return dict(time_range=time_range, crs=crs[0])
 
-    def get_preload_params(self, data_id: str) -> dict[str : str | None]:
-        self._fetch_all_datasets()
-        preload_params = [
-            data[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]
-            for data in self._datasets_info
-            if data[CLMS_DATA_ID_KEY] == data_id
-        ][0]
-
-        return preload_params
-
     def get_preload_data_params_schema_for_data(self, data_id: str):
-        self._fetch_all_datasets()
         raw_schema = [
             data[DOWNLOADABLE_FILES_KEY][SCHEMA_KEY][PROPERTIES_KEY]
             for data in self._datasets_info
@@ -163,18 +149,15 @@ class CLMS:
             product = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
             task_id = self._preload_data.request_download(data_id, item, product)
             task_ids[data_id] = {TASK_ID_KEY: task_id, DATA_ID_KEY: data_id}
-        cancel_handler = self._preload_data.process_tasks(task_ids)
+        preload_handler = self._preload_data.process_tasks(task_ids)
         self._file_store = new_data_store("file", root=self.path)
         LOG.info(f"A local Filestore is created at the path: {self.path}")
-        return cancel_handler, task_ids
+        return preload_handler
 
     def _create_data_ids(
         self,
         include_attrs: Container[str] | bool | None = None,
     ) -> list[str] | list[tuple[str, dict[str, Any]]]:
-        if not self._datasets_info:
-            self._fetch_all_datasets()
-
         data_ids = []
         for item in self._datasets_info:
             for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
@@ -201,46 +184,9 @@ class CLMS:
                         )
         return data_ids
 
-    def _filter_dataset_attrs(
-        self, attrs: Container[str], raw_datasets: list[dict[str, Any]] = None
-    ) -> list[dict[str, Any]]:
-        """
-        Filters attributes of datasets in a list
-
-        Args:
-            attrs: A container of attribute names to filter for in each dataset.
-            raw_datasets: List of datasets metadata where each dataset contains the same keys
-
-        Returns:
-           A list of dictionaries with filtered keys.
-        """
-        if raw_datasets:
-            supported_keys = list(raw_datasets[0].keys())
-        else:
-            supported_keys = self._attrs
-
-        raw_datasets = raw_datasets or self._fetch_all_datasets()
-
-        signature = inspect.signature(self._filter_dataset_attrs)
-        if (attrs is not None and not isinstance(attrs, (list, set, tuple))) | (
-            attrs is None
-        ):
-            raise TypeError(
-                f"Expected instance "
-                f"{get_args(signature.parameters.get('attrs').annotation)}, "
-                f"got {type(attrs).__name__}"
-            )
-
-        return [
-            {key: item[key] for key in supported_keys if key in attrs}
-            for item in raw_datasets
-        ]
-
     def _fetch_all_datasets(self) -> list[dict[str, Any]]:
         if not self._datasets_info:
-            LOG.info(
-                f"Datasets not fetched yet. Fetching all datasets now from {self._url}"
-            )
+            LOG.info(f"Fetching metadata of all datasets from {self._url}")
 
             response_data = make_api_request(build_api_url(self._url, SEARCH_ENDPOINT))
             while True:

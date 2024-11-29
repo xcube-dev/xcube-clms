@@ -13,6 +13,7 @@ from xcube_clms.constants import (
     FULL_SCHEMA,
     METADATA_FIELDS,
     TIME_TO_EXPIRE,
+    NAME_KEY,
 )
 
 
@@ -156,3 +157,26 @@ def has_expired(download_available_time):
         return True
     else:
         return False
+
+
+def find_geo_in_dir(path, zip_fs):
+    geo_file: str = ""
+    contents = zip_fs.ls(path)
+    for item in contents:
+        if zip_fs.isdir(item[NAME_KEY]):
+            geo_file = find_geo_in_dir(
+                item[NAME_KEY],
+                zip_fs,
+            )
+            if geo_file:
+                return geo_file
+        else:
+            if item[NAME_KEY].endswith(".tif"):
+                LOG.info(f"Found TIFF file: {item[NAME_KEY]}")
+                geo_file = item["name"]
+                return geo_file
+            if item[NAME_KEY].endswith(".nc"):
+                LOG.info(f"Found NetCDF file: {item[NAME_KEY]}")
+                geo_file = item[NAME_KEY]
+                return geo_file
+    return geo_file
