@@ -49,13 +49,15 @@ from xcube_clms.constants import (
     STATUS_CANCELLED,
 )
 from xcube_clms.preload_handle import PreloadHandle
+from xcube_clms.task import Task
 from xcube_clms.utils import (
     make_api_request,
     get_response_of_type,
     get_authorization_header,
     get_dataset_download_info,
     build_api_url,
-    has_expired, find_geo_in_dir,
+    has_expired,
+    find_geo_in_dir,
 )
 
 
@@ -146,14 +148,14 @@ class PreloadData:
 
     def process_tasks(self, task_ids):
         for task_id in task_ids:
-            self._task_control[task_id] = {
-                "cancel_event": threading.Event(),
-            }
-            self._task_control[task_id].update(
-                {
-                    "status_event": threading.Event(),
-                }
-            )
+            if task_id not in self._task_control:
+                task = Task(
+                    task_id[TASK_ID_KEY],
+                    task_id[DATA_ID_KEY],
+                    self._url,
+                    self._api_token,
+                )
+                self._task_control[task_id] = task
 
         executor = ThreadPoolExecutor()
         for task_id in task_ids:
