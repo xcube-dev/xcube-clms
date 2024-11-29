@@ -1,7 +1,6 @@
 import glob
 import io
 import os
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures._base import CANCELLED
@@ -45,8 +44,10 @@ from xcube_clms.constants import (
     ORIGINAL_FILENAME_KEY,
     FILE_ID_KEY,
     RETRY_TIMEOUT,
-    DATA_ID_KEY,
     STATUS_CANCELLED,
+    EXPIRED,
+    STATUS_REJECTED,
+    REJECTED,
 )
 from xcube_clms.preload_handle import PreloadHandle
 from xcube_clms.task import Task
@@ -64,11 +65,11 @@ from xcube_clms.utils import (
 class PreloadData:
     def __init__(self, url, credentials, path):
         self._credentials: dict = {}
-        self._api_token = None
+        self._api_token: str = None
         self._clms_api_token_instance = None
-        self._url = url
-        self._task_control = {}
-        self.path = path
+        self._url: str = url
+        self.tasks: list[Task] = []
+        self.path: str = path
 
         self._set_credentials(credentials)
 
@@ -146,29 +147,13 @@ class PreloadData:
         LOG.info(f"Download Requested with Task ID : {task_id}")
         return task_id
 
-    def process_tasks(self, task_ids):
-        for task_id in task_ids:
-            if task_id not in self._task_control:
-                task = Task(
-                    task_id[TASK_ID_KEY],
-                    task_id[DATA_ID_KEY],
-                    self._url,
-                    self._api_token,
-                )
-                self._task_control[task_id] = task
-
+    def initiate_preload(self, data_id_maps: dict):
         executor = ThreadPoolExecutor()
-        for task_id in task_ids:
-            executor.submit(
-                self._check_status_and_download,
-                task_ids[task_id][TASK_ID_KEY],
-                task_ids[task_id][DATA_ID_KEY],
-                self.path,
-                self._task_control[task_id]["cancel_event"],
-                self._task_control[task_id]["status_event"],
-            )
 
-        return PreloadHandle()
+        for data_id_map in data_id_maps.items():
+            executor.submit(self._initiate_preload, self.path, data_id_map)
+
+        return PreloadHandle(self.tasks)
 
     @staticmethod
     def _is_data_cached(data_id, path):
@@ -178,34 +163,76 @@ class PreloadData:
             return False
         return True
 
-    def _check_status_and_download(
-        self, task_id, data_id, path, cancel_event, status_event
-    ):
-        spinner_thread = threading.Thread(
-            target=self.spinner, args=(status_event, task_id, cancel_event)
+    def _initiate_preload(self, path, data_id_map: tuple[str:dict]):
+        data_id = data_id_map[0]
+        task_id = self.request_download(
+            data_id=data_id,
+            item=data_id_map[1].get("item"),
+            product=data_id_map[1].get("product"),
         )
-        status_event.set()
-        spinner_thread.start()
 
+        task = None
+        for _task in self.tasks:
+            if task_id == _task.task_id:
+                task = _task
+                break
+
+        if task is None:
+            task = Task(
+                data_id,
+                task_id,
+                self._url,
+                self._api_token,
+            )
+            task.update_html()
+            self.tasks.append(task)
+
+        task_events = task.get_events()
+        cancel_event = task_events.get("cancel_event")
+        queue_event = task_events.get("queue_event")
+
+        # spinner_thread = threading.Thread(
+        #     target=task.spinner, args=(queue_event, task_id, cancel_event)
+        # )
+
+        # spinner_thread.start()
+
+        # Check if the data is already downloaded and extracted at the given
+        # path
         if self._is_data_cached(data_id, path):
-            status_event.clear()
-            spinner_thread.join()
+            # spinner_thread.join()
             LOG.info(f"The data for {data_id} is already cached at {path}")
             return
 
-        while status_event.is_set():
+        # Set the queue event to indicate that the queue process has started.
+        queue_event.set()
+        task.update_html()
+
+        while queue_event.is_set():
+            # Check if the cancel_event was set, if so clear the queue and
+            # return
             if cancel_event.is_set():
-                status_event.clear()
-                spinner_thread.join()
+                queue_event.clear()
+                task.update_html()
+                # spinner_thread.join()
                 return
 
             status, _ = self._get_current_requests_status(task_id=task_id)
             if status == COMPLETE:
-                status_event.clear()
-                spinner_thread.join()
+                # Clear the queue event and stop the spinner.
+                queue_event.clear()
+                # spinner_thread.join()
+                download_event = task_events.get("download_event")
+                download_event.set()
+                task.update_html()
                 download_url = self._get_download_url(task_id)
                 # Use the path used to create a filestore.
-                self._download_data(download_url, path, task_id)
+                extraction_event = task_events.get("extraction_event")
+                self._download_and_extract_data(
+                    download_url, path, task_id, extraction_event
+                )
+                download_event.clear()
+                task.update_html()
             time.sleep(RETRY_TIMEOUT)
 
     def _get_download_url(self, task_id):
@@ -259,7 +286,7 @@ class PreloadData:
         task_id: str | None = None,
     ) -> tuple[str, str]:
         """
-        If both dataset_id and task_id are provided, task_id is ignored.
+        If all dataset_id, file_id and task_id are provided, task_id is ignored.
         """
         self._refresh_token()
 
@@ -277,23 +304,25 @@ class PreloadData:
             requested_file_id = datasets[0][FILE_ID_KEY]
             condition = (
                 ((dataset_id == requested_data_id) and (file_id == requested_file_id))
-                if dataset_id
+                if (dataset_id and file_id)
                 else (key == task_id)
             )
             if status in STATUS_PENDING and condition:
                 return PENDING, key
-            if status in STATUS_COMPLETE and condition:
+            if status == STATUS_COMPLETE and condition:
                 if has_expired(response[key][DOWNLOAD_AVAILABLE_TIME_KEY]):
-                    return UNDEFINED, ""
+                    return EXPIRED, ""
                 else:
                     return COMPLETE, key
-            if status in STATUS_CANCELLED and condition:
+            if status == STATUS_CANCELLED and condition:
                 return CANCELLED, key
+            if status == STATUS_REJECTED and condition:
+                return REJECTED, key
 
         return UNDEFINED, ""
 
     @staticmethod
-    def _download_data(download_url, path, task_id):
+    def _download_and_extract_data(download_url, path, task_id, extraction_event):
         LOG.info(f"Downloading zip file from {download_url}")
         download_progress_bar = tqdm(
             total=100,
@@ -307,6 +336,7 @@ class PreloadData:
         total_size = float(response.headers.get("content-length", 0))
         chunk_size = 1024 * 1024
 
+        extraction_event.set()
         with io.BytesIO(response.content) as zip_file_in_memory:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 zip_file_in_memory.write(chunk)
@@ -323,42 +353,50 @@ class PreloadData:
                     actual_zip_file = zip_contents[0]
             elif len(zip_contents) > 1:
                 LOG.warn("Cannot handle more than one zip files at the moment.")
+                extraction_event.clear()
+                return
             else:
                 LOG.warn("No downloadable zip file found inside.")
-            if actual_zip_file:
-                LOG.info(
-                    f"Found one zip file "
-                    f"{actual_zip_file.get(ORIGINAL_FILENAME_KEY)}."
+                extraction_event.clear()
+                return
+
+            LOG.info(
+                f"Found one zip file " f"{actual_zip_file.get(ORIGINAL_FILENAME_KEY)}."
+            )
+            with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
+                zip_fs = fsspec.filesystem("zip", fo=f)
+
+                geo_file = find_geo_in_dir(
+                    "/",
+                    zip_fs,
                 )
-                with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
-                    zip_fs = fsspec.filesystem("zip", fo=f)
-
-                    geo_file = find_geo_in_dir(
-                        "/",
-                        zip_fs,
-                    )
-                    if geo_file:
-                        print("trying to create dir now here::", path)
-                        os.makedirs(os.path.dirname(path), exist_ok=True)
-                        try:
-                            with zip_fs.open(geo_file, "rb") as source_file:
-                                with open(path, "wb") as dest_file:
-                                    dest_file.write(source_file.read())
-                            LOG.info(
-                                f"The file {geo_file} has been successfully "
-                                f"downloaded to {path}"
-                            )
-                        except OSError as e:
-                            raise OSError(f"Error occurred while writing data. {e}")
-                        except UnicodeDecodeError as e:
-                            raise ValueError(
-                                f"Decoding error: {e}. File might not be text "
-                                f"or encoding is incorrect."
-                            )
-                        except Exception as e:
-                            raise Exception(f"An unexpected error occurred: {e}")
-
-                    else:
-                        raise FileNotFoundError(
-                            "No file found in the downloaded zip file to load"
+                if geo_file:
+                    try:
+                        file_path = os.path.join(path, geo_file)
+                        with zip_fs.open(geo_file, "rb") as source_file:
+                            with open(file_path, "wb") as dest_file:
+                                dest_file.write(source_file.read())
+                                extraction_event.clear()
+                        LOG.info(
+                            f"The file {geo_file} has been successfully "
+                            f"downloaded to {file_path}"
                         )
+
+                    except OSError as e:
+                        extraction_event.clear()
+                        raise OSError(f"Error occurred while writing data. {e}")
+                    except UnicodeDecodeError as e:
+                        extraction_event.clear()
+                        raise ValueError(
+                            f"Decoding error: {e}. File might not be text "
+                            f"or encoding is incorrect."
+                        )
+                    except Exception as e:
+                        extraction_event.clear()
+                        raise Exception(f"An unexpected error occurred: {e}")
+
+                else:
+                    extraction_event.clear()
+                    raise FileNotFoundError(
+                        "No file found in the downloaded zip file to load"
+                    )

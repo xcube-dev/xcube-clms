@@ -1,8 +1,10 @@
-import threading
 import time
 from itertools import cycle
 
+from IPython.core.display_functions import display
+
 from xcube_clms.constants import ACCEPT_HEADER, CANCEL_ENDPOINT, JSON_TYPE, LOG
+from xcube_clms.event import Event
 from xcube_clms.utils import (
     get_authorization_header,
     build_api_url,
@@ -18,6 +20,7 @@ class Task:
     """
 
     def __init__(self, task_id, data_id, url, api_token):
+        self.html_output = None
         self.task_id = task_id
         self.data_id = data_id
         self.url = url
@@ -28,11 +31,24 @@ class Task:
 
     @staticmethod
     def get_events():
-        return {"cancel_event": threading.Event(), "status_event": threading.Event()}
+        return {
+            # For cancelling this task. If set, the task will be cancelled.
+            "cancel_event": Event(),
+            # For checking if the task is still in queue. If set, it means
+            # that the task is in queue. If it is cleared, it is not in queue.
+            "queue_event": Event(),
+            # For checking if the downloaded has completed. If set,
+            # the download is in progress.
+            "download_event": Event(),
+            # For checking if the downloaded has been unzipped and extracted
+            # to a folder. If set, the extraction is in progress. If cleared,
+            # the extraction is complete.
+            "extraction_event": Event(),
+        }
 
-    # Currently this method will not work as expected because the CLMS API
+    # Currently this method will not work as expected because the CLMS API's
     # Delete endpoint does not work as expected. I have created an issue with
-    # them, waiting for communication from them.
+    # them, waiting for further communication from them.
     def cancel(self):
         self.events.get("cancel_event").set()
         headers = ACCEPT_HEADER.copy()
@@ -49,14 +65,14 @@ class Task:
             LOG.warn(f"Cancel request not successful. {response.content}")
         LOG.warn(f"Cancel request successful. {response.content}")
 
-    def spinner(self, status_event, task_id, cancel_event):
+    def spinner(self, queue_event, task_id, cancel_event):
         """
         Displays a spinner with elapsed time for a single task until the event is set.
         """
         spinner = cycle(["◐", "◓", "◑", "◒"])
         start_time = time.time()
 
-        while status_event.is_set():
+        while queue_event.is_set():
             elapsed = int(time.time() - start_time)
             print(
                 f"\rTask {task_id}: {next(spinner)} Elapsed time: {elapsed}s",
@@ -71,7 +87,10 @@ class Task:
         else:
             print(f"\rTask {task_id}: Done!{' ' * 20}")
 
-    def _repr_html_(self):
+    def display(self):
+        display(self.html_output)
+
+    def update_html(self):
         status_colors = {
             "Success": "background-color: green; color: white;",
             "Failed": "background-color: red; color: white;",
@@ -87,7 +106,7 @@ class Task:
             self.download_status, "background-color: lightgray; color: " "black;"
         )
 
-        return f"""
+        self.html_output = f"""
                 <tr style="border-bottom: 1px solid #ddd;">
                     <td>{self.data_id}</td>
                     <td>{self.task_id}</td>

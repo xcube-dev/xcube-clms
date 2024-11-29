@@ -81,13 +81,19 @@ TASK_IDS_KEY = "TaskIds"
 TASK_ID_KEY = "TaskID"
 DOWNLOAD_AVAILABLE_TIME_KEY = "FinalizationDateTime"
 ORIGINAL_FILENAME_KEY = "orig_filename"
+ITEM_KEY = "item"
+PRODUCT_KEY = "product"
 
 STATUS_PENDING = ["Queued", "In_progress"]
-STATUS_COMPLETE = ["Finished_ok"]
-STATUS_CANCELLED = ["Cancelled"]
+STATUS_COMPLETE = "Finished_ok"
+STATUS_CANCELLED = "Cancelled"
+STATUS_REJECTED = "Rejected"
+
 PENDING = "PENDING"
 COMPLETE = "COMPLETE"
 UNDEFINED = "UNDEFINED"
+EXPIRED = "EXPIRED"
+REJECTED = "REJECTED"
 RESULTS = "Results/"
 
 NOT_SUPPORTED_LIST = ["WEKEO", "LEGACY", "LANDCOVER"]
@@ -117,3 +123,13 @@ DATA_OPENER_IDS = (
 
 JSON_TYPE = "json"
 BYTES_TYPE = "bytes"
+
+# Progress weights (should sum to 1)
+QUEUE_WEIGHT = 0.9
+DOWNLOAD_WEIGHT = 0.5
+EXTRACTION_WEIGHT = 0.5
+
+# Three State event const
+NOT_STARTED = "NOT_STARTED"
+STARTED = "STARTED"
+FINISHED = "FINISHED"

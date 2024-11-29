@@ -19,13 +19,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
+import threading
 from typing import Any, Container
 
 import xarray as xr
 from xcube.core.store import DataTypeLike, new_data_store
 from xcube.util.jsonschema import JsonObjectSchema, JsonStringSchema
 
-from build.lib.xcube_clms.constants import TASK_ID_KEY
 from .constants import (
     SEARCH_ENDPOINT,
     LOG,
@@ -42,8 +42,9 @@ from .constants import (
     PROPERTIES_KEY,
     ALLOWED_SCHEMA_PARAMS,
     FILE_KEY,
-    DATA_ID_KEY,
     DATA_ID_SEPARATOR,
+    ITEM_KEY,
+    PRODUCT_KEY,
 )
 from .preload import PreloadData
 from .utils import (
@@ -67,6 +68,7 @@ class CLMS:
     #  preload_data(..., non_blocking=True) => this should not go into ABC
 
     def __init__(self, url: str, credentials: dict, path: str | None = None):
+        self.preload_handler = None
         self._url = url
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
@@ -143,16 +145,23 @@ class CLMS:
         return schema
 
     def preload_data(self, *data_ids: str, **preload_params):
-        task_ids = {}
+        data_id_maps = {}
         for data_id in data_ids:
             item = self._access_item(data_id)
             product = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
-            task_id = self._preload_data.request_download(data_id, item, product)
-            task_ids[data_id] = {TASK_ID_KEY: task_id, DATA_ID_KEY: data_id}
-        preload_handler = self._preload_data.process_tasks(task_ids)
+            data_id_maps[data_id] = {ITEM_KEY: item, PRODUCT_KEY: product}
+        self.preload_handler = self._preload_data.initiate_preload(data_id_maps)
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
         self._file_store = new_data_store("file", root=self.path)
         LOG.info(f"A local Filestore is created at the path: {self.path}")
-        return preload_handler
+        update_handler_output = threading.Thread(
+            target=self.preload_handler.update_html
+        )
+
+        return self.preload_handler
+
+    def _repr_html_(self):
+        return self.preload_handler
 
     def _create_data_ids(
         self,
