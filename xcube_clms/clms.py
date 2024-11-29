@@ -19,10 +19,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import inspect
+import os
 from typing import Any, get_args, Container
 
 import xarray as xr
-from xcube.core.store import DataTypeLike
+from xcube.core.store import DataTypeLike, new_data_store
 from xcube.util.jsonschema import JsonObjectSchema, JsonStringSchema
 
 from build.lib.xcube_clms.constants import TASK_ID_KEY
@@ -42,6 +43,8 @@ from .constants import (
     PROPERTIES_KEY,
     ALLOWED_SCHEMA_PARAMS,
     FILE_KEY,
+    DATA_ID_KEY,
+    DATA_ID_SEPARATOR,
 )
 from .preload import PreloadData
 from .utils import (
@@ -65,24 +68,38 @@ class CLMS:
     #  preload_data(..., non_blocking=True) => this should not go into ABC
 
     def __init__(self, url: str, credentials: dict, path: str | None = None):
-        self._api_token = None
-        self._clms_api_token_instance = None
         self._url = url
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
         self._data_ids = []
         self._preload_data = PreloadData(self._url, credentials, path)
+        if path is None:
+            self.path = os.getcwd()
+        else:
+            self.path = os.path.join(os.getcwd(), path)
+
+        self._file_store = None
         self._fetch_all_datasets()
 
-    def open_dataset(
+    def open_data(
         self,
         data_id: str,
-        spatial_coverage: str = "",
-        resolution: str = "",
-        title: str = "",
         **open_params,
     ) -> xr.Dataset:
-        raise NotImplementedError()
+        try:
+            _, file_id = data_id.split(DATA_ID_SEPARATOR)
+        except ValueError as e:
+            raise ValueError(
+                f"Expected a data_id in the format {{ product_id}}:{{"
+                f"file_id}} but got {data_id}"
+            )
+        if self._file_store is None:
+            raise ValueError(
+                "File store does not exist yet. Please preload "
+                "data first using the preload_data() method."
+            )
+
+        return self._file_store.open_data(file_id, **open_params)
 
     def get_data_ids(
         self,
@@ -101,7 +118,7 @@ class CLMS:
 
     def get_extent(self, data_id: str) -> dict:
         self._fetch_all_datasets()
-        item = self._access_item(data_id.split(":")[0])
+        item = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
         crs = item.get(CRS_KEY)
         time_range = (item.get(START_TIME_KEY), item.get(END_TIME_KEY))
 
@@ -143,10 +160,12 @@ class CLMS:
         task_ids = {}
         for data_id in data_ids:
             item = self._access_item(data_id)
-            product = self._access_item(data_id.split(":")[0])
+            product = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
             task_id = self._preload_data.request_download(data_id, item, product)
-            task_ids[data_id] = {TASK_ID_KEY: task_id}
+            task_ids[data_id] = {TASK_ID_KEY: task_id, DATA_ID_KEY: data_id}
         cancel_handler = self._preload_data.process_tasks(task_ids)
+        self._file_store = new_data_store("file", root=self.path)
+        LOG.info(f"A local Filestore is created at the path: {self.path}")
         return cancel_handler, task_ids
 
     def _create_data_ids(
@@ -161,9 +180,17 @@ class CLMS:
             for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
                 if FILE_KEY in i and i[FILE_KEY] != "":
                     if not include_attrs:
-                        data_ids.append(f"{item[CLMS_DATA_ID_KEY]}:{i[FILE_KEY]}")
+                        data_ids.append(
+                            f"{item[CLMS_DATA_ID_KEY]}"
+                            f"{DATA_ID_SEPARATOR}{i[FILE_KEY]}"
+                        )
                     elif isinstance(include_attrs, bool) and include_attrs:
-                        data_ids.append((f"{item[CLMS_DATA_ID_KEY]}:{i[FILE_KEY]}", i))
+                        data_ids.append(
+                            (
+                                f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[FILE_KEY]}",
+                                i,
+                            )
+                        )
                     elif isinstance(include_attrs, list):
                         attrs = {}
                         for attr in include_attrs:
@@ -237,8 +264,8 @@ class CLMS:
         return dataset[0]
 
     def _get_item(self, data_id):
-        if len(data_id.split(":")) == 2:
-            clms_data_product_id, dataset_filename = data_id.split(":")
+        if len(data_id.split(DATA_ID_SEPARATOR)) == 2:
+            clms_data_product_id, dataset_filename = data_id.split(DATA_ID_SEPARATOR)
             dataset = []
             for product in self._datasets_info:
                 for item in product.get(DOWNLOADABLE_FILES_KEY).get(ITEMS_KEY):

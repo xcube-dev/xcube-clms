@@ -1,8 +1,10 @@
+import glob
 import io
 import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures._base import CANCELLED
 from itertools import cycle
 
 import fsspec
@@ -43,6 +45,10 @@ from xcube_clms.constants import (
     DOWNLOAD_AVAILABLE_TIME_KEY,
     ORIGINAL_FILENAME_KEY,
     FILE_ID_KEY,
+    RETRY_TIMEOUT,
+    DATA_ID_KEY,
+    CANCEL_ENDPOINT,
+    STATUS_CANCELLED,
 )
 from xcube_clms.utils import (
     make_api_request,
@@ -64,7 +70,8 @@ class PreloadData:
         if path is None:
             self.path = os.getcwd()
         else:
-            self.path = path
+            self.path = os.path.join(os.getcwd(), path)
+
         if credentials:
             self._set_credentials(credentials)
 
@@ -142,7 +149,7 @@ class PreloadData:
         LOG.info(f"Download Requested with Task ID : {task_id}")
         return task_id
 
-    def cancel(self, task_id):
+    def cancel(self, task_id: str):
         """
         Cancels the task by setting the cancel_event for the given task.
         If the task is already complete or does not exist, prints a message.
@@ -181,6 +188,7 @@ class PreloadData:
             executor.submit(
                 self._check_status_and_download,
                 task_ids[task_id][TASK_ID_KEY],
+                task_ids[task_id][DATA_ID_KEY],
                 self.path,
                 self._task_control[task_id]["cancel_event"],
                 self._task_control[task_id]["status_event"],
@@ -188,31 +196,43 @@ class PreloadData:
 
         return self.cancel
 
-    def _check_status_and_download(self, task_id, path, cancel_event, status_event):
+    @staticmethod
+    def _is_data_cached(data_id, path):
+        if not os.path.isdir(path):
+            return False
+        if len(glob.glob(f"{os.path.join(path, data_id)}.*")) != 1:
+            return False
+        return True
+
+    def _check_status_and_download(
+        self, task_id, data_id, path, cancel_event, status_event
+    ):
         spinner_thread = threading.Thread(
             target=self.spinner, args=(status_event, task_id, cancel_event)
         )
         status_event.set()
         spinner_thread.start()
 
-        try:
-            while status_event.is_set():
-                # spinner_thread.join()
-                if cancel_event.is_set():
-                    status_event.clear()
-                    # spinner_thread.join()  # Wait for spinner to finish
-                    print(f"Task {task_id} was cancelled.")
-                    return
-
-                status, _ = self._get_current_requests_status(task_id=task_id)
-                if status == COMPLETE:
-                    status_event.clear()
-                    download_url = self._get_download_url(task_id)
-                    # Use the path used to create a filestore.
-                    self._download_data(download_url, path, task_id)
-                time.sleep(10)
-        finally:
+        if self._is_data_cached(data_id, path):
+            status_event.clear()
             spinner_thread.join()
+            LOG.info(f"The data for {data_id} is already cached at {path}")
+            return
+
+        while status_event.is_set():
+            if cancel_event.is_set():
+                status_event.clear()
+                spinner_thread.join()
+                return
+
+            status, _ = self._get_current_requests_status(task_id=task_id)
+            if status == COMPLETE:
+                status_event.clear()
+                spinner_thread.join()
+                download_url = self._get_download_url(task_id)
+                # Use the path used to create a filestore.
+                self._download_data(download_url, path, task_id)
+            time.sleep(RETRY_TIMEOUT)
 
     def _get_download_url(self, task_id):
         """
@@ -239,8 +259,7 @@ class PreloadData:
                         f"Task ID {task_id} has not yet finished. No download url available yet."
                     )
 
-    @staticmethod
-    def spinner(status_event, task_id, cancel_event):
+    def spinner(self, status_event, task_id, cancel_event):
         """
         Displays a spinner with elapsed time for a single task until the event is set.
         """
@@ -254,10 +273,22 @@ class PreloadData:
                 end="",
                 flush=True,
             )
-            time.sleep(0.7)
+            time.sleep(0.3)
         if cancel_event.is_set():
             print(f"\rTask {task_id}: Task cancellation requested!{' ' * 20}")
-            # TODO: send cancel request to the API
+            headers = ACCEPT_HEADER.copy()
+            headers.update(get_authorization_header(self._api_token))
+
+            url = build_api_url(self._url, CANCEL_ENDPOINT, datasets_request=False)
+            json = {"TaskID": task_id}
+            response_data = make_api_request(
+                url=url, headers=headers, json=json, method="DELETE"
+            )
+            response = get_response_of_type(response_data, JSON_TYPE)
+
+            if not response.ok:
+                LOG.warn(f"Cancel request not successful. {response.content}")
+
         else:
             print(f"\rTask {task_id}: Done!{' ' * 20}")
 
@@ -316,6 +347,8 @@ class PreloadData:
                     return UNDEFINED, ""
                 else:
                     return COMPLETE, key
+            if status in STATUS_CANCELLED and condition:
+                return CANCELLED, key
 
         return UNDEFINED, ""
 
@@ -323,22 +356,22 @@ class PreloadData:
     def _download_data(download_url, path, task_id):
         LOG.info(f"Downloading zip file from {download_url}")
         download_progress_bar = tqdm(
-            total=100, desc=f"Downloading zip file for task: {task_id}"
+            total=100,
+            desc=f"Downloading zip file for task: {task_id}",
+            unit_scale=True,
         )
-        headers = ACCEPT_HEADER.copy()
-        headers.update(CONTENT_TYPE_HEADER)
-        response_data = make_api_request(download_url, headers=headers, stream=True)
+
+        response_data = make_api_request(download_url, stream=True)
         response = get_response_of_type(response_data, BYTES_TYPE)
 
-        total_size = int(response.headers.get("content-length", 0))
+        total_size = float(response.headers.get("content-length", 0))
         chunk_size = 1024 * 1024
-        downloaded_size = 0
 
         with io.BytesIO(response.content) as zip_file_in_memory:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 zip_file_in_memory.write(chunk)
-                downloaded_size += len(chunk)
-                download_progress_bar.update(int(len(chunk) / total_size * 100))
+                bar_update = (len(chunk) / total_size) * 100
+                download_progress_bar.update(bar_update)
             download_progress_bar.close()
 
             zip_file_in_memory.seek(0)
@@ -365,15 +398,15 @@ class PreloadData:
                         zip_fs,
                     )
                     if geo_file:
-                        target_file_path = os.path.join(path, geo_file)
-                        os.makedirs(os.path.dirname(target_file_path), exist_ok=True)
+                        print("trying to create dir now here::", path)
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
                         try:
                             with zip_fs.open(geo_file, "rb") as source_file:
-                                with open(target_file_path, "wb") as dest_file:
+                                with open(path, "wb") as dest_file:
                                     dest_file.write(source_file.read())
                             LOG.info(
                                 f"The file {geo_file} has been successfully "
-                                f"downloaded to {target_file_path}"
+                                f"downloaded to {path}"
                             )
                         except OSError as e:
                             raise OSError(f"Error occurred while writing data. {e}")

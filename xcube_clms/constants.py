@@ -22,6 +22,7 @@ import logging
 
 # Configuration constants
 TIME_TO_EXPIRE = 48  # (in hours)
+RETRY_TIMEOUT = 60  # (in seconds)
 
 DATA_STORE_ID = "clms"
 
@@ -29,6 +30,7 @@ DATA_STORE_ID = "clms"
 SEARCH_ENDPOINT = "@search"
 DOWNLOAD_ENDPOINT = "@datarequest_post"
 TASK_STATUS_ENDPOINT = "@datarequest_search"
+CANCEL_ENDPOINT = "@datarequest_delete"
 
 BATCH = "batching"
 NEXT = "next"
@@ -40,8 +42,11 @@ CONTENT_TYPE_HEADER = {"Content-Type": "application/json"}
 METADATA_FIELDS = "metadata_fields"
 FULL_SCHEMA = "fullobjects"
 
+DATA_ID_SEPARATOR = "|"
+
 # Dict keys
 
+DATA_ID_KEY = "data_id"
 CLMS_DATA_ID_KEY = "id"
 DATASET_FORMAT_KEY = "distribution_format_list"
 UID_KEY = "UID"
@@ -79,6 +84,7 @@ ORIGINAL_FILENAME_KEY = "orig_filename"
 
 STATUS_PENDING = ["Queued", "In_progress"]
 STATUS_COMPLETE = ["Finished_ok"]
+STATUS_CANCELLED = ["Cancelled"]
 PENDING = "PENDING"
 COMPLETE = "COMPLETE"
 UNDEFINED = "UNDEFINED"

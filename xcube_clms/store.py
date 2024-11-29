@@ -127,7 +127,7 @@ class CLMSDataStore(DataStore, ABC):
         resolution: str = "",
         **open_params,
     ) -> xr.Dataset:
-        raise NotImplementedError()
+        return self._clms.open_data(data_id)
 
     def search_data(
         self, data_type: DataTypeLike = None, **search_params
