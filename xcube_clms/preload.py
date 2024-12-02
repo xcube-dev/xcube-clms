@@ -193,7 +193,7 @@ class PreloadData:
                 status_event.clear()
                 spinner_thread.join()
                 download_url = self._get_download_url(task_id)
-                self._download_data(download_url, path, task_id)
+                self._download_data(download_url, path, task_id, data_id)
             time.sleep(RETRY_TIMEOUT)
 
     def _get_download_url(self, task_id):
@@ -295,7 +295,7 @@ class PreloadData:
         return UNDEFINED, ""
 
     @staticmethod
-    def _download_data(download_url, path, task_id):
+    def _download_data(download_url, path, task_id, data_id):
         LOG.info(f"Downloading zip file from {download_url}")
         download_progress_bar = tqdm(
             total=100,
@@ -335,28 +335,39 @@ class PreloadData:
                 with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
                     zip_fs = fsspec.filesystem("zip", fo=f)
 
-                    geo_file = PreloadData._find_geo_in_dir(
+                    geo_files = PreloadData._find_geo_in_dir(
                         "/",
                         zip_fs,
                     )
-                    if geo_file:
-                        try:
-                            with zip_fs.open(geo_file, "rb") as source_file:
-                                with open(path, "wb") as dest_file:
-                                    dest_file.write(source_file.read())
-                            LOG.info(
-                                f"The file {geo_file} has been successfully "
-                                f"downloaded to {path}"
-                            )
-                        except OSError as e:
-                            raise OSError(f"Error occurred while writing data. {e}")
-                        except UnicodeDecodeError as e:
-                            raise ValueError(
-                                f"Decoding error: {e}. File might not be text "
-                                f"or encoding is incorrect."
-                            )
-                        except Exception as e:
-                            raise Exception(f"An unexpected error occurred: {e}")
+                    if geo_files:
+                        target_file = os.path.join(path, data_id + "/").__str__()
+                        os.makedirs(
+                            os.path.dirname(target_file),
+                            exist_ok=True,
+                        )
+                        for geo_file in tqdm(geo_files, desc="Extracting geo files"):
+                            try:
+                                with zip_fs.open(geo_file, "rb") as source_file:
+                                    with open(
+                                        os.path.join(
+                                            target_file, geo_file.split("/")[-1]
+                                        ),
+                                        "wb",
+                                    ) as dest_file:
+                                        dest_file.write(source_file.read())
+                                LOG.info(
+                                    f"The file {geo_file} has been successfully "
+                                    f"downloaded to {path}"
+                                )
+                            except OSError as e:
+                                raise OSError(f"Error occurred while writing data. {e}")
+                            except UnicodeDecodeError as e:
+                                raise ValueError(
+                                    f"Decoding error: {e}. File might not be text "
+                                    f"or encoding is incorrect."
+                                )
+                            except Exception as e:
+                                raise Exception(f"An unexpected error occurred: {e}")
 
                     else:
                         raise FileNotFoundError(
@@ -365,23 +376,19 @@ class PreloadData:
 
     @staticmethod
     def _find_geo_in_dir(path, zip_fs):
-        geo_file: str = ""
+        geo_file: list[str] = []
         contents = zip_fs.ls(path)
         for item in contents:
             if zip_fs.isdir(item[NAME_KEY]):
-                geo_file = PreloadData._find_geo_in_dir(
-                    item[NAME_KEY],
-                    zip_fs,
+                geo_file.extend(
+                    PreloadData._find_geo_in_dir(
+                        item[NAME_KEY],
+                        zip_fs,
+                    )
                 )
-                if geo_file:
-                    return geo_file
             else:
                 if item[NAME_KEY].endswith(".tif"):
                     LOG.info(f"Found TIFF file: {item[NAME_KEY]}")
-                    geo_file = item["name"]
-                    return geo_file
-                if item[NAME_KEY].endswith(".nc"):
-                    LOG.info(f"Found NetCDF file: {item[NAME_KEY]}")
-                    geo_file = item[NAME_KEY]
-                    return geo_file
+                    filename = item[NAME_KEY]
+                    geo_file.append(filename)
         return geo_file
