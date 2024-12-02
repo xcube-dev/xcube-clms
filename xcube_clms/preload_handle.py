@@ -8,7 +8,7 @@ from xcube_clms.constants import (
     DOWNLOAD_WEIGHT,
     EXTRACTION_WEIGHT,
 )
-from xcube_clms.task import Task
+from xcube_clms.preloadtask import PreloadTask
 
 
 class PreloadHandle:
@@ -17,7 +17,7 @@ class PreloadHandle:
     progress of the preloading.
     """
 
-    def __init__(self, tasks: list[Task]):
+    def __init__(self, tasks: list[PreloadTask]):
         self.tasks = tasks
         self.html_output = widgets.HTML("<p>Loading tasks...</p>")
 

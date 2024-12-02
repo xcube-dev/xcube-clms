@@ -14,7 +14,7 @@ from xcube_clms.utils import (
 )
 
 
-class Task:
+class PreloadTask:
     """
     Creates a task. The task can be cancelled. It provides a progress method
     to check on the progress of the task.
@@ -28,7 +28,7 @@ class Task:
         self.api_token = api_token
         self._queue_status = "Not started"
         self._download_status = "Not started"
-        self.events = Task.get_events()
+        self.events = PreloadTask.get_events()
 
     @staticmethod
     def get_events():

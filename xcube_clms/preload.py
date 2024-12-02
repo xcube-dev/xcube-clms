@@ -51,7 +51,7 @@ from xcube_clms.constants import (
     REJECTED,
 )
 from xcube_clms.preload_handle import PreloadHandle
-from xcube_clms.task import Task
+from xcube_clms.preloadtask import PreloadTask
 from xcube_clms.utils import (
     make_api_request,
     get_response_of_type,
@@ -69,7 +69,7 @@ class PreloadData:
         self._api_token: str = None
         self._clms_api_token_instance = None
         self._url: str = url
-        self.tasks: list[Task] = []
+        self.tasks: list[PreloadTask] = []
         self.path: str = path
 
         self._set_credentials(credentials)
@@ -193,7 +193,7 @@ class PreloadData:
                 break
 
         if task is None:
-            task = Task(
+            task = PreloadTask(
                 data_id,
                 task_id,
                 self._url,
