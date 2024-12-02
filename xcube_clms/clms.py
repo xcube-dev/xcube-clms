@@ -26,7 +26,6 @@ import xarray as xr
 from xcube.core.store import DataTypeLike, new_data_store
 from xcube.util.jsonschema import JsonObjectSchema, JsonStringSchema
 
-from build.lib.xcube_clms.constants import TASK_ID_KEY
 from .constants import (
     SEARCH_ENDPOINT,
     LOG,
@@ -43,7 +42,6 @@ from .constants import (
     PROPERTIES_KEY,
     ALLOWED_SCHEMA_PARAMS,
     FILE_KEY,
-    DATA_ID_KEY,
     DATA_ID_SEPARATOR,
 )
 from .preload import PreloadData
@@ -72,11 +70,11 @@ class CLMS:
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
         self._data_ids = []
-        self._preload_data = PreloadData(self._url, credentials, path)
         if path is None:
-            self.path = os.getcwd()
+            self.path = os.path.join(os.getcwd(), "preload_cache/")
         else:
             self.path = os.path.join(os.getcwd(), path)
+        self._preload_data = PreloadData(self._url, credentials, self.path)
 
         self._file_store = None
         self._fetch_all_datasets()
@@ -157,16 +155,16 @@ class CLMS:
         return schema
 
     def preload_data(self, *data_ids: str, **preload_params):
-        task_ids = {}
+        data_id_maps = {}
         for data_id in data_ids:
             item = self._access_item(data_id)
             product = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
             task_id = self._preload_data.request_download(data_id, item, product)
-            task_ids[data_id] = {TASK_ID_KEY: task_id, DATA_ID_KEY: data_id}
-        cancel_handler = self._preload_data.process_tasks(task_ids)
+            data_id_maps[data_id] = task_id
+        self._preload_data.initiate_preload(data_id_maps)
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
         self._file_store = new_data_store("file", root=self.path)
         LOG.info(f"A local Filestore is created at the path: {self.path}")
-        return cancel_handler, task_ids
 
     def _create_data_ids(
         self,

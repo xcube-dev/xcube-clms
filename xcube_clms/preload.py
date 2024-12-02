@@ -6,6 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures._base import CANCELLED
 from itertools import cycle
+from typing import Any
 
 import fsspec
 from tqdm.notebook import tqdm
@@ -46,8 +47,6 @@ from xcube_clms.constants import (
     ORIGINAL_FILENAME_KEY,
     FILE_ID_KEY,
     RETRY_TIMEOUT,
-    DATA_ID_KEY,
-    CANCEL_ENDPOINT,
     STATUS_CANCELLED,
 )
 from xcube_clms.utils import (
@@ -63,14 +62,11 @@ from xcube_clms.utils import (
 class PreloadData:
     def __init__(self, url, credentials, path):
         self._credentials: dict = {}
-        self._api_token = None
+        self._api_token: str = None
         self._clms_api_token_instance = None
-        self._url = url
+        self._url: str = url
         self._task_control = {}
-        if path is None:
-            self.path = os.getcwd()
-        else:
-            self.path = os.path.join(os.getcwd(), path)
+        self.path: str = path
 
         if credentials:
             self._set_credentials(credentials)
@@ -149,52 +145,23 @@ class PreloadData:
         LOG.info(f"Download Requested with Task ID : {task_id}")
         return task_id
 
-    def cancel(self, task_id: str):
-        """
-        Cancels the task by setting the cancel_event for the given task.
-        If the task is already complete or does not exist, prints a message.
-        """
-        if task_id in self._task_control:
-            cancel_event = self._task_control[task_id]["cancel_event"]
+    def initiate_preload(self, data_id_maps: dict[str, Any]):
 
-            # If task has already completed or canceled, we cannot cancel it
-            if cancel_event.is_set():
-                print(
-                    f"Task {task_id} has already been completed or canceled and cannot be canceled again."
-                )
-            else:
-                cancel_event.set()  # Set the cancel event
-                print(
-                    f"Cancel requested for Task {task_id}. The task is being canceled."
-                )
-        else:
-            print(
-                f"Task {task_id} cannot be canceled because it is not in the queue or does not exist."
-            )
-
-    def process_tasks(self, task_ids):
-        for task_id in task_ids:
-            self._task_control[task_id] = {
-                "cancel_event": threading.Event(),
+        # We create a status event for each of the tasks so that we can
+        # signal the thread that it can proceed further from the queue.
+        for data_id_map_key in data_id_maps.keys():
+            self._task_control[data_id_map_key] = {
+                "status_event": threading.Event(),
             }
-            self._task_control[task_id].update(
-                {
-                    "status_event": threading.Event(),
-                }
-            )
 
         executor = ThreadPoolExecutor()
-        for task_id in task_ids:
+        for data_id_map in data_id_maps.items():
             executor.submit(
-                self._check_status_and_download,
-                task_ids[task_id][TASK_ID_KEY],
-                task_ids[task_id][DATA_ID_KEY],
+                self._initiate_preload,
                 self.path,
-                self._task_control[task_id]["cancel_event"],
-                self._task_control[task_id]["status_event"],
+                data_id_map,
+                self._task_control[data_id_map[0]]["status_event"],
             )
-
-        return self.cancel
 
     @staticmethod
     def _is_data_cached(data_id, path):
@@ -204,11 +171,12 @@ class PreloadData:
             return False
         return True
 
-    def _check_status_and_download(
-        self, task_id, data_id, path, cancel_event, status_event
-    ):
+    def _initiate_preload(self, path, data_id_map, status_event):
+        data_id = data_id_map[0]
+        task_id = data_id_map[1]
+
         spinner_thread = threading.Thread(
-            target=self.spinner, args=(status_event, task_id, cancel_event)
+            target=self.spinner, args=(status_event, task_id)
         )
         status_event.set()
         spinner_thread.start()
@@ -220,26 +188,15 @@ class PreloadData:
             return
 
         while status_event.is_set():
-            if cancel_event.is_set():
-                status_event.clear()
-                spinner_thread.join()
-                return
-
             status, _ = self._get_current_requests_status(task_id=task_id)
             if status == COMPLETE:
                 status_event.clear()
                 spinner_thread.join()
                 download_url = self._get_download_url(task_id)
-                # Use the path used to create a filestore.
                 self._download_data(download_url, path, task_id)
             time.sleep(RETRY_TIMEOUT)
 
     def _get_download_url(self, task_id):
-        """
-        Implement me!
-        :param task_id:
-        :return:
-        """
         self._refresh_token()
 
         headers = ACCEPT_HEADER.copy()
@@ -259,7 +216,7 @@ class PreloadData:
                         f"Task ID {task_id} has not yet finished. No download url available yet."
                     )
 
-    def spinner(self, status_event, task_id, cancel_event):
+    def spinner(self, status_event, task_id):
         """
         Displays a spinner with elapsed time for a single task until the event is set.
         """
@@ -274,23 +231,8 @@ class PreloadData:
                 flush=True,
             )
             time.sleep(0.3)
-        if cancel_event.is_set():
-            print(f"\rTask {task_id}: Task cancellation requested!{' ' * 20}")
-            headers = ACCEPT_HEADER.copy()
-            headers.update(get_authorization_header(self._api_token))
 
-            url = build_api_url(self._url, CANCEL_ENDPOINT, datasets_request=False)
-            json = {"TaskID": task_id}
-            response_data = make_api_request(
-                url=url, headers=headers, json=json, method="DELETE"
-            )
-            response = get_response_of_type(response_data, JSON_TYPE)
-
-            if not response.ok:
-                LOG.warn(f"Cancel request not successful. {response.content}")
-
-        else:
-            print(f"\rTask {task_id}: Done!{' ' * 20}")
+        print(f"\rTask {task_id}: Done!{' ' * 20}")
 
     def _prepare_download_request(
         self, data_id: str, item: dict, product: dict
@@ -398,8 +340,6 @@ class PreloadData:
                         zip_fs,
                     )
                     if geo_file:
-                        print("trying to create dir now here::", path)
-                        os.makedirs(os.path.dirname(path), exist_ok=True)
                         try:
                             with zip_fs.open(geo_file, "rb") as source_file:
                                 with open(path, "wb") as dest_file:
