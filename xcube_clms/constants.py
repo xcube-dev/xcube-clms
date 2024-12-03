@@ -81,6 +81,8 @@ TASK_IDS_KEY = "TaskIds"
 TASK_ID_KEY = "TaskID"
 DOWNLOAD_AVAILABLE_TIME_KEY = "FinalizationDateTime"
 ORIGINAL_FILENAME_KEY = "orig_filename"
+ITEM_KEY = "item"
+PRODUCT_KEY = "product"
 
 STATUS_PENDING = ["Queued", "In_progress"]
 STATUS_COMPLETE = ["Finished_ok"]
@@ -117,3 +119,5 @@ DATA_OPENER_IDS = (
 
 JSON_TYPE = "json"
 BYTES_TYPE = "bytes"
+
+GEO_FILE_EXTS = (".tif", ".tiff", ".nc")

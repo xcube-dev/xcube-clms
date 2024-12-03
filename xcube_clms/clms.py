@@ -43,6 +43,8 @@ from .constants import (
     ALLOWED_SCHEMA_PARAMS,
     FILE_KEY,
     DATA_ID_SEPARATOR,
+    ITEM_KEY,
+    PRODUCT_KEY,
 )
 from .preload import PreloadData
 from .utils import (
@@ -159,8 +161,7 @@ class CLMS:
         for data_id in data_ids:
             item = self._access_item(data_id)
             product = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
-            task_id = self._preload_data.request_download(data_id, item, product)
-            data_id_maps[data_id] = task_id
+            data_id_maps[data_id] = {ITEM_KEY: item, PRODUCT_KEY: product}
         self._preload_data.initiate_preload(data_id_maps)
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         self._file_store = new_data_store("file", root=self.path)

@@ -1,14 +1,15 @@
-import glob
 import io
 import os
 import threading
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures._base import CANCELLED
-from itertools import cycle
 from typing import Any
 
 import fsspec
+import xarray as xr
+from rioxarray import rioxarray
 from tqdm.notebook import tqdm
 
 from xcube_clms.api_token import CLMSAPIToken
@@ -48,6 +49,8 @@ from xcube_clms.constants import (
     FILE_ID_KEY,
     RETRY_TIMEOUT,
     STATUS_CANCELLED,
+    GEO_FILE_EXTS,
+    DATA_ID_SEPARATOR,
 )
 from xcube_clms.utils import (
     make_api_request,
@@ -56,6 +59,8 @@ from xcube_clms.utils import (
     get_dataset_download_info,
     build_api_url,
     has_expired,
+    spinner,
+    find_easting_northing,
 )
 
 
@@ -67,9 +72,23 @@ class PreloadData:
         self._url: str = url
         self._task_control = {}
         self.path: str = path
+        self.cleanup: bool = False
 
         if credentials:
             self._set_credentials(credentials)
+
+        self._cache: dict[str, str] = {}
+        self._init_cache()
+
+    def _init_cache(self):
+        self._cache = {
+            d: os.path.join(self.path, d)
+            for d in os.listdir(self.path)
+            if DATA_ID_SEPARATOR in d
+        }
+
+    def _update_cache(self, path, data_id, file_name):
+        self._cache.update({data_id: os.path.join(path, data_id, file_name)})
 
     def _set_credentials(self, credentials: dict):
         self._credentials = credentials
@@ -146,6 +165,7 @@ class PreloadData:
         return task_id
 
     def initiate_preload(self, data_id_maps: dict[str, Any]):
+        self._update_cache(self.path)
 
         # We create a status event for each of the tasks so that we can
         # signal the thread that it can proceed further from the queue.
@@ -158,34 +178,27 @@ class PreloadData:
         for data_id_map in data_id_maps.items():
             executor.submit(
                 self._initiate_preload,
-                self.path,
                 data_id_map,
                 self._task_control[data_id_map[0]]["status_event"],
             )
 
-    @staticmethod
-    def _is_data_cached(data_id, path):
-        if not os.path.isdir(path):
-            return False
-        if len(glob.glob(f"{os.path.join(path, data_id)}.*")) != 1:
-            return False
-        return True
-
-    def _initiate_preload(self, path, data_id_map, status_event):
+    def _initiate_preload(self, data_id_map, status_event):
         data_id = data_id_map[0]
-        task_id = data_id_map[1]
+        if data_id in self._cache.keys():
+            LOG.info(f"The data for {data_id} is already cached at {self.path}")
+            return
+
+        task_id = self.request_download(
+            data_id=data_id,
+            item=data_id_map[1].get("item"),
+            product=data_id_map[1].get("product"),
+        )
 
         spinner_thread = threading.Thread(
-            target=self.spinner, args=(status_event, task_id)
+            target=spinner, args=(status_event, f"{task_id}")
         )
         status_event.set()
         spinner_thread.start()
-
-        if self._is_data_cached(data_id, path):
-            status_event.clear()
-            spinner_thread.join()
-            LOG.info(f"The data for {data_id} is already cached at {path}")
-            return
 
         while status_event.is_set():
             status, _ = self._get_current_requests_status(task_id=task_id)
@@ -193,8 +206,55 @@ class PreloadData:
                 status_event.clear()
                 spinner_thread.join()
                 download_url = self._get_download_url(task_id)
-                self._download_data(download_url, path, task_id, data_id)
+                self._download_data(download_url, task_id, data_id)
+                self._postprocess(data_id)
             time.sleep(RETRY_TIMEOUT)
+
+    def _postprocess(self, data_id):
+        files = os.listdir(os.path.join(self.path, data_id))
+        if len(files) == 1:
+            LOG.info("No postprocessing required.")
+        elif len(files) == 0:
+            LOG.warn("No files to postprocess!")
+        else:
+            new_filename = data_id.split(DATA_ID_SEPARATOR)[-1] + ".zarr"
+            en_map = {}
+            for file in files:
+                en = find_easting_northing(file)
+                en_map.update({file: en})
+            if en_map is {}:
+                LOG.error("This naming format is not supported")
+            self._merge_and_save(en_map)
+            if self.cleanup:
+                self._cleanup_dir()
+
+    def _merge_and_save(self, en_map):
+        grouped_files = defaultdict(list)
+        for file, coords in en_map.items():
+            grouped_files[coords].append(file)
+
+        # Step 1: Group by Easting
+        east_groups = defaultdict(list)
+        for coord, file_list in grouped_files.items():
+            easting = coord[:3]
+            east_groups[easting].extend(file_list)
+
+        # Step 2: Merge files along the Y-axis (Northing) for each Easting group
+        merged_eastings = {}
+        for easting, file_list in east_groups.items():
+            datasets = []
+            for file in file_list:
+                da = rioxarray.open_rasterio(file, masked=True)
+                datasets.append(da)
+            merged_eastings[easting] = xr.concat(datasets, dim="y")
+
+        # Step 3: Merge along the X-axis (Easting)
+        final_datasets = list(merged_eastings.values())
+        final_cube = xr.concat(final_datasets, dim="x")
+
+        # TODO: Save to a zarr file. Check for kernel death issues
+
+    def _cleanup_dir(self): ...
 
     def _get_download_url(self, task_id):
         self._refresh_token()
@@ -215,24 +275,6 @@ class PreloadData:
                     raise Exception(
                         f"Task ID {task_id} has not yet finished. No download url available yet."
                     )
-
-    def spinner(self, status_event, task_id):
-        """
-        Displays a spinner with elapsed time for a single task until the event is set.
-        """
-        spinner = cycle(["◐", "◓", "◑", "◒"])
-        start_time = time.time()
-
-        while status_event.is_set():
-            elapsed = int(time.time() - start_time)
-            print(
-                f"\rTask {task_id}: {next(spinner)} Elapsed time: {elapsed}s",
-                end="",
-                flush=True,
-            )
-            time.sleep(0.3)
-
-        print(f"\rTask {task_id}: Done!{' ' * 20}")
 
     def _prepare_download_request(
         self, data_id: str, item: dict, product: dict
@@ -294,26 +336,27 @@ class PreloadData:
 
         return UNDEFINED, ""
 
-    @staticmethod
-    def _download_data(download_url, path, task_id, data_id):
+    def _download_data(self, download_url, task_id, data_id):
         LOG.info(f"Downloading zip file from {download_url}")
+
+        response_data = make_api_request(download_url, timeout=400, stream=True)
+        response = get_response_of_type(response_data, BYTES_TYPE)
+
+        content_length = float(response.headers.get("content-length", 0))
+        chunk_size = 1024 * 1024  # 1 MB chunks
+        total_size = float(content_length)
+        print("total size::", total_size)
+
         download_progress_bar = tqdm(
-            total=100,
+            unit="B",
             desc=f"Downloading zip file for task: {task_id}",
             unit_scale=True,
         )
 
-        response_data = make_api_request(download_url, stream=True)
-        response = get_response_of_type(response_data, BYTES_TYPE)
-
-        total_size = float(response.headers.get("content-length", 0))
-        chunk_size = 1024 * 1024
-
         with io.BytesIO(response.content) as zip_file_in_memory:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 zip_file_in_memory.write(chunk)
-                bar_update = (len(chunk) / total_size) * 100
-                download_progress_bar.update(bar_update)
+                download_progress_bar.update(len(chunk))
             download_progress_bar.close()
 
             zip_file_in_memory.seek(0)
@@ -340,24 +383,36 @@ class PreloadData:
                         zip_fs,
                     )
                     if geo_files:
-                        target_file = os.path.join(path, data_id + "/").__str__()
+                        target_folder = os.path.join(self.path, data_id + "/").__str__()
                         os.makedirs(
-                            os.path.dirname(target_file),
+                            os.path.dirname(target_folder),
                             exist_ok=True,
                         )
-                        for geo_file in tqdm(geo_files, desc="Extracting geo files"):
+                        for geo_file in tqdm(
+                            geo_files,
+                            desc="Extracting geo files for task_id {task_id}",
+                        ):
                             try:
                                 with zip_fs.open(geo_file, "rb") as source_file:
+                                    geo_file_name = geo_file.split("/")[-1]
+                                    geo_file_path = os.path.join(
+                                        target_folder, geo_file_name
+                                    )
                                     with open(
-                                        os.path.join(
-                                            target_file, geo_file.split("/")[-1]
-                                        ),
+                                        geo_file_path,
                                         "wb",
                                     ) as dest_file:
-                                        dest_file.write(source_file.read())
+                                        for chunk in tqdm(
+                                            iter(
+                                                lambda: source_file.read(chunk_size),
+                                                b"",
+                                            ),
+                                            desc=f"Extracting geo file {geo_file_name}",
+                                        ):
+                                            dest_file.write(chunk)
                                 LOG.info(
-                                    f"The file {geo_file} has been successfully "
-                                    f"downloaded to {path}"
+                                    f"The file {geo_file_name} has been successfully "
+                                    f"downloaded to {geo_file_path}"
                                 )
                             except OSError as e:
                                 raise OSError(f"Error occurred while writing data. {e}")
@@ -387,8 +442,8 @@ class PreloadData:
                     )
                 )
             else:
-                if item[NAME_KEY].endswith(".tif"):
-                    LOG.info(f"Found TIFF file: {item[NAME_KEY]}")
+                if item[NAME_KEY].endswith(GEO_FILE_EXTS):
+                    LOG.info(f"Found geo file: {item[NAME_KEY]}")
                     filename = item[NAME_KEY]
                     geo_file.append(filename)
         return geo_file

@@ -1,4 +1,8 @@
+import re
+import threading
+import time
 from datetime import datetime, timedelta
+from itertools import cycle
 from typing import Any, Optional
 from urllib.parse import urlencode
 
@@ -56,10 +60,22 @@ def make_api_request(
     json: dict = None,
     method: str = "GET",
     stream: bool = False,
+    timeout: int = 100,
 ) -> dict:
     session = requests.Session()
     LOG.info(f"Making a request to {url}")
     try:
+        status_event = threading.Event()
+        status_event.set()
+        spinner_thread = threading.Thread(
+            target=spinner,
+            args=(
+                status_event,
+                "Waiting for response for server for " f"the request: {url}",
+            ),
+        )
+        status_event.set()
+        spinner_thread.start()
         response = session.request(
             method=method,
             url=url,
@@ -67,10 +83,13 @@ def make_api_request(
             data=data,
             json=json,
             stream=stream,
+            timeout=timeout,
         )
         try:
             response.raise_for_status()
         except HTTPError:
+            status_event.clear()
+            spinner_thread.join()
             if "application/json" in response.headers.get("Content-Type", "").lower():
                 try:
                     error_details = response.json()
@@ -79,17 +98,22 @@ def make_api_request(
                     )
                 except JSONDecodeError as e:
                     raise JSONDecodeError(f"Unable to parse JSON. {e}")
-
             raise HTTPError(f"HTTP error {response.status_code}: {response.text}")
         content_type = response.headers.get("Content-Type", "").lower()
         if "application/json" in content_type:
+            status_event.clear()
+            spinner_thread.join()
             try:
                 return {"type": "json", "response": response.json()}
             except JSONDecodeError as e:
                 raise JSONDecodeError("Invalid JSON in response", e)
         elif "text/html" in content_type:
+            status_event.clear()
+            spinner_thread.join()
             return {"type": "text", "response": response}
         else:
+            status_event.clear()
+            spinner_thread.join()
             return {"type": "bytes", "response": response}
 
     except requests.exceptions.HTTPError as eh:
@@ -156,3 +180,29 @@ def has_expired(download_available_time):
         return True
     else:
         return False
+
+
+def spinner(status_event, message):
+    """
+    Displays a spinner with elapsed time for a single task until the event is set.
+    """
+    spinner_cycle = cycle(["◐", "◓", "◑", "◒"])
+    start_time = time.time()
+
+    while status_event.is_set():
+        elapsed = int(time.time() - start_time)
+        print(
+            f"\rTask: {message}: {next(spinner_cycle)} Elapsed time:" f" {elapsed}s",
+            end="",
+            flush=True,
+        )
+        time.sleep(0.3)
+
+    print(f"Task: {message}: Done!")
+
+
+def find_easting_northing(name: str):
+    match = re.search(r"[A-Z]\d{2}[A-Z]\d{2}", name)
+    if match:
+        return match.group(0)
+    return None
