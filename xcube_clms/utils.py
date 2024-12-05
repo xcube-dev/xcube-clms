@@ -8,8 +8,8 @@ from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
 import requests
-from requests import JSONDecodeError, HTTPError, Timeout, RequestException, \
-    Response
+from requests import HTTPError, Timeout, RequestException, Response, \
+    JSONDecodeError
 from tqdm.notebook import tqdm
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
@@ -84,7 +84,7 @@ def make_api_request(
     if show_spinner:
         status_event.set()
         spinner_thread.start()
-
+    response = None
     try:
         response = session.request(
             method=method,
@@ -100,23 +100,18 @@ def make_api_request(
         # This is to make sure that the user gets to see the actual error
         # message which raise_for_status does not show
         except HTTPError:
+            error_details = response.text
             if "application/json" in response.headers.get("Content-Type", "").lower():
-                try:
-                    error_details = response.json()
-                    raise HTTPError(
-                        f"HTTP error {response.status_code}: {error_details}"
-                    )
-                except JSONDecodeError as e:
-                    raise JSONDecodeError(f"Unable to parse JSON. {e}")
-            raise HTTPError(f"HTTP error {response.status_code}: {response.text}")
+                error_details = response.json()
+            raise HTTPError(f"HTTP error {response.status_code}: {error_details}")
 
     except JSONDecodeError as e:
-        raise JSONDecodeError("Invalid JSON in response", e)
-    except requests.exceptions.HTTPError as eh:
-        raise HTTPError(f"HTTP error occurred. {eh}")
-    except requests.exceptions.Timeout as et:
+        raise JSONDecodeError(f"Invalid JSON: {e}", response.text, 0)
+    except HTTPError as eh:
+        raise HTTPError(f"HTTP error occurred: {eh}")
+    except Timeout as et:
         raise Timeout(f"Timeout error occurred: {et}")
-    except requests.exceptions.RequestException as e:
+    except RequestException as e:
         raise RequestException(f"Request error occurred: {e}")
     except Exception as e:
         raise Exception(f"Unknown error occurred: {e}")

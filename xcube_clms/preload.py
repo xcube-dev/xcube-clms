@@ -216,7 +216,7 @@ class PreloadData:
         while status_event.is_set():
             status, _ = self._get_current_requests_status(task_id=task_id)
             if status == COMPLETE:
-                LOG.info(f"Status: {status}.")
+                LOG.info(f"Status: {status} for {data_id}.")
                 status_event.clear()
                 spinner_thread.join()
                 download_url, file_size = self._get_download_url(task_id)
@@ -224,11 +224,11 @@ class PreloadData:
                 self._postprocess(data_id)
             if status in PENDING:
                 LOG.info(
-                    f"Status: {status}. Will recheck status in "
+                    f"Status: {status} for {data_id}. Will recheck status in "
                     f"{RETRY_TIMEOUT} seconds"
                 )
             if status in CANCELLED:
-                LOG.info(f"Status: {status}. Exiting now")
+                LOG.info(f"Status: {status} for {data_id}. Exiting now")
                 status_event.clear()
                 spinner_thread.join()
                 return

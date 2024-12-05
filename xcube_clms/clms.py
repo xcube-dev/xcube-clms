@@ -79,8 +79,8 @@ class CLMS:
             _, file_id = data_id.split(DATA_ID_SEPARATOR)
         except ValueError as e:
             raise ValueError(
-                f"Expected a data_id in the format {{ product_id}}:{{"
-                f"file_id}} but got {data_id}"
+                f"Expected a data_id in the format {{ product_id}}"
+                f"{DATA_ID_SEPARATOR}{{file_id}} but got {data_id}"
             )
         if self.file_store is None:
             raise ValueError(
@@ -94,9 +94,9 @@ class CLMS:
             data_id_file = os.listdir(folder)
             print(data_id_file)
             if len(data_id_file) != 1:
-                LOG.warning(
+                LOG.error(
                     f"Expected 1 file in the folder {folder}, "
-                    f"got {len(data_id_file)}"
+                    f"got {len(data_id_file)}. Opening the first file."
                 )
             return self.file_store.open_data(
                 os.path.join(data_id, data_id_file[0]), **open_params
