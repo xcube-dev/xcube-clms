@@ -1,16 +1,16 @@
-import io
 import os
+import tempfile
 import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures._base import CANCELLED
 from typing import Any
 
 import fsspec
 import xarray as xr
 from rioxarray import rioxarray
 from tqdm.notebook import tqdm
+from xcube.core.store import new_data_store
 
 from xcube_clms.api_token import CLMSAPIToken
 from xcube_clms.constants import (
@@ -41,9 +41,6 @@ from xcube_clms.constants import (
     RESULTS,
     FILENAME_KEY,
     NAME_KEY,
-    BYTES_TYPE,
-    TASK_IDS_KEY,
-    TASK_ID_KEY,
     DOWNLOAD_AVAILABLE_TIME_KEY,
     ORIGINAL_FILENAME_KEY,
     FILE_ID_KEY,
@@ -51,6 +48,9 @@ from xcube_clms.constants import (
     STATUS_CANCELLED,
     GEO_FILE_EXTS,
     DATA_ID_SEPARATOR,
+    TASK_IDS_KEY,
+    TASK_ID_KEY,
+    CANCELLED,
 )
 from xcube_clms.utils import (
     make_api_request,
@@ -61,6 +61,7 @@ from xcube_clms.utils import (
     has_expired,
     spinner,
     find_easting_northing,
+    cleanup_dir,
 )
 
 
@@ -72,23 +73,28 @@ class PreloadData:
         self._url: str = url
         self._task_control = {}
         self.path: str = path
-        self.cleanup: bool = False
+        self.cleanup: bool = True
 
         if credentials:
             self._set_credentials(credentials)
 
-        self._cache: dict[str, str] = {}
-        self._init_cache()
+        self.cache: dict[str, str] = {}
+        self._init_file_store()
+        self.refresh_cache()
 
-    def _init_cache(self):
-        self._cache = {
+    def _init_file_store(self):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        self.file_store = new_data_store("file", root=self.path)
+
+    def refresh_cache(self):
+        self.cache = {
             d: os.path.join(self.path, d)
             for d in os.listdir(self.path)
             if DATA_ID_SEPARATOR in d
         }
 
-    def _update_cache(self, path, data_id, file_name):
-        self._cache.update({data_id: os.path.join(path, data_id, file_name)})
+    def _update_cache(self, data_id, file_name):
+        self.cache.update({data_id: os.path.join(self.path, data_id, file_name)})
 
     def _set_credentials(self, credentials: dict):
         self._credentials = credentials
@@ -114,7 +120,7 @@ class PreloadData:
         path = item.get(PATH_KEY, "")
         source = item.get(SOURCE_KEY, "")
 
-        if (path is "") and (source is ""):
+        if (path == "") and (source == ""):
             LOG.warning(f"No prepackaged downloadable items available for {data_id}")
 
         # This is to make sure that we do not send requests for currently for
@@ -134,6 +140,7 @@ class PreloadData:
         status, task_id = self._get_current_requests_status(
             dataset_id=product[UID_KEY], file_id=item[ID_KEY]
         )
+
         if status == COMPLETE or status == PENDING:
             LOG.info(
                 f"Download request with task id {task_id} "
@@ -146,6 +153,13 @@ class PreloadData:
                 f"Download request does not exists or has expired for "
                 f"data id:"
                 f" {data_id}"
+            )
+
+        if status == CANCELLED:
+            LOG.info(
+                f"Download request was cancelled for "
+                f"data id:"
+                f" {data_id}. Re-requesting now."
             )
 
         download_request_url, headers, json = self._prepare_download_request(
@@ -165,8 +179,7 @@ class PreloadData:
         return task_id
 
     def initiate_preload(self, data_id_maps: dict[str, Any]):
-        self._update_cache(self.path)
-
+        self.refresh_cache()
         # We create a status event for each of the tasks so that we can
         # signal the thread that it can proceed further from the queue.
         for data_id_map_key in data_id_maps.keys():
@@ -184,7 +197,7 @@ class PreloadData:
 
     def _initiate_preload(self, data_id_map, status_event):
         data_id = data_id_map[0]
-        if data_id in self._cache.keys():
+        if data_id in self.cache.keys():
             LOG.info(f"The data for {data_id} is already cached at {self.path}")
             return
 
@@ -203,58 +216,90 @@ class PreloadData:
         while status_event.is_set():
             status, _ = self._get_current_requests_status(task_id=task_id)
             if status == COMPLETE:
+                LOG.info(f"Status: {status}.")
                 status_event.clear()
                 spinner_thread.join()
-                download_url = self._get_download_url(task_id)
-                self._download_data(download_url, task_id, data_id)
+                download_url, file_size = self._get_download_url(task_id)
+                self._download_data(download_url, file_size, task_id, data_id)
                 self._postprocess(data_id)
+            if status in PENDING:
+                LOG.info(
+                    f"Status: {status}. Will recheck status in "
+                    f"{RETRY_TIMEOUT} seconds"
+                )
+            if status in CANCELLED:
+                LOG.info(f"Status: {status}. Exiting now")
+                status_event.clear()
+                spinner_thread.join()
+                return
+
             time.sleep(RETRY_TIMEOUT)
 
     def _postprocess(self, data_id):
         files = os.listdir(os.path.join(self.path, data_id))
         if len(files) == 1:
             LOG.info("No postprocessing required.")
+            # self._update_cache(data_id, files)
         elif len(files) == 0:
             LOG.warn("No files to postprocess!")
         else:
-            new_filename = data_id.split(DATA_ID_SEPARATOR)[-1] + ".zarr"
-            en_map = {}
+            en_map = defaultdict(list)
+            data_id_folder = os.path.join(self.path, data_id)
+            files = os.listdir(data_id_folder)
             for file in files:
                 en = find_easting_northing(file)
-                en_map.update({file: en})
+                en_map[en].append(os.path.join(data_id_folder, file))
             if en_map is {}:
-                LOG.error("This naming format is not supported")
-            self._merge_and_save(en_map)
+                LOG.error(
+                    "This naming format is not supported. Currently "
+                    "only filenames with Eastings and Northings are "
+                    "supported."
+                )
+            self._merge_and_save(en_map, data_id)
             if self.cleanup:
-                self._cleanup_dir()
+                cleanup_dir(data_id_folder)
 
-    def _merge_and_save(self, en_map):
-        grouped_files = defaultdict(list)
-        for file, coords in en_map.items():
-            grouped_files[coords].append(file)
-
+    def _merge_and_save(self, en_map: defaultdict[str, list], data_id: str):
         # Step 1: Group by Easting
         east_groups = defaultdict(list)
-        for coord, file_list in grouped_files.items():
+        for coord, file_list in en_map.items():
             easting = coord[:3]
             east_groups[easting].extend(file_list)
-
-        # Step 2: Merge files along the Y-axis (Northing) for each Easting group
+        # Step 2: Sort the Eastings and Northings. Reverse is true for the
+        # values in the list because it is northings and they should be in
+        # the descending order for the concat to happen correctly.
+        sorted_east_groups = {
+            key: sorted(value, reverse=True)
+            for key, value in sorted(east_groups.items())
+        }
+        # Step 3: Merge files along the Y-axis (Northings) for each Easting
+        # group. xarray takes care of the missing tiles and fills it with NaN
+        # values
+        chunk_size = {"x": 1000, "y": 1000}
         merged_eastings = {}
-        for easting, file_list in east_groups.items():
+        for easting, file_list in tqdm(
+            sorted_east_groups.items(),
+            desc=f"Concatenating along the Y-axis (Northings)",
+        ):
             datasets = []
             for file in file_list:
-                da = rioxarray.open_rasterio(file, masked=True)
+                da = rioxarray.open_rasterio(file, masked=True, chunks=chunk_size)
                 datasets.append(da)
             merged_eastings[easting] = xr.concat(datasets, dim="y")
 
-        # Step 3: Merge along the X-axis (Easting)
+        # Step 4: Merge along the X-axis (Easting)
         final_datasets = list(merged_eastings.values())
         final_cube = xr.concat(final_datasets, dim="x")
 
-        # TODO: Save to a zarr file. Check for kernel death issues
+        final_cube = final_cube.to_dataset(
+            name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
+        )
 
-    def _cleanup_dir(self): ...
+        new_filename = os.path.join(
+            data_id, data_id.split(DATA_ID_SEPARATOR)[-1] + ".zarr"
+        )
+        # self._update_cache(data_id, new_filename)
+        self.file_store.write_data(final_cube, new_filename)
 
     def _get_download_url(self, task_id):
         self._refresh_token()
@@ -270,7 +315,10 @@ class PreloadData:
             if key == task_id:
                 status = response[key][STATUS_KEY]
                 if status in STATUS_COMPLETE:
-                    return response[key][DOWNLOAD_URL_KEY]
+                    return (
+                        response[key][DOWNLOAD_URL_KEY],
+                        response[key]["FileSize"],
+                    )
                 else:
                     raise Exception(
                         f"Task ID {task_id} has not yet finished. No download url available yet."
@@ -306,7 +354,6 @@ class PreloadData:
         If both dataset_id and task_id are provided, task_id is ignored.
         """
         self._refresh_token()
-
         headers = ACCEPT_HEADER.copy()
         headers.update(get_authorization_header(self._api_token))
 
@@ -314,53 +361,87 @@ class PreloadData:
         response_data = make_api_request(url=url, headers=headers)
         response = get_response_of_type(response_data, JSON_TYPE)
 
+        status_priority = {
+            "Finished_ok": 1,  # Complete
+            "Queued": 2,  # Pending
+            "In_progress": 2,  # Pending
+            "Cancelled": 3,  # Cancelled
+        }
+
+        latest_entries = {status: {} for status in status_priority.keys()}
+
         for key in response:
             status = response[key][STATUS_KEY]
             datasets = response[key][DATASETS_KEY]
             requested_data_id = datasets[0][DATASET_ID_KEY]
             requested_file_id = datasets[0][FILE_ID_KEY]
+            timestamp = (
+                response[key][DOWNLOAD_AVAILABLE_TIME_KEY]
+                if status in {"Finished_ok", "Cancelled"}
+                else None
+            )  # Only get timestamp for Completed or Cancelled
             condition = (
                 ((dataset_id == requested_data_id) and (file_id == requested_file_id))
                 if dataset_id
                 else (key == task_id)
             )
-            if status in STATUS_PENDING and condition:
-                return PENDING, key
-            if status in STATUS_COMPLETE and condition:
-                if has_expired(response[key][DOWNLOAD_AVAILABLE_TIME_KEY]):
-                    return UNDEFINED, ""
-                else:
-                    return COMPLETE, key
-            if status in STATUS_CANCELLED and condition:
-                return CANCELLED, key
+            if condition:
+                current_entry = {
+                    "status": status,
+                    "key": key,
+                    "timestamp": timestamp,
+                    "response": response[key],
+                }
+
+                if status in latest_entries:
+                    existing_entry = latest_entries[status]
+                    if not existing_entry or (
+                        timestamp and (timestamp > existing_entry.get("timestamp", ""))
+                    ):
+                        latest_entries[status] = current_entry
+
+        for status in sorted(
+            status_priority, key=lambda s: status_priority[s], reverse=False
+        ):
+            latest_entry = latest_entries[status]
+            if latest_entry:
+                key = latest_entry["key"]
+                entry_response = latest_entry["response"]
+                if status in STATUS_COMPLETE:
+                    if not has_expired(entry_response[DOWNLOAD_AVAILABLE_TIME_KEY]):
+                        return COMPLETE, key
+                elif status in STATUS_PENDING:
+                    return PENDING, key
+                elif status in STATUS_CANCELLED:
+                    return CANCELLED, key
 
         return UNDEFINED, ""
 
-    def _download_data(self, download_url, task_id, data_id):
+    def _download_data(self, download_url, file_size, task_id, data_id):
         LOG.info(f"Downloading zip file from {download_url}")
 
-        response_data = make_api_request(download_url, timeout=400, stream=True)
-        response = get_response_of_type(response_data, BYTES_TYPE)
-
-        content_length = float(response.headers.get("content-length", 0))
+        response = make_api_request(download_url, timeout=600, stream=True)
         chunk_size = 1024 * 1024  # 1 MB chunks
-        total_size = float(content_length)
-        print("total size::", total_size)
 
-        download_progress_bar = tqdm(
-            unit="B",
-            desc=f"Downloading zip file for task: {task_id}",
-            unit_scale=True,
-        )
+        with tempfile.NamedTemporaryFile(mode="wb", delete=True) as temp_file:
+            temp_file_path = temp_file.name
+            LOG.info(f"Temporary file created at {temp_file_path}")
 
-        with io.BytesIO(response.content) as zip_file_in_memory:
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                zip_file_in_memory.write(chunk)
-                download_progress_bar.update(len(chunk))
-            download_progress_bar.close()
+            progress_bar = tqdm(
+                response.iter_content(chunk_size=chunk_size),
+                desc=f"Downloading zip file for task: {task_id}",
+                total=file_size // chunk_size,
+                unit_scale=True,
+            )
 
-            zip_file_in_memory.seek(0)
-            fs = fsspec.filesystem("zip", fo=zip_file_in_memory)
+            for chunk in progress_bar:
+                temp_file.write(chunk)
+                progress_bar.update(len(chunk))
+                # sys.stderr.flush()
+                del chunk
+            progress_bar.close()
+
+            fs = fsspec.filesystem("zip", fo=temp_file_path)
             zip_contents = fs.ls(RESULTS)
             actual_zip_file = None
             if len(zip_contents) == 1:

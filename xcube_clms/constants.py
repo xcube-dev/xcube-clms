@@ -21,7 +21,7 @@
 import logging
 
 # Configuration constants
-TIME_TO_EXPIRE = 48  # (in hours)
+TIME_TO_EXPIRE = 24  # (in hours)
 RETRY_TIMEOUT = 60  # (in seconds)
 
 DATA_STORE_ID = "clms"
@@ -90,6 +90,7 @@ STATUS_CANCELLED = ["Cancelled"]
 PENDING = "PENDING"
 COMPLETE = "COMPLETE"
 UNDEFINED = "UNDEFINED"
+CANCELLED = "CANCELLED"
 RESULTS = "Results/"
 
 NOT_SUPPORTED_LIST = ["WEKEO", "LEGACY", "LANDCOVER"]
@@ -115,9 +116,11 @@ if not LOG.hasHandlers():
 DATA_OPENER_IDS = (
     f"dataset:netcdf:{DATA_STORE_ID}",
     f"dataset:geotiff:{DATA_STORE_ID}",
+    f"dataset:zarr:{DATA_STORE_ID}",
 )
 
 JSON_TYPE = "json"
 BYTES_TYPE = "bytes"
 
 GEO_FILE_EXTS = (".tif", ".tiff", ".nc")
+KEEP_EXTENSION = ".zarr"

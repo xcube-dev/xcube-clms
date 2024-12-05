@@ -23,7 +23,7 @@ import os
 from typing import Any, get_args, Container
 
 import xarray as xr
-from xcube.core.store import DataTypeLike, new_data_store
+from xcube.core.store import DataTypeLike
 from xcube.util.jsonschema import JsonObjectSchema, JsonStringSchema
 
 from .constants import (
@@ -56,17 +56,6 @@ from .utils import (
 
 
 class CLMS:
-
-    # TODO: change get_data_id def and doc in the base class (ABC) to let the
-    #  include_attrs kw arg be of type boolean (should be done in a diff PR)
-    # TODO: preload_data should take in tuple of str
-    #  It should return a preload handle. It can be used to cancel the preloading,
-    #  - check the progress,
-    #  - initiate the download,
-    #  - it should have a progress bar for download. Its representation should be a progress bar in JN, (indeterminate Progress Bar)
-    #  Create new store, init new file store ("filesystem")
-    #  preload_data(..., non_blocking=True) => this should not go into ABC
-
     def __init__(self, url: str, credentials: dict, path: str | None = None):
         self._url = url
         self._datasets_info: list[dict[str, Any]] = []
@@ -78,7 +67,7 @@ class CLMS:
             self.path = os.path.join(os.getcwd(), path)
         self._preload_data = PreloadData(self._url, credentials, self.path)
 
-        self._file_store = None
+        self.file_store = self._preload_data.file_store
         self._fetch_all_datasets()
 
     def open_data(
@@ -93,13 +82,25 @@ class CLMS:
                 f"Expected a data_id in the format {{ product_id}}:{{"
                 f"file_id}} but got {data_id}"
             )
-        if self._file_store is None:
+        if self.file_store is None:
             raise ValueError(
                 "File store does not exist yet. Please preload "
                 "data first using the preload_data() method."
             )
-
-        return self._file_store.open_data(file_id, **open_params)
+        self._preload_data.refresh_cache()
+        if data_id in self._preload_data.cache.keys():
+            folder = self._preload_data.cache[data_id]
+            print(folder)
+            data_id_file = os.listdir(folder)
+            print(data_id_file)
+            if len(data_id_file) != 1:
+                LOG.warning(
+                    f"Expected 1 file in the folder {folder}, "
+                    f"got {len(data_id_file)}"
+                )
+            return self.file_store.open_data(
+                os.path.join(data_id, data_id_file[0]), **open_params
+            )
 
     def get_data_ids(
         self,
@@ -109,7 +110,6 @@ class CLMS:
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
         if is_valid_data_type(data_type):
-            self._fetch_all_datasets()
             dataset = self._get_item(data_id)
             if len(dataset) == 0:
                 return False
@@ -117,7 +117,6 @@ class CLMS:
         return False
 
     def get_extent(self, data_id: str) -> dict:
-        self._fetch_all_datasets()
         item = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
         crs = item.get(CRS_KEY)
         time_range = (item.get(START_TIME_KEY), item.get(END_TIME_KEY))
@@ -162,9 +161,8 @@ class CLMS:
             item = self._access_item(data_id)
             product = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
             data_id_maps[data_id] = {ITEM_KEY: item, PRODUCT_KEY: product}
+
         self._preload_data.initiate_preload(data_id_maps)
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        self._file_store = new_data_store("file", root=self.path)
         LOG.info(f"A local Filestore is created at the path: {self.path}")
 
     def _create_data_ids(

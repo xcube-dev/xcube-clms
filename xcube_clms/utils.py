@@ -1,13 +1,16 @@
+import os
 import re
 import threading
 import time
 from datetime import datetime, timedelta
 from itertools import cycle
-from typing import Any, Optional
+from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
 import requests
-from requests import JSONDecodeError, HTTPError, Timeout, RequestException
+from requests import JSONDecodeError, HTTPError, Timeout, RequestException, \
+    Response
+from tqdm.notebook import tqdm
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
 from xcube_clms.constants import (
@@ -17,6 +20,7 @@ from xcube_clms.constants import (
     FULL_SCHEMA,
     METADATA_FIELDS,
     TIME_TO_EXPIRE,
+    KEEP_EXTENSION,
 )
 
 
@@ -53,29 +57,35 @@ def is_valid_data_type(data_type: DataTypeLike) -> bool:
     return data_type is None or DATASET_TYPE.is_super_type_of(data_type)
 
 
+ResponseType = Literal["json", "text", "bytes"]
+
+
 def make_api_request(
     url: str,
-    headers: dict = ACCEPT_HEADER,
-    data: dict = None,
-    json: dict = None,
+    headers: Optional[dict[str, str]] = ACCEPT_HEADER,
+    data: Optional[dict[str, Any]] = None,
+    json: Optional[dict[str, Any]] = None,
     method: str = "GET",
     stream: bool = False,
     timeout: int = 100,
-) -> dict:
+    show_spinner: bool = True,
+) -> Response:
     session = requests.Session()
     LOG.info(f"Making a request to {url}")
-    try:
-        status_event = threading.Event()
-        status_event.set()
-        spinner_thread = threading.Thread(
-            target=spinner,
-            args=(
-                status_event,
-                "Waiting for response for server for " f"the request: {url}",
-            ),
-        )
+
+    status_event = threading.Event()
+    spinner_thread = threading.Thread(
+        target=spinner,
+        args=(
+            status_event,
+            "Waiting for response for server for " f"the request: {url}",
+        ),
+    )
+    if show_spinner:
         status_event.set()
         spinner_thread.start()
+
+    try:
         response = session.request(
             method=method,
             url=url,
@@ -87,9 +97,9 @@ def make_api_request(
         )
         try:
             response.raise_for_status()
+        # This is to make sure that the user gets to see the actual error
+        # message which raise_for_status does not show
         except HTTPError:
-            status_event.clear()
-            spinner_thread.join()
             if "application/json" in response.headers.get("Content-Type", "").lower():
                 try:
                     error_details = response.json()
@@ -99,29 +109,22 @@ def make_api_request(
                 except JSONDecodeError as e:
                     raise JSONDecodeError(f"Unable to parse JSON. {e}")
             raise HTTPError(f"HTTP error {response.status_code}: {response.text}")
-        content_type = response.headers.get("Content-Type", "").lower()
-        if "application/json" in content_type:
-            status_event.clear()
-            spinner_thread.join()
-            try:
-                return {"type": "json", "response": response.json()}
-            except JSONDecodeError as e:
-                raise JSONDecodeError("Invalid JSON in response", e)
-        elif "text/html" in content_type:
-            status_event.clear()
-            spinner_thread.join()
-            return {"type": "text", "response": response}
-        else:
-            status_event.clear()
-            spinner_thread.join()
-            return {"type": "bytes", "response": response}
 
+    except JSONDecodeError as e:
+        raise JSONDecodeError("Invalid JSON in response", e)
     except requests.exceptions.HTTPError as eh:
         raise HTTPError(f"HTTP error occurred. {eh}")
     except requests.exceptions.Timeout as et:
         raise Timeout(f"Timeout error occurred: {et}")
     except requests.exceptions.RequestException as e:
         raise RequestException(f"Request error occurred: {e}")
+    except Exception as e:
+        raise Exception(f"Unknown error occurred: {e}")
+    finally:
+        if show_spinner:
+            status_event.clear()
+            spinner_thread.join()
+    return response
 
 
 def build_api_url(
@@ -142,16 +145,38 @@ def build_api_url(
     return f"{url}/{api_endpoint}"
 
 
-def get_response_of_type(response_data: dict, data_type: str):
-    try:
-        if data_type == "json":
-            return response_data.get("response", {})
-        if data_type == "text":
-            return response_data.get("response", "")
-        if data_type == "bytes":
-            return response_data.get("response", b"")
-    except TypeError:
-        raise TypeError(f"Expected {data_type}. Got {response_data.get("type", "")}")
+def get_response_of_type(api_response: Response, data_type: Union[ResponseType, str]):
+
+    if not isinstance(api_response, Response):
+        raise TypeError(
+            f"Invalid input: response_data must be a Response, got "
+            f"'{type(api_response).__name__}'."
+        )
+
+    valid_data_types = {"json", "text", "bytes"}
+    if data_type not in valid_data_types:
+        raise ValueError(
+            f"Invalid data_type: {data_type}. Must be one of {valid_data_types}."
+        )
+    content_type = api_response.headers.get("Content-Type", "").lower()
+
+    if "application/json" in content_type:
+        response_data_type = "json"
+        response = api_response.json()
+    elif "text/html" in content_type:
+        response_data_type = "text"
+        response = api_response.text
+    else:
+        response_data_type = "bytes"
+        response = api_response.content
+
+    if response_data_type != data_type:
+        raise ValueError(
+            f"Type mismatch: Expected {data_type}, but response "
+            f"is of type '{response_data_type}'."
+        )
+
+    return response
 
 
 def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
@@ -167,10 +192,6 @@ def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
 
 def get_authorization_header(access_token: str) -> dict:
     return {"Authorization": f"Bearer {access_token}"}
-
-
-def convert_list_dict_to_list(data: list[dict[str, Any]], key: str) -> list[str]:
-    return [d[key] for d in data if key in d]
 
 
 def has_expired(download_available_time):
@@ -198,11 +219,28 @@ def spinner(status_event, message):
         )
         time.sleep(0.3)
 
-    print(f"Task: {message}: Done!")
+    print(f"\rTask: {message}: Done!{' ' * 50}")
 
 
 def find_easting_northing(name: str):
-    match = re.search(r"[A-Z]\d{2}[A-Z]\d{2}", name)
+    match = re.search(r"[E]\d{2}[N]\d{2}", name)
     if match:
         return match.group(0)
     return None
+
+
+def cleanup_dir(folder_path, keep_extension=None):
+    if keep_extension is None:
+        keep_extension = KEEP_EXTENSION
+
+    for filename in tqdm(
+        os.listdir(folder_path), desc=f"Cleaning up directory {folder_path}"
+    ):
+        file_path = os.path.join(folder_path, filename)
+
+        if os.path.isfile(file_path) and not filename.endswith(keep_extension):
+            os.remove(file_path)
+            LOG.debug(f"Deleted: {file_path}")
+        else:
+            LOG.debug(f"Kept: {file_path}")
+    LOG.info(f"Cleaning up finished")
