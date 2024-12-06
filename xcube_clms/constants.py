@@ -26,6 +26,8 @@ RETRY_TIMEOUT = 60  # (in seconds)
 
 DATA_STORE_ID = "clms"
 
+PRELOAD_CACHE_FOLDER = "preload_cache/"
+
 # CLMS API Constants
 SEARCH_ENDPOINT = "@search"
 DOWNLOAD_ENDPOINT = "@datarequest_post"
