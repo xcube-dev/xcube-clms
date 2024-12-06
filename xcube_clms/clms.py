@@ -100,7 +100,7 @@ class CLMS:
             )
 
         self._preload_data.refresh_cache()
-        cache_entry = self._preload_data.cache.get(data_id)
+        cache_entry = self._preload_data.view_cache().get(data_id)
         if not cache_entry:
             raise FileNotFoundError(f"No cached data found for data_id: {data_id}")
 
