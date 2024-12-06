@@ -34,13 +34,6 @@ class FileProcessor:
     """
     Handles file processing after download completes. Currently, it merges and
     saves files by stacking the `Easting` and `Northing` coordinates.
-
-    Attributes:
-        path: The directory path where the downloaded files are stored.
-        file_store: A xcube data store based file store system for managing
-            processed data.
-        cleanup: Indicates whether to remove intermediate files after
-        processing in case there are multiple files downloaded.
     """
 
     def __init__(self, path: str, file_store, cleanup: bool = True) -> None:

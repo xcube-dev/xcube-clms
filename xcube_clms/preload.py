@@ -47,21 +47,6 @@ class PreloadData:
     Handles the preloading of data, including cache management, token handling,
     and file downloading and its processing if required for a given tuple of
     'data_ids'.
-
-
-    Attributes:
-        _url: The base URL for data requests.
-        _credentials: Credentials for authentication.
-        path: Local path for caching and file storage.
-        _task_control: Tracks the control status of preload tasks.
-        cleanup: Whether to clean up cached files after processing.
-        _token_handler: Manages API token retrieval and updates.
-        _api_token: The current API token for requests.
-        _cache_manager: Handles cache operations and file storage.
-        file_store: Local file store from xcube data store obtained from the
-            cache manager.
-        _file_processor: Handles processing of downloaded files.
-        _download_manager: Manages download tasks and statuses.
     """
 
     def __init__(

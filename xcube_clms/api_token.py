@@ -29,10 +29,21 @@ from xcube_clms.utils import make_api_request, get_response_of_type
 
 
 class CLMSAPIToken:
-    def __init__(
-        self,
-        credentials: dict,
-    ):
+    """
+    Manages the OAuth2 access token for authenticating with the CLMS API.
+    This class is responsible for refreshing the token when it expires,
+    generating a JWT (JSON Web Token) grant, and checking if the current
+    token is expired.
+    """
+
+    def __init__(self, credentials: dict[str, str]) -> None:
+        """
+        Initializes the CLMSAPIToken object with the given credentials and sets
+        up the necessary values for token management.
+
+        Args:
+            credentials: A dictionary containing the credentials
+        """
         self._credentials: dict = credentials
         self._token_expiry: int = 0
         self._token_lifetime: int = 3600  # Token lifetime in seconds
@@ -41,6 +52,16 @@ class CLMSAPIToken:
         self.refresh_token()
 
     def refresh_token(self) -> str:
+        """
+        Refreshes the access token by requesting a new one from the CLMS API.
+        Updates the token expiry time after a successful refresh.
+
+        Returns:
+            str: The new access token.
+
+        Raises:
+            RequestException: If the token refresh fails.
+        """
         try:
             self.access_token = self._request_access_token()
             self._token_expiry = time.time() + self._token_lifetime
@@ -52,6 +73,15 @@ class CLMSAPIToken:
         return self.access_token
 
     def _request_access_token(self) -> str:
+        """
+        Makes an API request to obtain a new access token using the JWT grant.
+
+        Returns:
+            str: The access token from the response.
+
+        Raises:
+            RequestException: If the API request fails.
+        """
         headers = ACCEPT_HEADER.copy()
         headers["Content-Type"] = "application/x-www-form-urlencoded"
 
@@ -66,7 +96,13 @@ class CLMSAPIToken:
 
         return response["access_token"]
 
-    def _create_jwt_grant(self):
+    def _create_jwt_grant(self) -> str:
+        """
+        Creates an encoded JWT used to obtain the access token.
+
+        Returns:
+            str: The JWT grant as a string.
+        """
         private_key = self._credentials["private_key"].encode("utf-8")
 
         claim_set = {
@@ -79,4 +115,10 @@ class CLMSAPIToken:
         return jwt.encode(claim_set, private_key, algorithm="RS256")
 
     def is_token_expired(self) -> bool:
+        """
+        Checks if the current access token has expired.
+
+        Returns:
+            bool: True if the token has expired, False otherwise.
+        """
         return time.time() > (self._token_expiry - self._expiry_margin)

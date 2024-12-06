@@ -29,11 +29,6 @@ from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
 class CacheManager:
     """
     Manages the cache map for preloaded data
-
-    Attributes:
-        cache: A dictionary mapping data IDs to their respective file paths.
-        path: The directory path where cached data is stored.
-        file_store: The file storage system for managing cached data.
     """
 
     def __init__(self, path) -> None:

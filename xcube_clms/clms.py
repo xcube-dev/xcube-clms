@@ -59,14 +59,6 @@ class CLMS:
 
     This class enables users to fetch metadata for datasets, preload data
     into a cache, and open specific datasets for further processing.
-
-    Attributes:
-        _url: The base URL for the CLMS API.
-        path: The path for the cache directory, where preloaded data is stored.
-        _preload_data: An instance of PreloadData to manage caching and preloading operations.
-        file_store: An object for managing file storage operations such as
-        opening and writing data.
-        _datasets_info: Metadata for all datasets fetched from the API.
     """
 
     def __init__(

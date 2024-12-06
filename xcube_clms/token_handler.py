@@ -26,11 +26,6 @@ from xcube_clms.constants import LOG
 class TokenHandler:
     """
     Handles the management and refreshing of API tokens for the CLMS API.
-
-    Attributes:
-        _credentials: Authentication credentials used for generating tokens.
-        _clms_api_token_instance: Instance for handling token-related operations.
-        api_token: The current API token for authenticated requests.
     """
 
     def __init__(self, credentials: dict) -> None:

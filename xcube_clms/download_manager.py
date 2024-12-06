@@ -78,12 +78,6 @@ class DownloadTaskManager:
     """
     Manages tasks for downloading datasets from the CLMS API, including task
     creation, download request status monitoring, and data extraction.
-
-    Attributes:
-        _token_handler: Manages API token operations for authentication.
-        _api_token: The current API token for authenticated requests.
-        _url: Base URL of the CLMS API for handling download tasks.
-        path: Directory path where downloaded files are stored.
     """
 
     def __init__(self, token_handler: TokenHandler, url: str, path: str) -> None:
