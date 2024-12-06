@@ -23,7 +23,6 @@ from typing import Any, Container
 
 import xarray as xr
 from xcube.core.store import DataTypeLike, DataStore
-from xcube.util.jsonschema import JsonObjectSchema, JsonStringSchema
 
 from .constants import (
     SEARCH_ENDPOINT,
@@ -35,13 +34,12 @@ from .constants import (
     START_TIME_KEY,
     END_TIME_KEY,
     JSON_TYPE,
-    SCHEMA_KEY,
-    PROPERTIES_KEY,
-    ALLOWED_SCHEMA_PARAMS,
     FILE_KEY,
     DATA_ID_SEPARATOR,
     ITEM_KEY,
     PRODUCT_KEY,
+    BATCH,
+    NEXT,
 )
 from .preload import PreloadData
 from .utils import (
@@ -54,6 +52,13 @@ from .utils import (
 
 class CLMS:
     def __init__(self, url: str, credentials: dict, path: str | None = None):
+        """Initialize the CLMS class with API URL, credentials, and optional path.
+
+        Args:
+            url: Base URL for the API.
+            credentials: JSON containing authentication credentials.
+            path: Optional cache path for storing preloaded data.
+        """
         self._url: str = url
         self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
@@ -63,6 +68,9 @@ class CLMS:
 
     @property
     def file_store(self) -> DataStore:
+        LOG.info(
+            f"Local Filestore for preload cache created at the path:" f" {self.path}"
+        )
         return self._preload_data.file_store
 
     def open_data(
@@ -70,6 +78,20 @@ class CLMS:
         data_id: str,
         **open_params,
     ) -> xr.Dataset:
+        """Open data associated with a specific data ID.
+
+        Args:
+            data_id: Identifier for the data to open.
+            **open_params: Additional parameters for opening the data.
+
+        Returns:
+            The opened data object.
+
+        Raises:
+            ValueError: If the data ID is invalid or improperly formatted.
+            FileNotFoundError: If the data ID is not found in the cache.
+        """
+
         try:
             _, file_id = data_id.split(DATA_ID_SEPARATOR)
         except ValueError as e:
@@ -102,15 +124,44 @@ class CLMS:
         self,
         include_attrs: Container[str] | bool | None = None,
     ) -> list[str] | list[tuple[str, dict[str, Any]]]:
+        """Retrieve all data IDs, optionally including additional attributes.
+
+        Args:
+            include_attrs: Specifies whether to include attributes.
+                - If True, includes all attributes.
+                - If a list, includes specified attributes.
+                - If False or None, includes no attributes.
+
+        Returns:
+            A list of data IDs, or tuples of data IDs and attributes.
+        """
         return self._create_data_ids(include_attrs)
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
+        """Check if data exists for the given data ID and optional type.
+
+        Args:
+            data_id: Identifier for the data to check.
+            data_type: Optional type to validate against.
+
+        Returns:
+            True if data exists, False otherwise.
+        """
         if is_valid_data_type(data_type):
             dataset = self._get_item(data_id)
             return bool(dataset)
         return False
 
     def _get_extent(self, data_id: str) -> dict[str, Any]:
+        """Retrieve the spatial and temporal extent of a dataset.
+
+        Args:
+            data_id: Identifier for the dataset.
+
+        Returns:
+            A dictionary with the dataset's time range and CRS (currently
+            supported).
+        """
         item = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
         crs = item.get(CRS_KEY, [])
         time_range = (item.get(START_TIME_KEY), item.get(END_TIME_KEY))
@@ -122,34 +173,21 @@ class CLMS:
 
         return dict(time_range=time_range, crs=crs[0] if crs else None)
 
-    def get_preload_params(self, data_id: str) -> dict[str : str | None]:
-        self._fetch_all_datasets()
-        preload_params = [
-            data[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]
-            for data in self._datasets_info
-            if data[CLMS_DATA_ID_KEY] == data_id
-        ][0]
-
-        return preload_params
-
-    def get_preload_data_params_schema_for_data(self, data_id: str):
-        self._fetch_all_datasets()
-        raw_schema = [
-            data[DOWNLOADABLE_FILES_KEY][SCHEMA_KEY][PROPERTIES_KEY]
-            for data in self._datasets_info
-            if data[CLMS_DATA_ID_KEY] == data_id
-        ][0]
-        params = {}
-        for item, inner_dict in raw_schema.items():
-            param_data = {}
-            for inner_item, val in inner_dict.items():
-                if any(key in inner_item for key in ALLOWED_SCHEMA_PARAMS):
-                    param_data[inner_item] = val
-            params[item] = JsonStringSchema(**param_data)
-        schema = JsonObjectSchema(properties=params)
-        return schema
-
     def preload_data(self, *data_ids: str, **preload_params):
+        """Preload data into a cache for specified data IDs with optional
+        parameters for faster access using open_data.
+
+        Args:
+            *data_ids: One or more data IDs to preload.
+            **preload_params: Additional parameters for preloading (currently
+            not supported).
+
+        Returns:
+            None.
+
+        Raises:
+            ValueError: If any data ID is invalid.
+        """
         data_id_maps = {
             data_id: {
                 ITEM_KEY: self._access_item(data_id),
@@ -158,12 +196,24 @@ class CLMS:
             for data_id in data_ids
         }
         self._preload_data.initiate_preload(data_id_maps)
-        LOG.info(f"Local Filestore created at the path: {self.path}")
 
     def _create_data_ids(
         self,
         include_attrs: Container[str] | bool | None = None,
     ) -> list[str] | list[tuple[str, dict[str, Any]]]:
+        """
+        Generates a list of data IDs, optionally including attributes. This is
+        the actual implementation of the get_data_ids() method.
+
+        Args:
+            include_attrs: Specifies whether to include attributes.
+                - If True, includes all attributes.
+                - If a list, includes specified attributes.
+                - If False or None, includes no attributes.
+
+        Returns:
+            A list of data IDs or tuples of data IDs and attributes.
+        """
         data_ids = []
         for item in self._datasets_info:
             for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
@@ -171,37 +221,57 @@ class CLMS:
                     data_id = (
                         f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[FILE_KEY]}"
                     )
-                    if not include_attrs or (
-                        isinstance(include_attrs, bool) and include_attrs
-                    ):
+                    if not include_attrs:
                         data_ids.append(data_id)
+                    elif isinstance(include_attrs, bool) and include_attrs:
+                        data_ids.append((data_id, i))
                     elif isinstance(include_attrs, list):
-                        filtered_attrs = {k: i[k] for k in include_attrs if k in i}
-                        data_ids.append(
-                            (
-                                f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[FILE_KEY]}",
-                                filtered_attrs,
-                            )
-                        )
+                        filtered_attrs = {
+                            attr: i[attr] for attr in include_attrs if attr in i
+                        }
+                        data_ids.append((data_id, filtered_attrs))
         return data_ids
 
     def _fetch_all_datasets(self) -> list[dict[str, Any]]:
+        """Fetch all datasets from the API and cache their metadata.
+
+        Returns:
+            A list of dictionaries representing all datasets.
+
+        Raises:
+            RequestException: If an error occurs during the API request.
+            Other exceptions such as Timeout, JSONDecodeError could be raised
+            as well from the make_api_request()
+            ValueError: For type mismatches between response object type and
+            the required type in get_response_of_type()
+            TypeError: For invalid input to get_response_of_type()
+        """
         if not self._datasets_info:
             LOG.info(f"Fetching datasets metadata from {self._url}")
 
             response_data = make_api_request(build_api_url(self._url, SEARCH_ENDPOINT))
-            while response_data:
+            while True:
                 response = get_response_of_type(response_data, JSON_TYPE)
                 self._datasets_info.extend(response.get(ITEMS_KEY, []))
-                # next_page = response.get(BATCH, {}).get(NEXT)
-                # if not next_page:
-                #     break
-                # response_data = make_api_request(next_page)
-                response_data = make_api_request(response.get("next", None))
+                next_page = response.get(BATCH, {}).get(NEXT)
+                if not next_page:
+                    break
+                response_data = make_api_request(next_page)
             self._attrs = list(self._datasets_info[0].keys())
         return self._datasets_info
 
-    def _access_item(self, data_id) -> dict:
+    def _access_item(self, data_id) -> dict[str, Any]:
+        """Access an item from the dataset for a given data ID.
+
+        Args:
+            data_id: The unique identifier for the dataset.
+
+        Returns:
+            A dictionary representing the dataset item.
+
+        Raises:
+            ValueError: If the dataset item is not found or multiple items match.
+        """
         dataset = self._get_item(data_id)
         if len(dataset) != 1:
             raise ValueError(
@@ -210,7 +280,16 @@ class CLMS:
             )
         return dataset[0]
 
-    def _get_item(self, data_id):
+    def _get_item(self, data_id: str) -> list[dict[str, Any]] | list[any]:
+        """Retrieve a dataset item or its components for a given data ID.
+        This is the actual implementation of the _access_item() method
+
+        Args:
+            data_id: Identifier for the dataset or its components.
+
+        Returns:
+            A list of dictionaries matching the data ID.
+        """
         if DATA_ID_SEPARATOR in data_id:
             clms_data_product_id, dataset_filename = data_id.split(DATA_ID_SEPARATOR)
             return [
