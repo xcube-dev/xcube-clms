@@ -52,18 +52,47 @@ from .utils import (
 
 
 class CLMS:
-    def __init__(self, url: str, credentials: dict, path: str | None = None):
-        """Initialize the CLMS class with API URL, credentials, and optional path.
+    """
+    The CLMS class provides an interface to interact with the CLMS API,
+    allowing the user to preload the data in a non-blocking way which is a
+    time-consuming task.
+
+    This class enables users to fetch metadata for datasets, preload data
+    into a cache, and open specific datasets for further processing.
+
+    Attributes:
+        _url: The base URL for the CLMS API.
+        path: The path for the cache directory, where preloaded data is stored.
+        _preload_data: An instance of PreloadData to manage caching and preloading operations.
+        file_store: An object for managing file storage operations such as
+        opening and writing data.
+        _datasets_info: Metadata for all datasets fetched from the API.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        credentials: dict,
+        path: str | None = None,
+        cleanup: bool | None = None,
+    ) -> None:
+        """
+        Initialize the CLMS class with API URL, credentials, and optional path.
 
         Args:
             url: Base URL for the API.
             credentials: JSON containing authentication credentials.
-            path: Optional cache path for storing preloaded data.
+            path: Optional cache path for storing preloaded data. If not
+                provided, it will be stored in the predefined folder.
+            cleanup: Option to clean up the directory after downloading the
+                datasets and if they contain multiple datasets. Defaults to
+                True.
         """
         self._url: str = url
-        self._metadata: list[str] = []
         self.path: str = os.path.join(os.getcwd(), path or PRELOAD_CACHE_FOLDER)
-        self._preload_data = PreloadData(self._url, credentials, self.path)
+        self._preload_data = PreloadData(
+            self._url, credentials, self.path, cleanup=cleanup
+        )
         self.file_store = self._preload_data.file_store
         self._datasets_info: list[dict[str, Any]] = CLMS._fetch_all_datasets(self._url)
 
@@ -72,7 +101,8 @@ class CLMS:
         data_id: str,
         **open_params,
     ) -> xr.Dataset:
-        """Open data associated with a specific data ID.
+        """
+        Open data associated with a specific data ID.
 
         Args:
             data_id: Identifier for the data to open.
@@ -118,7 +148,8 @@ class CLMS:
         self,
         include_attrs: Container[str] | bool | None = None,
     ) -> list[str] | list[tuple[str, dict[str, Any]]]:
-        """Retrieve all data IDs, optionally including additional attributes.
+        """
+        Retrieve all data IDs, optionally including additional attributes.
 
         Args:
             include_attrs: Specifies whether to include attributes.
@@ -132,7 +163,8 @@ class CLMS:
         return self._create_data_ids(include_attrs)
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
-        """Check if data exists for the given data ID and optional type.
+        """
+        Check if data exists for the given data ID and optional type.
 
         Args:
             data_id: Identifier for the data to check.
@@ -146,8 +178,9 @@ class CLMS:
             return bool(dataset)
         return False
 
-    def _get_extent(self, data_id: str) -> dict[str, Any]:
-        """Retrieve the spatial and temporal extent of a dataset.
+    def get_extent(self, data_id: str) -> dict[str, Any]:
+        """
+        Retrieve the spatial and temporal extent of a dataset.
 
         Args:
             data_id: Identifier for the dataset.
@@ -167,8 +200,9 @@ class CLMS:
 
         return dict(time_range=time_range, crs=crs[0] if crs else None)
 
-    def preload_data(self, *data_ids: str, **preload_params):
-        """Preload data into a cache for specified data IDs with optional
+    def preload_data(self, *data_ids: str, **preload_params) -> None:
+        """
+        Preload data into a cache for specified data IDs with optional
         parameters for faster access using open_data.
 
         Args:
@@ -228,7 +262,8 @@ class CLMS:
 
     @staticmethod
     def _fetch_all_datasets(url) -> list[dict[str, Any]]:
-        """Fetch all datasets from the API and cache their metadata.
+        """
+        Fetch all datasets from the API and cache their metadata.
 
         Returns:
             A list of dictionaries representing all datasets.
@@ -254,7 +289,8 @@ class CLMS:
         return datasets_info
 
     def _access_item(self, data_id) -> dict[str, Any]:
-        """Access an item from the dataset for a given data ID.
+        """
+        Access an item from the dataset for a given data ID.
 
         Args:
             data_id: The unique identifier for the dataset.
@@ -274,7 +310,8 @@ class CLMS:
         return dataset[0]
 
     def _get_item(self, data_id: str) -> list[dict[str, Any]] | list[any]:
-        """Retrieve a dataset item or its components for a given data ID.
+        """
+        Retrieve a dataset item or its components for a given data ID.
         This is the actual implementation of the _access_item() method
 
         Args:

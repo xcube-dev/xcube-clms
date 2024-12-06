@@ -21,6 +21,7 @@
 
 import os
 import tempfile
+from typing import Any
 
 import fsspec
 from tqdm.notebook import tqdm
@@ -74,13 +75,48 @@ from xcube_clms.utils import (
 
 
 class DownloadTaskManager:
-    def __init__(self, token_handler: TokenHandler, url: str, path: str):
+    """
+    Manages tasks for downloading datasets from the CLMS API, including task
+    creation, download request status monitoring, and data extraction.
+
+    Attributes:
+        _token_handler: Manages API token operations for authentication.
+        _api_token: The current API token for authenticated requests.
+        _url: Base URL of the CLMS API for handling download tasks.
+        path: Directory path where downloaded files are stored.
+    """
+
+    def __init__(self, token_handler: TokenHandler, url: str, path: str) -> None:
+        """
+        Initializes the DownloadTaskManager with API token handler, base URL,
+         and file storage path.
+
+        Args:
+            token_handler: TokenHandler instance for API authentication.
+            url: Base URL for the API.
+            path: Path where downloaded data will be stored.
+        """
         self._token_handler = token_handler
         self._api_token = self._token_handler.api_token
         self._url = url
         self.path = path
 
     def request_download(self, data_id: str, item: dict, product: dict) -> str:
+        """
+        Submits a download request for a specific dataset if it does not
+        already exist. If it does, it returns the existing task ID.
+
+        Args:
+            data_id: Unique identifier of the dataset.
+            item: Metadata for the specific file to download.
+            product: Metadata for the dataset containing the file.
+
+        Returns:
+            str: Task ID of the submitted download request.
+
+        Raises:
+            AssertionError: If the dataset is unsupported.
+        """
         self._token_handler.refresh_token()
 
         # This is to make sure that there are pre-packaged files available for
@@ -150,7 +186,19 @@ class DownloadTaskManager:
         LOG.info(f"Download Requested with Task ID : {task_id}")
         return task_id
 
-    def get_download_url(self, task_id):
+    def get_download_url(self, task_id: str) -> tuple[str, int]:
+        """
+        Retrieves the download URL and file size for a completed download task.
+
+        Args:
+            task_id: Task ID for which to retrieve the download URL.
+
+        Returns:
+            tuple[str, int]: A tuple containing the download URL and the file size in bytes.
+
+        Raises:
+            Exception: If the task has not completed or no download URL is available.
+        """
         self._token_handler.refresh_token()
 
         headers = ACCEPT_HEADER.copy()
@@ -176,6 +224,18 @@ class DownloadTaskManager:
     def _prepare_download_request(
         self, data_id: str, item: dict, product: dict
     ) -> tuple[str, dict, dict]:
+        """
+        Prepares the API request details for downloading a dataset.
+
+        Args:
+            data_id: Unique identifier of the dataset.
+            item: Metadata for the specific file to download.
+            product: Metadata for the dataset containing the file.
+
+        Returns:
+            tuple[str, dict, dict]: A tuple containing the request URL,
+                headers, and JSON payload.
+        """
         LOG.info(f"Preparing download request for {data_id}")
 
         dataset_id = product[UID_KEY]
@@ -200,7 +260,23 @@ class DownloadTaskManager:
         task_id: str | None = None,
     ) -> tuple[str, str]:
         """
-        If both dataset_id and task_id are provided, task_id is ignored.
+        Checks the status of existing download request tasks.
+        The user can either provide the dataset_id and file_id or just the
+        task_id to enquire the status of the request.
+
+        We perform sorting based on the priority and timestamps so that we have
+        the result of the latest requests in the decreasing order of priorities.
+
+        Args:
+            dataset_id: Dataset ID to filter tasks (optional).
+            file_id: File ID to filter tasks (optional).
+            task_id: Task ID to filter tasks (optional).
+
+        Returns:
+            tuple[str, str]: A tuple containing the status
+                (e.g., COMPLETE, PENDING) and task ID.
+
+        Notes:
         """
         self._token_handler.refresh_token()
         headers = ACCEPT_HEADER.copy()
@@ -266,7 +342,19 @@ class DownloadTaskManager:
 
         return UNDEFINED, ""
 
-    def download_data(self, download_url, file_size, task_id, data_id):
+    def download_data(
+        self, download_url: str, file_size: int, task_id: str, data_id: str
+    ) -> None:
+        """
+        Downloads a dataset from the provided URL, extracts files, and saves
+        them.
+
+        Args:
+            download_url: URL for downloading the dataset.
+            file_size: Size of the dataset in bytes.
+            task_id: Task ID associated with the dataset.
+            data_id: Unique identifier of the dataset.
+        """
         LOG.info(f"Downloading zip file from {download_url}")
 
         response = make_api_request(download_url, timeout=600, stream=True)
@@ -359,7 +447,24 @@ class DownloadTaskManager:
                         )
 
     @staticmethod
-    def _find_geo_in_dir(path, zip_fs):
+    def _find_geo_in_dir(path: str, zip_fs: Any) -> list[str]:
+        """
+        Recursively searches a directory within a zip filesystem for geo files.
+
+        Args:
+            path: Path within the zip filesystem to start searching.
+            zip_fs: Zip filesystem object supporting directory listing and file
+             checks.
+
+        Returns:
+            list[str]: A list of geo file paths found within the specified
+                directory.
+
+        Notes:
+            - A geo file is identified by its extension, which matches entries
+                in `GEO_FILE_EXTS`.
+            - Logs details of each discovered geo file.
+        """
         geo_file: list[str] = []
         contents = zip_fs.ls(path)
         for item in contents:

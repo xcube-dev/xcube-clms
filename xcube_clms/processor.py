@@ -26,17 +26,52 @@ import rioxarray
 import xarray as xr
 from tqdm.notebook import tqdm
 
-from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
+from xcube_clms.constants import LOG, DATA_ID_SEPARATOR, ZARR_FORMAT
 from xcube_clms.utils import find_easting_northing, cleanup_dir
 
 
 class FileProcessor:
-    def __init__(self, path, file_store, cleanup=True):
+    """
+    Handles file processing after download completes. Currently, it merges and
+    saves files by stacking the `Easting` and `Northing` coordinates.
+
+    Attributes:
+        path: The directory path where the downloaded files are stored.
+        file_store: A xcube data store based file store system for managing
+            processed data.
+        cleanup: Indicates whether to remove intermediate files after
+        processing in case there are multiple files downloaded.
+    """
+
+    def __init__(self, path: str, file_store, cleanup: bool = True) -> None:
+        """
+        Initialize the FileProcessor with the given path, file store, and
+        cleanup option.
+
+        Args:
+            path: The directory path where files are processed.
+            file_store: The file store object used for saving processed files.
+            cleanup: Whether to clean up the directory after processing.
+        """
         self.path = path
         self.file_store = file_store
         self.cleanup = cleanup
 
-    def postprocess(self, data_id: str):
+    def postprocess(self, data_id: str) -> None:
+        """
+        Perform postprocessing on the files for a given data ID.
+
+        This includes preparing files for merging, merging them based on their
+        Easting and Northing coordinates computed from their file names,
+        and optionally cleaning up the directory.
+
+        We currently assume that all the datasets that are downloaded which
+        contain multiple files will have this information in their
+        file_names. This can be further improved once we find cases otherwise.
+
+        Args:
+            data_id: The identifier for the dataset being post-processed.
+        """
         target_folder = os.path.join(self.path, data_id)
         files = os.listdir(target_folder)
         if len(files) == 1:
@@ -56,7 +91,20 @@ class FileProcessor:
             if self.cleanup:
                 cleanup_dir(target_folder)
 
-    def _prepare_merge(self, files: list[str], data_id: str):
+    def _prepare_merge(
+        self, files: list[str], data_id: str
+    ) -> defaultdict[str, list[str]]:
+        """
+        Prepare files for merging by grouping them based on their Easting and
+        Northing coordinates.
+
+        Args:
+            files: The list of files to be processed.
+            data_id: The identifier for the dataset being processed.
+
+        Returns:
+            A dictionary mapping coordinates to lists of file paths.
+        """
         en_map = defaultdict(list)
         data_id_folder = os.path.join(self.path, data_id)
         for file in files:
@@ -64,12 +112,23 @@ class FileProcessor:
             en_map[en].append(os.path.join(data_id_folder, file))
         return en_map
 
-    def _merge_and_save(self, en_map: defaultdict[str, list], data_id: str):
+    def _merge_and_save(
+        self, en_map: defaultdict[str, list[str]], data_id: str
+    ) -> None:
+        """
+        Merge files along Easting and Northing axes and save the final
+        dataset using the file store.
+
+        Args:
+            en_map: A dictionary mapping coordinates to file lists.
+            data_id: The identifier for the dataset being processed.
+        """
         # Step 1: Group by Easting
         east_groups = defaultdict(list)
         for coord, file_list in en_map.items():
             easting = coord[:3]
             east_groups[easting].extend(file_list)
+
         # Step 2: Sort the Eastings and Northings. Reverse is true for the
         # values in the list because it is northings and they should be in
         # the descending order for the concat to happen correctly.
@@ -77,6 +136,7 @@ class FileProcessor:
             key: sorted(value, reverse=True)
             for key, value in sorted(east_groups.items())
         }
+
         # Step 3: Merge files along the Y-axis (Northings) for each Easting
         # group. xarray takes care of the missing tiles and fills it with NaN
         # values
@@ -99,9 +159,8 @@ class FileProcessor:
         final_cube = final_cube.to_dataset(
             name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
         )
-
         new_filename = os.path.join(
-            data_id, data_id.split(DATA_ID_SEPARATOR)[-1] + ".zarr"
+            data_id, data_id.split(DATA_ID_SEPARATOR)[-1] + ZARR_FORMAT
         )
-        # self._update_cache(data_id, new_filename)
+
         self.file_store.write_data(final_cube, new_filename)

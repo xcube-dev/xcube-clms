@@ -32,6 +32,7 @@ from xcube.core.store import (
 from xcube.util.jsonschema import (
     JsonObjectSchema,
     JsonStringSchema,
+    JsonBooleanSchema,
 )
 
 from .clms import CLMS
@@ -69,10 +70,15 @@ class CLMSDataStore(DataStore, ABC):
             path=JsonStringSchema(
                 title="Temporary path to store the downloaded data.",
             ),
+            cleanup=JsonBooleanSchema(
+                title="Option to cleanup the directory in case there were "
+                "multiple files downloaded for the same data_id. "
+                "Defaults to True ",
+            ),
         )
         return JsonObjectSchema(
             properties=dict(**params),
-            required=("url", "credentials"),
+            required=("url", "credentials", "path"),
             additional_properties=False,
         )
 

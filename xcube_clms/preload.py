@@ -24,6 +24,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from xcube.core.store import DataStore
+
 from xcube_clms.cache_manager import CacheManager
 from xcube_clms.constants import (
     LOG,
@@ -41,25 +43,67 @@ from xcube_clms.utils import (
 
 
 class PreloadData:
-    def __init__(self, url, credentials, path):
+    """
+    Handles the preloading of data, including cache management, token handling,
+    and file downloading and its processing if required for a given tuple of
+    'data_ids'.
+
+
+    Attributes:
+        _url: The base URL for data requests.
+        _credentials: Credentials for authentication.
+        path: Local path for caching and file storage.
+        _task_control: Tracks the control status of preload tasks.
+        cleanup: Whether to clean up cached files after processing.
+        _token_handler: Manages API token retrieval and updates.
+        _api_token: The current API token for requests.
+        _cache_manager: Handles cache operations and file storage.
+        file_store: Local file store from xcube data store obtained from the
+            cache manager.
+        _file_processor: Handles processing of downloaded files.
+        _download_manager: Manages download tasks and statuses.
+    """
+
+    def __init__(
+        self, url: str, credentials: dict, path: str, cleanup: bool | None = None
+    ) -> None:
+        """
+        Initialize the PreloadData instance with the provided URL,
+        credentials, path and cleanup option.
+
+        Args:
+            url: The base URL for data requests to the CLMS API.
+            credentials: Authentication credentials that are obtained
+                following the steps from the CLMS API documentation.
+                https://eea.github.io/clms-api-docs/authentication.html
+            path: Local path for caching and file storage.
+        """
         self._url: str = url
         self._credentials: dict = {}
         self.path: str = path
 
-        self._task_control = {}
-        self.cleanup: bool = True
+        self._task_control: dict = {}
+        self.cleanup: bool = cleanup or True
 
         self._token_handler = TokenHandler(credentials)
         self._api_token: str = self._token_handler.api_token
         self._cache_manager = CacheManager(self.path)
         self._cache_manager.refresh_cache()
-        self.file_store = self._cache_manager.get_file_store()
+        self.file_store: DataStore = self._cache_manager.get_file_store()
         self._file_processor = FileProcessor(self.path, self.file_store)
         self._download_manager = DownloadTaskManager(
             self._token_handler, self._url, self.path
         )
 
-    def initiate_preload(self, data_id_maps: dict[str, Any]):
+    def initiate_preload(self, data_id_maps: dict[str, Any]) -> None:
+        """
+        Initiates the preload process for a set of data IDs.
+
+        Args:
+            data_id_maps : Mapping of data IDs to their metadata. Here,
+                we use the item and product keys mapped to their data ids to
+                preload the data.
+        """
         self.refresh_cache()
         # We create a status event for each of the tasks so that we can
         # signal the thread that it can proceed further from the queue.
@@ -76,7 +120,19 @@ class PreloadData:
                 self._task_control[data_id_map[0]]["status_event"],
             )
 
-    def _initiate_preload(self, data_id_map, status_event):
+    def _initiate_preload(
+        self, data_id_map: tuple[str, dict[str, Any]], status_event: threading.Event
+    ) -> None:
+        """
+        Processes a single preload task on a separate thread with its own
+            status_event to indicate when to proceed further.
+
+        Args:
+            data_id_map: Tuple containing the data ID and its metadata as a
+                dict.
+            status_event: Event to manage task status and the visibility of
+                the spinner.
+        """
         data_id = data_id_map[0]
         if data_id in self.view_cache().keys():
             LOG.info(f"The data for {data_id} is already cached at {self.path}")
@@ -99,7 +155,7 @@ class PreloadData:
                 task_id=task_id
             )
             if status == COMPLETE:
-                LOG.info(f"Status: {status} for {data_id}.")
+                LOG.info(f"Status: {status} for {data_id} with task ID {task_id}.")
                 status_event.clear()
                 spinner_thread.join()
                 download_url, file_size = self._download_manager.get_download_url(
@@ -109,22 +165,47 @@ class PreloadData:
                 self._file_processor.postprocess(data_id)
             if status in PENDING:
                 LOG.info(
-                    f"Status: {status} for {data_id}. Will recheck status in "
+                    f"Status: {status} for {data_id} with task ID {task_id}. Will "
+                    f"recheck status in "
                     f"{RETRY_TIMEOUT} seconds"
                 )
             if status in CANCELLED:
-                LOG.info(f"Status: {status} for {data_id}. Exiting now")
+                LOG.info(
+                    f"Status: {status} for {data_id} with task ID {task_id}. Exiting now"
+                )
                 status_event.clear()
                 spinner_thread.join()
                 return
 
             time.sleep(RETRY_TIMEOUT)
 
-    def download_data(self, download_url, file_size, task_id, data_id):
+    def download_data(
+        self, download_url: str, file_size: int, task_id: str, data_id: str
+    ) -> None:
+        """
+        Initiates the download process for a given data item.
+
+        Args:
+            download_url: URL of the data to download. This is obtained from
+                the completed request of a dataset.
+            file_size: Size of the file to download which is used in the
+                progress bar display.
+            task_id: Task ID of the download request.
+            data_id: Identifier of the data being downloaded.
+        """
         self._download_manager.download_data(download_url, file_size, task_id, data_id)
 
-    def view_cache(self):
+    def view_cache(self) -> dict[str, str]:
+        """
+        Retrieve the current cache map.
+
+        Returns:
+            dict: Cached map.
+        """
         return self._cache_manager.get_cache()
 
-    def refresh_cache(self):
-        return self._cache_manager.refresh_cache()
+    def refresh_cache(self) -> None:
+        """
+        Refreshes the cache map.
+        """
+        self._cache_manager.refresh_cache()

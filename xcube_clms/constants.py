@@ -126,3 +126,4 @@ BYTES_TYPE = "bytes"
 
 GEO_FILE_EXTS = (".tif", ".tiff", ".nc")
 KEEP_EXTENSION = ".zarr"
+ZARR_FORMAT = ".zarr"
