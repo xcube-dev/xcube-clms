@@ -22,6 +22,7 @@ from abc import ABC
 from typing import Tuple, Iterator, Container, Any, Union
 
 import xarray as xr
+from mashumaro.jsonschema.models import JSONArraySchema
 from xcube.core.store import (
     DataDescriptor,
     DataStore,
@@ -78,7 +79,7 @@ class CLMSDataStore(DataStore, ABC):
         )
         return JsonObjectSchema(
             properties=dict(**params),
-            required=("url", "credentials", "path"),
+            required=("url", "credentials"),
             additional_properties=False,
         )
 
@@ -150,5 +151,11 @@ class CLMSDataStore(DataStore, ABC):
         return self._clms.preload_data(*data_ids, **preload_params)
 
     @classmethod
-    def get_preload_params_schema(cls) -> JsonObjectSchema:
-        return JsonObjectSchema(additional_properties=True)
+    def get_preload_params_schema(cls):
+        params = dict(
+            data_ids=JSONArraySchema(
+                title="Provide the data_ids as a tuple for which you would like"
+                " to preload its data."
+            ),
+        )
+        return JsonObjectSchema(properties=dict(**params), additional_properties=True)

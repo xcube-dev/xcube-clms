@@ -57,7 +57,7 @@ class CLMSAPIToken:
 
         data = {
             "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            "assertion": self._create_JWT_grant(),
+            "assertion": self._create_jwt_grant(),
         }
         response_data = make_api_request(
             CLMS_API_AUTH, headers=headers, data=data, method="POST"
@@ -66,7 +66,7 @@ class CLMSAPIToken:
 
         return response["access_token"]
 
-    def _create_JWT_grant(self):
+    def _create_jwt_grant(self):
         private_key = self._credentials["private_key"].encode("utf-8")
 
         claim_set = {
