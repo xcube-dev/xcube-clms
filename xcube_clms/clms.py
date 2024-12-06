@@ -22,7 +22,7 @@ import os
 from typing import Any, Container
 
 import xarray as xr
-from xcube.core.store import DataTypeLike, DataStore
+from xcube.core.store import DataTypeLike
 
 from .constants import (
     SEARCH_ENDPOINT,
@@ -40,6 +40,7 @@ from .constants import (
     PRODUCT_KEY,
     BATCH,
     NEXT,
+    PRELOAD_CACHE_FOLDER,
 )
 from .preload import PreloadData
 from .utils import (
@@ -60,18 +61,11 @@ class CLMS:
             path: Optional cache path for storing preloaded data.
         """
         self._url: str = url
-        self._datasets_info: list[dict[str, Any]] = []
         self._metadata: list[str] = []
-        self.path: str = os.path.join(os.getcwd(), path or "preload_cache/")
+        self.path: str = os.path.join(os.getcwd(), path or PRELOAD_CACHE_FOLDER)
         self._preload_data = PreloadData(self._url, credentials, self.path)
-        self._fetch_all_datasets()
-
-    @property
-    def file_store(self) -> DataStore:
-        LOG.info(
-            f"Local Filestore for preload cache created at the path:" f" {self.path}"
-        )
-        return self._preload_data.file_store
+        self.file_store = self._preload_data.file_store
+        self._datasets_info: list[dict[str, Any]] = CLMS._fetch_all_datasets(self._url)
 
     def open_data(
         self,
@@ -96,7 +90,7 @@ class CLMS:
             _, file_id = data_id.split(DATA_ID_SEPARATOR)
         except ValueError as e:
             raise ValueError(
-                f"Expected a data_id in the format {{ product_id}}"
+                f"Expected a data_id in the format {{product_id}}"
                 f"{DATA_ID_SEPARATOR}{{file_id}} but got {data_id}"
             )
         if not self.file_store:
@@ -232,7 +226,8 @@ class CLMS:
                         data_ids.append((data_id, filtered_attrs))
         return data_ids
 
-    def _fetch_all_datasets(self) -> list[dict[str, Any]]:
+    @staticmethod
+    def _fetch_all_datasets(url) -> list[dict[str, Any]]:
         """Fetch all datasets from the API and cache their metadata.
 
         Returns:
@@ -246,19 +241,17 @@ class CLMS:
             the required type in get_response_of_type()
             TypeError: For invalid input to get_response_of_type()
         """
-        if not self._datasets_info:
-            LOG.info(f"Fetching datasets metadata from {self._url}")
-
-            response_data = make_api_request(build_api_url(self._url, SEARCH_ENDPOINT))
-            while True:
-                response = get_response_of_type(response_data, JSON_TYPE)
-                self._datasets_info.extend(response.get(ITEMS_KEY, []))
-                next_page = response.get(BATCH, {}).get(NEXT)
-                if not next_page:
-                    break
-                response_data = make_api_request(next_page)
-            self._attrs = list(self._datasets_info[0].keys())
-        return self._datasets_info
+        LOG.info(f"Fetching datasets metadata from {url}")
+        datasets_info = []
+        response_data = make_api_request(build_api_url(url, SEARCH_ENDPOINT))
+        while True:
+            response = get_response_of_type(response_data, JSON_TYPE)
+            datasets_info.extend(response.get(ITEMS_KEY, []))
+            next_page = response.get(BATCH, {}).get(NEXT)
+            if not next_page:
+                break
+            response_data = make_api_request(next_page)
+        return datasets_info
 
     def _access_item(self, data_id) -> dict[str, Any]:
         """Access an item from the dataset for a given data ID.
