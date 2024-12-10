@@ -19,7 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
-from typing import Any, Container
+from typing import Any, Container, Union, Iterator
 
 import xarray as xr
 from xcube.core.store import DataTypeLike
@@ -140,7 +140,7 @@ class CLMS:
     def get_data_ids(
         self,
         include_attrs: Container[str] | bool | None = None,
-    ) -> list[str] | list[tuple[str, dict[str, Any]]]:
+    ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
         """
         Retrieve all data IDs, optionally including additional attributes.
 
@@ -151,9 +151,10 @@ class CLMS:
                 - If False or None, includes no attributes.
 
         Returns:
-            A list of data IDs, or tuples of data IDs and attributes.
+            An iterator of data IDs, or tuples of data IDs and attributes.
         """
-        return self._create_data_ids(include_attrs)
+        for data_id in self._create_data_ids(include_attrs):
+            yield data_id
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
         """
@@ -221,7 +222,7 @@ class CLMS:
     def _create_data_ids(
         self,
         include_attrs: Container[str] | bool | None = None,
-    ) -> list[str] | list[tuple[str, dict[str, Any]]]:
+    ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
         """
         Generates a list of data IDs, optionally including attributes. This is
         the actual implementation of the get_data_ids() method.
@@ -233,9 +234,8 @@ class CLMS:
                 - If False or None, includes no attributes.
 
         Returns:
-            A list of data IDs or tuples of data IDs and attributes.
+            An iterator of data IDs or tuples of data IDs and attributes.
         """
-        data_ids = []
         for item in self._datasets_info:
             for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
                 if FILE_KEY in i and i[FILE_KEY] != "":
@@ -243,15 +243,14 @@ class CLMS:
                         f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[FILE_KEY]}"
                     )
                     if not include_attrs:
-                        data_ids.append(data_id)
+                        yield data_id
                     elif isinstance(include_attrs, bool) and include_attrs:
-                        data_ids.append((data_id, i))
+                        yield data_id, i
                     elif isinstance(include_attrs, list):
                         filtered_attrs = {
                             attr: i[attr] for attr in include_attrs if attr in i
                         }
-                        data_ids.append((data_id, filtered_attrs))
-        return data_ids
+                        yield data_id, filtered_attrs
 
     @staticmethod
     def _fetch_all_datasets(url) -> list[dict[str, Any]]:

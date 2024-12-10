@@ -178,10 +178,10 @@ class TestCLMS(unittest.TestCase):
 
         clms = CLMS(self.mock_url, self.mock_credentials, self.mock_path)
         clms._preload_data = mock_preload_instance
-        data_ids = clms.get_data_ids()
+        data_ids = list(clms.get_data_ids())
         self.assertEqual(data_ids, ["dataset1|file1", "dataset2|file2"])
 
-        result = clms.get_data_ids(include_attrs=True)
+        result = list(clms.get_data_ids(include_attrs=True))
         assert result == [
             (
                 "dataset1|file1",
@@ -193,7 +193,7 @@ class TestCLMS(unittest.TestCase):
             ),
         ]
 
-        result = clms.get_data_ids(include_attrs=["area"])
+        result = list(clms.get_data_ids(include_attrs=["area"]))
         assert result == [
             ("dataset1|file1", {"area": "area1"}),
             ("dataset2|file2", {"area": "area2"}),
@@ -371,14 +371,14 @@ class TestCLMS(unittest.TestCase):
         clms = CLMS(self.mock_url, self.mock_credentials, self.mock_path)
         clms._datasets_info = mock_dataset
 
-        result = clms._create_data_ids(include_attrs=None)
+        result = list(clms._create_data_ids(include_attrs=None))
         expected = [
             "dataset1|file1",
             "dataset2|file2",
         ]
         assert result == expected
 
-        result = clms._create_data_ids(include_attrs=True)
+        result = list(clms._create_data_ids(include_attrs=True))
         assert result == [
             (
                 "dataset1|file1",
@@ -390,7 +390,7 @@ class TestCLMS(unittest.TestCase):
             ),
         ]
 
-        result = clms._create_data_ids(include_attrs=["area"])
+        result = list(clms._create_data_ids(include_attrs=["area"]))
         assert result == [
             ("dataset1|file1", {"area": "area1"}),
             ("dataset2|file2", {"area": "area2"}),
@@ -399,13 +399,13 @@ class TestCLMS(unittest.TestCase):
         mock_datasets_info = []
         clms._datasets_info = mock_datasets_info
 
-        result = clms._create_data_ids(include_attrs=None)
+        result = list(clms._create_data_ids(include_attrs=None))
         assert result == []
 
-        result = clms._create_data_ids(include_attrs=True)
+        result = list(clms._create_data_ids(include_attrs=True))
         assert result == []
 
-        result = clms._create_data_ids(include_attrs=["size"])
+        result = list(clms._create_data_ids(include_attrs=["size"]))
         assert result == []
 
     @patch("xcube_clms.clms.make_api_request")
