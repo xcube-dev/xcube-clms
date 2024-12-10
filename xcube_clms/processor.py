@@ -73,7 +73,7 @@ class FileProcessor:
             LOG.warn("No files to postprocess!")
         else:
             en_map = self._prepare_merge(files, data_id)
-            if en_map is {}:
+            if not en_map:
                 LOG.error(
                     "This naming format is not supported. Currently "
                     "only filenames with Eastings and Northings are "
@@ -102,7 +102,8 @@ class FileProcessor:
         data_id_folder = os.path.join(self.path, data_id)
         for file in files:
             en = find_easting_northing(file)
-            en_map[en].append(os.path.join(data_id_folder, file))
+            if en:
+                en_map[en].append(os.path.join(data_id_folder, file))
         return en_map
 
     def _merge_and_save(
@@ -145,11 +146,13 @@ class FileProcessor:
                 datasets.append(da)
             merged_eastings[easting] = xr.concat(datasets, dim="y")
 
-        # Step 4: Merge along the X-axis (Easting)
         final_datasets = list(merged_eastings.values())
-        final_cube = xr.concat(final_datasets, dim="x")
+        if not final_datasets:
+            LOG.error("No files to merge!")
+            return
+        concat_cube = xr.concat(final_datasets, dim="x")
 
-        final_cube = final_cube.to_dataset(
+        final_cube = concat_cube.to_dataset(
             name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
         )
         new_filename = os.path.join(

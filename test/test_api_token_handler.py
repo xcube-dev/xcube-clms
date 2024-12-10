@@ -24,7 +24,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 from requests import RequestException
 
-from xcube_clms.api_token import CLMSAPIToken
+from xcube_clms.api_token_handler import CLMSAPITokenHandler
 
 credentials = {
     "client_id": "test_client_id",
@@ -36,19 +36,19 @@ credentials = {
 
 @pytest.fixture
 def mock_jwt_encode():
-    with patch("xcube_clms.api_token.jwt.encode") as mock:
+    with patch("xcube_clms.api_token_handler.jwt.encode") as mock:
         yield mock
 
 
 @pytest.fixture
 def mock_make_api_request():
-    with patch("xcube_clms.api_token.make_api_request") as mock:
+    with patch("xcube_clms.api_token_handler.make_api_request") as mock:
         yield mock
 
 
 @pytest.fixture
 def mock_get_response_of_type():
-    with patch("xcube_clms.api_token.get_response_of_type") as mock:
+    with patch("xcube_clms.api_token_handler.get_response_of_type") as mock:
         yield mock
 
 
@@ -60,13 +60,13 @@ def mock_time():
 
 @pytest.fixture
 def mock_log_info():
-    with patch("xcube_clms.api_token.LOG.info") as mock:
+    with patch("xcube_clms.api_token_handler.LOG.info") as mock:
         yield mock
 
 
 @pytest.fixture
 def mock_log_error():
-    with patch("xcube_clms.api_token.LOG.error") as mock:
+    with patch("xcube_clms.api_token_handler.LOG.error") as mock:
         yield mock
 
 
@@ -84,11 +84,11 @@ def test_create_jwt_grant(
     mock_get_response_of_type.return_value = {"access_token": "mocked_access_token"}
     mock_time.return_value = 1234567890
 
-    token = CLMSAPIToken(credentials)
+    token = CLMSAPITokenHandler(credentials)
 
     mock_jwt_encode.assert_called_once()
     mock_make_api_request.assert_called_once()
-    assert token.access_token == "mocked_access_token"
+    assert token.api_token == "mocked_access_token"
     mock_time.assert_called()
     mock_log_info.assert_called_with("Token refreshed successfully.")
 
@@ -103,11 +103,11 @@ def test_is_token_expired(
     mock_get_response_of_type.return_value = {"access_token": "mocked_access_token"}
     mock_time.return_value = 1234567890
 
-    token = CLMSAPIToken(credentials)
+    token = CLMSAPITokenHandler(credentials)
     token._token_expiry = 1234567800
     assert token.is_token_expired() is True
 
-    token = CLMSAPIToken(credentials)
+    token = CLMSAPITokenHandler(credentials)
     token._token_expiry = 1234569900
     assert token.is_token_expired() is False
 
@@ -121,16 +121,50 @@ def test_refresh_token(
     )
     mock_get_response_of_type.return_value = {"access_token": "mocked_access_token"}
 
-    token = CLMSAPIToken(credentials)
+    handler = CLMSAPITokenHandler(credentials)
 
-    assert token.access_token == "mocked_access_token"
+    assert handler.api_token == "mocked_access_token"
     mock_log_info.assert_called_with("Token refreshed successfully.")
 
 
 def test_refresh_token_failure(mock_jwt_encode, mock_make_api_request, mock_log_error):
     mock_make_api_request.side_effect = RequestException("Mocked request failure")
     with pytest.raises(RequestException, match="Mocked request failure"):
-        CLMSAPIToken(credentials)
+        CLMSAPITokenHandler(credentials)
     mock_log_error.assert_called_with(
         "Token refresh failed: ", mock_make_api_request.side_effect
     )
+
+
+@patch("xcube_clms.api_token_handler.CLMSAPITokenHandler.is_token_expired")
+@patch("xcube_clms.api_token_handler.LOG")
+def test_refresh_token_expired(
+    mock_log,
+    mock_expiry,
+    mock_time,
+    mock_jwt_encode,
+    mock_make_api_request,
+    mock_get_response_of_type,
+):
+    mock_jwt_encode.return_value = "mocked_jwt_token"
+    mock_make_api_request.return_value = MagicMock(
+        status_code=200, json={"access_token": "mocked_access_token"}
+    )
+    mock_get_response_of_type.return_value = {"access_token": "mocked_access_token"}
+
+    mock_time.return_value = 1000
+
+    handler = CLMSAPITokenHandler(credentials)
+    assert handler.api_token == "mocked_access_token"
+    assert handler._token_expiry == 3600 + 1000
+
+    mock_time.reset_mock()
+    mock_time.return_value = 3900
+
+    mock_expiry.return_value = True
+    mock_get_response_of_type.return_value = {"access_token": "new_mocked_access_token"}
+
+    handler.refresh_token()
+    assert handler.is_token_expired() is True
+    mock_log.info.assert_any_call("Token expired or not present. Refreshing token.")
+    assert handler.api_token == "new_mocked_access_token"

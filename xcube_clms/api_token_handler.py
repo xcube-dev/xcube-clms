@@ -28,7 +28,7 @@ from xcube_clms.constants import ACCEPT_HEADER, CLMS_API_AUTH, JSON_TYPE, LOG
 from xcube_clms.utils import make_api_request, get_response_of_type
 
 
-class CLMSAPIToken:
+class CLMSAPITokenHandler:
     """
     Manages the OAuth2 access token for authenticating with the CLMS API.
     This class is responsible for refreshing the token when it expires,
@@ -48,13 +48,15 @@ class CLMSAPIToken:
         self._token_expiry: int = 0
         self._token_lifetime: int = 3600  # Token lifetime in seconds
         self._expiry_margin: int = 300  # Refresh 5 minutes before expiration
-        self.access_token: str = ""
+        self.api_token: str = ""
         self.refresh_token()
 
     def refresh_token(self) -> str:
         """
         Refreshes the access token by requesting a new one from the CLMS API.
         Updates the token expiry time after a successful refresh.
+        This method checks the current token's status and either refreshes it
+        or logs that the existing token is still valid.
 
         Returns:
             str: The new access token.
@@ -62,15 +64,19 @@ class CLMSAPIToken:
         Raises:
             RequestException: If the token refresh fails.
         """
-        try:
-            self.access_token = self._request_access_token()
-            self._token_expiry = time.time() + self._token_lifetime
-            LOG.info("Token refreshed successfully.")
-        except RequestException as e:
-            LOG.error("Token refresh failed: ", e)
-            raise e
+        if not self.api_token or self.is_token_expired():
+            LOG.info("Token expired or not present. Refreshing token.")
+            try:
+                self.api_token = self._request_access_token()
+                self._token_expiry = time.time() + self._token_lifetime
+                LOG.info("Token refreshed successfully.")
+            except RequestException as e:
+                LOG.error("Token refresh failed: ", e)
+                raise e
+        else:
+            LOG.info("Current token valid. Reusing it.")
 
-        return self.access_token
+        return self.api_token
 
     def _request_access_token(self) -> str:
         """
