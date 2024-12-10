@@ -112,8 +112,9 @@ class CLMS:
             _, file_id = data_id.split(DATA_ID_SEPARATOR)
         except ValueError as e:
             raise ValueError(
-                f"Expected a data_id in the format {{product_id}}"
-                f"{DATA_ID_SEPARATOR}{{file_id}} but got {data_id}"
+                f"The format of the data ID is wrong. Expected it in "
+                f"the format {{product_id}}{DATA_ID_SEPARATOR}{{file_id}} but "
+                f"got {data_id}"
             )
         if not self.file_store:
             raise ValueError(
