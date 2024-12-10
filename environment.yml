@@ -8,6 +8,7 @@ dependencies:
   - xcube >= 1.7.0
   - cryptography
   - tqdm
+  - ipywidgets
   # for testing
   - black
   - flake8

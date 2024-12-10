@@ -22,7 +22,8 @@ dependencies = [
     "xarray",
     "xcube",
     "tqdm",
-    "cryptography"
+    "cryptography",
+    "ipywidgets"
 ]
 
 [tool.setuptools.dynamic]
