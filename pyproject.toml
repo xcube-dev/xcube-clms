@@ -20,7 +20,9 @@ requires-python = ">=3.8"
 dependencies = [
     "requests",
     "xarray",
-    "xcube"
+    "xcube",
+    "tqdm",
+    "cryptography"
 ]
 
 [tool.setuptools.dynamic]
