@@ -41,6 +41,7 @@ from .constants import (
     BATCH,
     NEXT,
     PRELOAD_CACHE_FOLDER,
+    CLMS_API_URL,
 )
 from .preload import PreloadData
 from .utils import (
@@ -63,7 +64,6 @@ class CLMS:
 
     def __init__(
         self,
-        url: str,
         credentials: dict,
         path: str | None = None,
         cleanup: bool | None = None,
@@ -72,7 +72,6 @@ class CLMS:
         Initialize the CLMS class with API URL, credentials, and optional path.
 
         Args:
-            url: Base URL for the API.
             credentials: JSON containing authentication credentials.
             path: Optional cache path for storing preloaded data. If not
                 provided, it will be stored in the predefined folder.
@@ -80,13 +79,12 @@ class CLMS:
                 datasets and if they contain multiple datasets. Defaults to
                 True.
         """
-        self._url: str = url
         self.path: str = os.path.join(os.getcwd(), path or PRELOAD_CACHE_FOLDER)
         self._preload_data = PreloadData(
-            self._url, credentials, self.path, cleanup=cleanup
+            CLMS_API_URL, credentials, self.path, cleanup=cleanup
         )
         self.file_store = self._preload_data.file_store
-        self._datasets_info: list[dict[str, Any]] = CLMS._fetch_all_datasets(self._url)
+        self._datasets_info: list[dict[str, Any]] = CLMS._fetch_all_datasets()
 
     def open_data(
         self,
@@ -253,7 +251,7 @@ class CLMS:
                         yield data_id, filtered_attrs
 
     @staticmethod
-    def _fetch_all_datasets(url) -> list[dict[str, Any]]:
+    def _fetch_all_datasets() -> list[dict[str, Any]]:
         """
         Fetch all datasets from the API and cache their metadata.
 
@@ -268,9 +266,9 @@ class CLMS:
             the required type in get_response_of_type()
             TypeError: For invalid input to get_response_of_type()
         """
-        LOG.info(f"Fetching datasets metadata from {url}")
+        LOG.info(f"Fetching datasets metadata from {CLMS_API_URL}")
         datasets_info = []
-        response_data = make_api_request(build_api_url(url, SEARCH_ENDPOINT))
+        response_data = make_api_request(build_api_url(CLMS_API_URL, SEARCH_ENDPOINT))
         while True:
             response = get_response_of_type(response_data, JSON_TYPE)
             datasets_info.extend(response.get(ITEMS_KEY, []))

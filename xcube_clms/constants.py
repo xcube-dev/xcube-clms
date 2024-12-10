@@ -20,6 +20,8 @@
 # SOFTWARE.
 import logging
 
+CLMS_API_URL = "https://land.copernicus.eu/api"
+
 # Configuration constants
 TIME_TO_EXPIRE = 24  # (in hours)
 RETRY_TIMEOUT = 60  # (in seconds)
