@@ -48,14 +48,18 @@ class TestCLMS(unittest.TestCase):
         self.mock_path = "mockpath"
 
     @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.token_handler.CLMSAPIToken")
+    @patch("xcube_clms.preload.CLMSAPITokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_initialization(
-        self, mock_preload, mock_clms_api_token, mock_fetch_datasets
+        self,
+        mock_preload,
+        mock_clms_api_token,
+        mock_fetch_datasets,
     ):
+
         mock_token_instance = MagicMock()
-        mock_clms_api_token.return_value = mock_token_instance
         mock_token_instance.access_token = "mocked_access_token"
+        mock_clms_api_token.return_value = mock_token_instance
 
         mock_preload_instance = MagicMock()
         mock_preload.return_value = mock_preload_instance
@@ -69,7 +73,7 @@ class TestCLMS(unittest.TestCase):
 
         clms = CLMS(self.mock_url, self.mock_credentials, self.mock_path)
 
-        mock_clms_api_token.assert_called_once_with(credentials=self.mock_credentials)
+        mock_clms_api_token.assert_called_once_with(self.mock_credentials)
         self.assertEqual(clms._url, self.mock_url)
         self.assertEqual(clms.path, os.path.join(os.getcwd(), self.mock_path))
         mock_fetch_datasets.assert_called_once()
@@ -83,7 +87,7 @@ class TestCLMS(unittest.TestCase):
 
     @patch("xcube_clms.clms.os.listdir")
     @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.token_handler.CLMSAPIToken")
+    @patch("xcube_clms.preload.CLMSAPITokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_open_data(
         self,
@@ -140,7 +144,7 @@ class TestCLMS(unittest.TestCase):
             clms.open_data(data_id)
 
     @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.token_handler.CLMSAPIToken")
+    @patch("xcube_clms.preload.CLMSAPITokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_get_data_ids(
         self,
@@ -200,7 +204,7 @@ class TestCLMS(unittest.TestCase):
         ]
 
     @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.token_handler.CLMSAPIToken")
+    @patch("xcube_clms.preload.CLMSAPITokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     @patch("xcube_clms.clms.is_valid_data_type")
     @patch("xcube_clms.clms.CLMS._get_item")
@@ -270,7 +274,7 @@ class TestCLMS(unittest.TestCase):
 
     @patch("xcube_clms.clms.CLMS._access_item")
     @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.token_handler.CLMSAPIToken")
+    @patch("xcube_clms.preload.CLMSAPITokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_get_extent(
         self, mock_preload, mock_clms_api_token, mock_fetch_datasets, mock_access_item
@@ -330,7 +334,7 @@ class TestCLMS(unittest.TestCase):
         }
 
     @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.token_handler.CLMSAPIToken")
+    @patch("xcube_clms.preload.CLMSAPITokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_create_data_ids(
         self,
@@ -455,7 +459,7 @@ class TestCLMS(unittest.TestCase):
 
     @patch("xcube_clms.clms.CLMS._get_item")
     @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.token_handler.CLMSAPIToken")
+    @patch("xcube_clms.preload.CLMSAPITokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_access_item(
         self, mock_preload, mock_clms_api_token, mock_fetch_datasets, mock_get_item
@@ -504,7 +508,7 @@ class TestCLMS(unittest.TestCase):
         assert item == expected_item
 
     @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.token_handler.CLMSAPIToken")
+    @patch("xcube_clms.preload.CLMSAPITokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_get_item(
         self,
