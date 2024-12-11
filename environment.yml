@@ -10,6 +10,7 @@ dependencies:
   - tqdm
   - ipywidgets
   # for testing
+  - numpy
   - black
   - flake8
   - pytest
