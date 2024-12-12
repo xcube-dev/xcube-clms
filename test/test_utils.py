@@ -25,8 +25,7 @@ from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
-from requests import Response, JSONDecodeError, RequestException, Timeout, \
-    HTTPError
+from requests import Response, JSONDecodeError, RequestException, Timeout, HTTPError
 
 from xcube_clms.utils import (
     get_response_of_type,

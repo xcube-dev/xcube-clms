@@ -27,20 +27,8 @@ from xcube.core.store import DataTypeLike
 from .constants import (
     SEARCH_ENDPOINT,
     LOG,
-    CLMS_DATA_ID_KEY,
-    DOWNLOADABLE_FILES_KEY,
-    ITEMS_KEY,
-    CRS_KEY,
-    START_TIME_KEY,
-    END_TIME_KEY,
-    JSON_TYPE,
-    FILE_KEY,
     DATA_ID_SEPARATOR,
-    ITEM_KEY,
-    PRODUCT_KEY,
-    BATCH,
-    NEXT,
-    PRELOAD_CACHE_FOLDER,
+    DEFAULT_PRELOAD_CACHE_FOLDER,
     CLMS_API_URL,
 )
 from .preload import PreloadData
@@ -50,6 +38,18 @@ from .utils import (
     get_response_of_type,
     build_api_url,
 )
+
+_CLMS_DATA_ID_KEY = "id"
+_DOWNLOADABLE_FILES_KEY = "downloadable_files"
+_FILE_KEY = "file"
+_CRS_KEY = "coordinateReferenceSystemList"
+_START_TIME_KEY = "temporalExtentStart"
+_END_TIME_KEY = "temporalExtentEnd"
+_ITEM_KEY = "item"
+_PRODUCT_KEY = "product"
+_BATCH = "batching"
+_NEXT = "next"
+_ITEMS_KEY = "items"
 
 
 class Clms:
@@ -77,7 +77,7 @@ class Clms:
                 datasets and if they contain multiple datasets. Defaults to
                 True.
         """
-        self.path: str = os.path.join(os.getcwd(), path or PRELOAD_CACHE_FOLDER)
+        self.path: str = os.path.join(os.getcwd(), path or DEFAULT_PRELOAD_CACHE_FOLDER)
         self._preload_data = PreloadData(
             CLMS_API_URL, credentials, self.path, cleanup=cleanup
         )
@@ -175,8 +175,8 @@ class Clms:
             supported).
         """
         item = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
-        crs = item.get(CRS_KEY, [])
-        time_range = (item.get(START_TIME_KEY), item.get(END_TIME_KEY))
+        crs = item.get(_CRS_KEY, [])
+        time_range = (item.get(_START_TIME_KEY), item.get(_END_TIME_KEY))
 
         if len(crs) > 1:
             LOG.warning(
@@ -199,8 +199,8 @@ class Clms:
         """
         data_id_maps = {
             data_id: {
-                ITEM_KEY: self._access_item(data_id),
-                PRODUCT_KEY: self._access_item(data_id.split(DATA_ID_SEPARATOR)[0]),
+                _ITEM_KEY: self._access_item(data_id),
+                _PRODUCT_KEY: self._access_item(data_id.split(DATA_ID_SEPARATOR)[0]),
             }
             for data_id in data_ids
         }
@@ -222,10 +222,10 @@ class Clms:
             An iterator of data IDs or tuples of data IDs and attributes.
         """
         for item in self._datasets_info:
-            for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
-                if FILE_KEY in i and i[FILE_KEY] != "":
+            for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
+                if _FILE_KEY in i and i[_FILE_KEY] != "":
                     data_id = (
-                        f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[FILE_KEY]}"
+                        f"{item[_CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
                     )
                     if not include_attrs:
                         yield data_id
@@ -256,9 +256,9 @@ class Clms:
         datasets_info = []
         response_data = make_api_request(build_api_url(CLMS_API_URL, SEARCH_ENDPOINT))
         while True:
-            response = get_response_of_type(response_data, JSON_TYPE)
-            datasets_info.extend(response.get(ITEMS_KEY, []))
-            next_page = response.get(BATCH, {}).get(NEXT)
+            response = get_response_of_type(response_data, "json")
+            datasets_info.extend(response.get(_ITEMS_KEY, []))
+            next_page = response.get(_BATCH, {}).get(_NEXT)
             if not next_page:
                 break
             response_data = make_api_request(next_page)
@@ -298,10 +298,10 @@ class Clms:
             return [
                 item
                 for product in self._datasets_info
-                if product[CLMS_DATA_ID_KEY] == clms_data_product_id
-                for item in product.get(DOWNLOADABLE_FILES_KEY, {}).get(ITEMS_KEY, [])
+                if product[_CLMS_DATA_ID_KEY] == clms_data_product_id
+                for item in product.get(_DOWNLOADABLE_FILES_KEY, {}).get(_ITEMS_KEY, [])
                 if item.get("file") == dataset_filename
             ]
         return [
-            item for item in self._datasets_info if data_id == item[CLMS_DATA_ID_KEY]
+            item for item in self._datasets_info if data_id == item[_CLMS_DATA_ID_KEY]
         ]

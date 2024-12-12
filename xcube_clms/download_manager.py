@@ -29,40 +29,13 @@ from tqdm.notebook import tqdm
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
-    NAME_KEY,
-    GEO_FILE_EXTS,
     LOG,
-    ORIGINAL_FILENAME_KEY,
-    FILENAME_KEY,
-    RESULTS,
-    UNDEFINED,
     CANCELLED,
-    STATUS_CANCELLED,
-    STATUS_PENDING,
     PENDING,
     COMPLETE,
-    DOWNLOAD_AVAILABLE_TIME_KEY,
-    STATUS_COMPLETE,
-    FILE_ID_KEY,
-    DATASET_ID_KEY,
-    DATASETS_KEY,
-    STATUS_KEY,
-    JSON_TYPE,
     TASK_STATUS_ENDPOINT,
     ACCEPT_HEADER,
     CONTENT_TYPE_HEADER,
-    PATH_KEY,
-    SOURCE_KEY,
-    DATASET_DOWNLOAD_INFORMATION_KEY,
-    ITEMS_KEY,
-    FULL_SOURCE_KEY,
-    NOT_SUPPORTED_LIST,
-    TITLE_KEY,
-    UID_KEY,
-    ID_KEY,
-    TASK_IDS_KEY,
-    TASK_ID_KEY,
-    DOWNLOAD_URL_KEY,
     DOWNLOAD_ENDPOINT,
     TIME_TO_EXPIRE,
 )
@@ -71,6 +44,33 @@ from xcube_clms.utils import (
     get_response_of_type,
     build_api_url,
 )
+
+_UID_KEY = "UID"
+_DATASET_DOWNLOAD_INFORMATION_KEY = "dataset_download_information"
+_ID_KEY = "@id"
+_FILE_ID_KEY = "FileID"
+_DOWNLOAD_URL_KEY = "DownloadURL"
+_STATUS_KEY = "Status"
+_DATASETS_KEY = "Datasets"
+_DATASET_ID_KEY = "DatasetID"
+_FILENAME_KEY = "filename"
+_NAME_KEY = "name"
+_TITLE_KEY = "title"
+_PATH_KEY = "path"
+_SOURCE_KEY = "source"
+_FULL_SOURCE_KEY = "full_source"
+_TASK_IDS_KEY = "TaskIds"
+_TASK_ID_KEY = "TaskID"
+_DOWNLOAD_AVAILABLE_TIME_KEY = "FinalizationDateTime"
+_ORIGINAL_FILENAME_KEY = "orig_filename"
+_STATUS_PENDING = ["Queued", "In_progress"]
+_STATUS_COMPLETE = ["Finished_ok"]
+_STATUS_CANCELLED = ["Cancelled"]
+_UNDEFINED = "UNDEFINED"
+_RESULTS = "Results/"
+_NOT_SUPPORTED_LIST = ["WEKEO", "LEGACY", "LANDCOVER"]
+_GEO_FILE_EXTS = (".tif", ".tiff", ".nc")
+_ITEMS_KEY = "items"
 
 
 class DownloadTaskManager:
@@ -114,8 +114,8 @@ class DownloadTaskManager:
         # We check for path and source based on the API code here:
         # https://github.com/eea/clms.downloadtool/blob/master/clms/downloadtool/api/services/datarequest_post/post.py#L177-L196
 
-        path = item.get(PATH_KEY, "")
-        source = item.get(SOURCE_KEY, "")
+        path = item.get(_PATH_KEY, "")
+        source = item.get(_SOURCE_KEY, "")
 
         if (path == "") and (source == ""):
             LOG.warning(f"No prepackaged downloadable items available for {data_id}")
@@ -124,18 +124,18 @@ class DownloadTaskManager:
         # unsupported datasets.
 
         full_source = (
-            product.get(DATASET_DOWNLOAD_INFORMATION_KEY)
-            .get(ITEMS_KEY)[0]
-            .get(FULL_SOURCE_KEY, "")
+            product.get(_DATASET_DOWNLOAD_INFORMATION_KEY)
+            .get(_ITEMS_KEY)[0]
+            .get(_FULL_SOURCE_KEY, "")
         )
 
-        assert full_source not in NOT_SUPPORTED_LIST, (
-            f"This data product: {product[TITLE_KEY]} is not yet supported in "
+        assert full_source not in _NOT_SUPPORTED_LIST, (
+            f"This data product: {product[_TITLE_KEY]} is not yet supported in "
             f"this plugin yet."
         )
 
         status, task_id = self.get_current_requests_status(
-            dataset_id=product[UID_KEY], file_id=item[ID_KEY]
+            dataset_id=product[_UID_KEY], file_id=item[_ID_KEY]
         )
 
         if status == COMPLETE or status == PENDING:
@@ -145,7 +145,7 @@ class DownloadTaskManager:
                 else 'is in queue'} for data id: {data_id}"
             )
             return task_id
-        if status == UNDEFINED:
+        if status == _UNDEFINED:
             LOG.info(
                 f"Download request does not exists or has expired for "
                 f"data id:"
@@ -166,12 +166,12 @@ class DownloadTaskManager:
         response_data = make_api_request(
             method="POST", url=download_request_url, headers=headers, json=json
         )
-        response = get_response_of_type(response_data, JSON_TYPE)
-        task_ids = response.get(TASK_IDS_KEY)
+        response = get_response_of_type(response_data, "json")
+        task_ids = response.get(_TASK_IDS_KEY)
         assert (
             len(task_ids) == 1
         ), f"Expected API response with 1 task_id, got {len(task_ids)}"
-        task_id = task_ids[0].get(TASK_ID_KEY)
+        task_id = task_ids[0].get(_TASK_ID_KEY)
         LOG.info(f"Download Requested with Task ID : {task_id}")
         return task_id
 
@@ -197,14 +197,14 @@ class DownloadTaskManager:
 
         url = build_api_url(self._url, TASK_STATUS_ENDPOINT, datasets_request=False)
         response_data = make_api_request(url=url, headers=headers)
-        response = get_response_of_type(response_data, JSON_TYPE)
+        response = get_response_of_type(response_data, "json")
 
         for key in response:
             if key == task_id:
-                status = response[key][STATUS_KEY]
-                if status in STATUS_COMPLETE:
+                status = response[key][_STATUS_KEY]
+                if status in _STATUS_COMPLETE:
                     return (
-                        response[key][DOWNLOAD_URL_KEY],
+                        response[key][_DOWNLOAD_URL_KEY],
                         response[key]["FileSize"],
                     )
                 else:
@@ -229,8 +229,8 @@ class DownloadTaskManager:
         """
         LOG.info(f"Preparing download request for {data_id}")
 
-        dataset_id = product[UID_KEY]
-        file_id = item[ID_KEY]
+        dataset_id = product[_UID_KEY]
+        file_id = item[_ID_KEY]
         json = get_dataset_download_info(
             dataset_id=dataset_id,
             file_id=file_id,
@@ -276,7 +276,7 @@ class DownloadTaskManager:
 
         url = build_api_url(self._url, TASK_STATUS_ENDPOINT, datasets_request=False)
         response_data = make_api_request(url=url, headers=headers)
-        response = get_response_of_type(response_data, JSON_TYPE)
+        response = get_response_of_type(response_data, "json")
 
         status_priority = {
             "Finished_ok": 1,  # Complete
@@ -288,12 +288,12 @@ class DownloadTaskManager:
         latest_entries = {status: {} for status in status_priority.keys()}
 
         for key in response:
-            status = response[key][STATUS_KEY]
-            datasets = response[key][DATASETS_KEY]
-            requested_data_id = datasets[0][DATASET_ID_KEY]
-            requested_file_id = datasets[0][FILE_ID_KEY]
+            status = response[key][_STATUS_KEY]
+            datasets = response[key][_DATASETS_KEY]
+            requested_data_id = datasets[0][_DATASET_ID_KEY]
+            requested_file_id = datasets[0][_FILE_ID_KEY]
             timestamp = (
-                response[key][DOWNLOAD_AVAILABLE_TIME_KEY]
+                response[key][_DOWNLOAD_AVAILABLE_TIME_KEY]
                 if status in {"Finished_ok", "Cancelled"}
                 else None
             )  # Only get timestamp for Completed or Cancelled
@@ -324,15 +324,15 @@ class DownloadTaskManager:
             if latest_entry:
                 key = latest_entry["key"]
                 entry_response = latest_entry["response"]
-                if status in STATUS_COMPLETE:
-                    if not has_expired(entry_response[DOWNLOAD_AVAILABLE_TIME_KEY]):
+                if status in _STATUS_COMPLETE:
+                    if not has_expired(entry_response[_DOWNLOAD_AVAILABLE_TIME_KEY]):
                         return COMPLETE, key
-                elif status in STATUS_PENDING:
+                elif status in _STATUS_PENDING:
                     return PENDING, key
-                elif status in STATUS_CANCELLED:
+                elif status in _STATUS_CANCELLED:
                     return CANCELLED, key
 
-        return UNDEFINED, ""
+        return _UNDEFINED, ""
 
     def download_data(
         self, download_url: str, file_size: int, task_id: str, data_id: str
@@ -368,10 +368,10 @@ class DownloadTaskManager:
             progress_bar.close()
 
             fs = fsspec.filesystem("zip", fo=temp_file_path)
-            zip_contents = fs.ls(RESULTS)
+            zip_contents = fs.ls(_RESULTS)
             actual_zip_file = None
             if len(zip_contents) == 1:
-                if ".zip" in zip_contents[0][FILENAME_KEY]:
+                if ".zip" in zip_contents[0][_FILENAME_KEY]:
                     actual_zip_file = zip_contents[0]
             elif len(zip_contents) > 1:
                 LOG.warn("Cannot handle more than one zip files at the moment.")
@@ -380,9 +380,9 @@ class DownloadTaskManager:
             if actual_zip_file:
                 LOG.info(
                     f"Found one zip file "
-                    f"{actual_zip_file.get(ORIGINAL_FILENAME_KEY)}."
+                    f"{actual_zip_file.get(_ORIGINAL_FILENAME_KEY)}."
                 )
-                with fs.open(actual_zip_file[NAME_KEY], "rb") as f:
+                with fs.open(actual_zip_file[_NAME_KEY], "rb") as f:
                     zip_fs = fsspec.filesystem("zip", fo=f)
 
                     geo_files = DownloadTaskManager._find_geo_in_dir(
@@ -457,17 +457,17 @@ class DownloadTaskManager:
         geo_file: list[str] = []
         contents = zip_fs.ls(path)
         for item in contents:
-            if zip_fs.isdir(item[NAME_KEY]):
+            if zip_fs.isdir(item[_NAME_KEY]):
                 geo_file.extend(
                     DownloadTaskManager._find_geo_in_dir(
-                        item[NAME_KEY],
+                        item[_NAME_KEY],
                         zip_fs,
                     )
                 )
             else:
-                if item[NAME_KEY].endswith(GEO_FILE_EXTS):
-                    LOG.info(f"Found geo file: {item[NAME_KEY]}")
-                    filename = item[NAME_KEY]
+                if item[_NAME_KEY].endswith(_GEO_FILE_EXTS):
+                    LOG.info(f"Found geo file: {item[_NAME_KEY]}")
+                    filename = item[_NAME_KEY]
                     geo_file.append(filename)
         return geo_file
 

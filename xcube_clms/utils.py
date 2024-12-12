@@ -26,18 +26,17 @@ from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
 import requests
-from requests import HTTPError, Timeout, RequestException, Response, \
-    JSONDecodeError
+from requests import HTTPError, Timeout, RequestException, Response, JSONDecodeError
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
 from xcube_clms.constants import (
     ACCEPT_HEADER,
     LOG,
-    PORTAL_TYPE,
-    FULL_SCHEMA,
-    METADATA_FIELDS,
 )
 
+_PORTAL_TYPE = {"portal_type": "DataSet"}
+_METADATA_FIELDS = "metadata_fields"
+_FULL_SCHEMA = "fullobjects"
 
 # Using the auxiliary functions below from xcube-stac
 
@@ -191,10 +190,10 @@ def build_api_url(
     """
     params = {}
     if datasets_request:
-        params = PORTAL_TYPE
-        params[FULL_SCHEMA] = "1"
+        params = _PORTAL_TYPE
+        params[_FULL_SCHEMA] = "1"
     if metadata_fields:
-        params[METADATA_FIELDS] = ",".join(metadata_fields)
+        params[_METADATA_FIELDS] = ",".join(metadata_fields)
     if params:
         query_params = urlencode(params)
         return f"{url}/{api_endpoint}/?{query_params}"

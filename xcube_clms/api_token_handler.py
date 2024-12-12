@@ -24,8 +24,10 @@ import time
 import jwt
 from requests import RequestException
 
-from xcube_clms.constants import ACCEPT_HEADER, CLMS_API_AUTH, JSON_TYPE, LOG
+from xcube_clms.constants import ACCEPT_HEADER, LOG
 from xcube_clms.utils import make_api_request, get_response_of_type
+
+_CLMS_API_AUTH = "https://land.copernicus.eu/@@oauth2-token"
 
 
 class ClmsApiTokenHandler:
@@ -94,9 +96,9 @@ class ClmsApiTokenHandler:
             "assertion": self._create_jwt_grant(),
         }
         response_data = make_api_request(
-            CLMS_API_AUTH, headers=headers, data=data, method="POST"
+            _CLMS_API_AUTH, headers=headers, data=data, method="POST"
         )
-        response = get_response_of_type(response_data, JSON_TYPE)
+        response = get_response_of_type(response_data, "json")
 
         return response["access_token"]
 

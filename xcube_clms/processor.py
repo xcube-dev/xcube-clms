@@ -29,7 +29,10 @@ import rioxarray
 import xarray as xr
 from tqdm.notebook import tqdm
 
-from xcube_clms.constants import LOG, DATA_ID_SEPARATOR, ZARR_FORMAT, KEEP_EXTENSION
+from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
+
+_KEEP_EXTENSION = ".zarr"
+_ZARR_FORMAT = ".zarr"
 
 
 class FileProcessor:
@@ -151,7 +154,7 @@ class FileProcessor:
             name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
         )
         new_filename = os.path.join(
-            data_id, data_id.split(DATA_ID_SEPARATOR)[-1] + ZARR_FORMAT
+            data_id, data_id.split(DATA_ID_SEPARATOR)[-1] + _ZARR_FORMAT
         )
 
         self.file_store.write_data(final_cube, new_filename)
@@ -185,7 +188,7 @@ def cleanup_dir(folder_path: Path | str, keep_extension=None):
         `KEEP_EXTENSION`.
     """
     if keep_extension is None:
-        keep_extension = KEEP_EXTENSION
+        keep_extension = _KEEP_EXTENSION
 
     for filename in tqdm(
         os.listdir(folder_path), desc=f"Cleaning up directory {folder_path}"
