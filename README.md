@@ -5,13 +5,13 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![License](https://img.shields.io/github/license/dcs4cop/xcube-smos)](https://github.com/xcube-dev/xcube-clms/blob/main/LICENSE)
 
-The `xcube-clms` package is a Python package and a
-[xcube plugin](https://xcube.readthedocs.io/en/latest/plugins.html) that
-introduces
-a [data store](https://xcube.readthedocs.io/en/latest/api.html#data-store-framework)
-called `clms` to xcube. This data store enables access
-to datasets hosted on [CLMS](https://land.copernicus.eu/en) through the
-[CLMS API](https://eea.github.io/clms-api-docs/introduction.html).
+The `xcube-clms` Python package provides an 
+[xcube data store](https://xcube.readthedocs.io/en/latest/api.html#data-store-framework)
+that enables access to datasets hosted by the 
+[Copernicus Land Monitoring Service (CLMS)](https://land.copernicus.eu/en).
+The data store is called `"clms"` and implemented as an [xcube plugin](https://xcube.readthedocs.io/en/latest/plugins.html).
+It uses the [CLMS API](https://eea.github.io/clms-api-docs/introduction.html)
+under the hood.
 
 ## Setup <a name="setup"></a>
 

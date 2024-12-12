@@ -52,7 +52,7 @@ from .utils import (
 )
 
 
-class CLMS:
+class Clms:
     """
     The CLMS class provides an interface to interact with the CLMS API,
     allowing the user to preload the data in a non-blocking way which is a

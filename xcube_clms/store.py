@@ -40,7 +40,7 @@ from .constants import DATA_OPENER_IDS
 from .utils import assert_valid_data_type
 
 
-class CLMSDataStore(DataStore, ABC):
+class ClmsDataStore(DataStore, ABC):
     """CLMS implementation of the data store defined in the ``xcube_clms``
     plugin."""
 

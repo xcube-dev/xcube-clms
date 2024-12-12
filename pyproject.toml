@@ -36,9 +36,9 @@ exclude = ["test*", "doc*"]
 dev = [
     "numpy",
     "pytest",
+    "black",
     "flake8",
     "pytest-cov",
-    "black",
     "pytest-recording"
 ]
 

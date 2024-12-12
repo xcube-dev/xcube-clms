@@ -27,8 +27,7 @@ from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
 
 
 class CacheManager:
-    """
-    Manages the cache map for preloaded data
+    """Manage the cache map for preloaded data.
     """
 
     def __init__(self, path) -> None:

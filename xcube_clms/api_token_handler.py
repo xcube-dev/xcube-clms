@@ -28,7 +28,7 @@ from xcube_clms.constants import ACCEPT_HEADER, CLMS_API_AUTH, JSON_TYPE, LOG
 from xcube_clms.utils import make_api_request, get_response_of_type
 
 
-class CLMSAPITokenHandler:
+class ClmsApiTokenHandler:
     """
     Manages the OAuth2 access token for authenticating with the CLMS API.
     This class is responsible for refreshing the token when it expires,
@@ -79,8 +79,7 @@ class CLMSAPITokenHandler:
         return self.api_token
 
     def _request_access_token(self) -> str:
-        """
-        Makes an API request to obtain a new access token using the JWT grant.
+        """Make an API request to obtain a new access token using the JWT grant.
 
         Returns:
             str: The access token from the response.
