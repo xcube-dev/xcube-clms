@@ -20,14 +20,16 @@
 # SOFTWARE.
 
 import os
+import re
 from collections import defaultdict
+from pathlib import Path
+from typing import Optional
 
 import rioxarray
 import xarray as xr
 from tqdm.notebook import tqdm
 
-from xcube_clms.constants import LOG, DATA_ID_SEPARATOR, ZARR_FORMAT
-from xcube_clms.utils import find_easting_northing, cleanup_dir
+from xcube_clms.constants import LOG, DATA_ID_SEPARATOR, ZARR_FORMAT, KEEP_EXTENSION
 
 
 class FileProcessor:
@@ -153,3 +155,46 @@ class FileProcessor:
         )
 
         self.file_store.write_data(final_cube, new_filename)
+
+
+def find_easting_northing(name: str) -> Optional[str]:
+    """Finds the easting/northing coordinate pattern in the provided filename.
+
+    This function searches for a specific pattern, "E##N##", in a string
+    and returns the first match if found.
+
+    Args:
+        name: The string to search for the easting/northing pattern.
+
+    Returns:
+        The matched coordinate string if found, otherwise None.
+    """
+    match = re.search(r"[E]\d{2}[N]\d{2}", name)
+    if match:
+        return match.group(0)
+    return None
+
+
+def cleanup_dir(folder_path: Path | str, keep_extension=None):
+    """Removes all files from a directory, retaining only those with the
+    specified extension.
+
+    Args:
+        folder_path: The path to the directory to clean up.
+        keep_extension: The file extension to retain. Defaults to the constant
+        `KEEP_EXTENSION`.
+    """
+    if keep_extension is None:
+        keep_extension = KEEP_EXTENSION
+
+    for filename in tqdm(
+        os.listdir(folder_path), desc=f"Cleaning up directory {folder_path}"
+    ):
+        file_path = os.path.join(folder_path, filename)
+
+        if os.path.isfile(file_path) and not filename.endswith(keep_extension):
+            os.remove(file_path)
+            LOG.debug(f"Deleted: {file_path}")
+        else:
+            LOG.debug(f"Kept: {file_path}")
+    LOG.info(f"Cleaning up finished")

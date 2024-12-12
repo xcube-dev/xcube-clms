@@ -21,6 +21,7 @@
 
 import os
 import tempfile
+from datetime import datetime, timedelta
 from typing import Any
 
 import fsspec
@@ -63,14 +64,12 @@ from xcube_clms.constants import (
     TASK_ID_KEY,
     DOWNLOAD_URL_KEY,
     DOWNLOAD_ENDPOINT,
+    TIME_TO_EXPIRE,
 )
 from xcube_clms.utils import (
     make_api_request,
-    has_expired,
     get_response_of_type,
     build_api_url,
-    get_authorization_header,
-    get_dataset_download_info,
 )
 
 
@@ -471,3 +470,62 @@ class DownloadTaskManager:
                     filename = item[NAME_KEY]
                     geo_file.append(filename)
         return geo_file
+
+
+def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
+    """Generates download information for a specific dataset ID and file ID.
+
+    This function creates a dictionary containing dataset and file IDs,
+    formatted as required by the CLMS API.
+
+    Args:
+        dataset_id: The identifier for the dataset product.
+        file_id: The identifier for the file within the dataset product.
+
+    Returns:
+        A dictionary containing the dataset and file IDs.
+    """
+    return {
+        "Datasets": [
+            {
+                "DatasetID": dataset_id,
+                "FileID": file_id,
+            }
+        ]
+    }
+
+
+def get_authorization_header(access_token: str) -> dict:
+    """Creates an authorization header using the provided access token.
+
+    This function generates the HTTP authorization header required by the CLMS
+    API requests, formatted with the Bearer token.
+
+    Args:
+        access_token: The access token to include in the header.
+
+    Returns:
+        A dictionary containing the authorization header.
+    """
+    return {"Authorization": f"Bearer {access_token}"}
+
+
+def has_expired(download_available_time: str) -> bool:
+    """Checks if the download availability time has expired.
+
+    This function compares the provided time against the current time to
+    determine whether the download window has expired.
+
+    Args:
+        download_available_time: The string representing the timestamp when the
+        download was made available.
+
+    Returns:
+        True if the download window has expired, otherwise False.
+    """
+    given_time = datetime.fromisoformat(download_available_time)
+    current_time = datetime.now()
+    if (current_time - given_time) > timedelta(hours=TIME_TO_EXPIRE):
+        return True
+    else:
+        return False

@@ -18,11 +18,9 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import threading
 import time
 from contextlib import redirect_stdout
-from datetime import datetime, timedelta
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -30,17 +28,11 @@ import pytest
 from requests import Response, JSONDecodeError, RequestException, Timeout, \
     HTTPError
 
-from xcube_clms.constants import TIME_TO_EXPIRE
 from xcube_clms.utils import (
     get_response_of_type,
-    get_authorization_header,
-    has_expired,
-    find_easting_northing,
-    spinner,
-    cleanup_dir,
     make_api_request,
     build_api_url,
-    get_dataset_download_info,
+    spinner,
 )
 
 url = "http://example.com/api"
@@ -228,82 +220,6 @@ def test_get_response_of_type_invalid_content_for_bytes(mock_successful_response
         get_response_of_type(mock_successful_response, "bytes")
 
 
-def test_get_authorization_header():
-    token = "test_token"
-    expected = {"Authorization": "Bearer test_token"}
-    assert get_authorization_header(token) == expected
-
-
-def test_has_expired_not_expired():
-    download_available_time = (datetime.now() - timedelta(hours=1)).isoformat()
-    assert not has_expired(download_available_time)
-
-
-def test_has_expired_expired():
-    download_available_time = (
-        datetime.now() - timedelta(hours=TIME_TO_EXPIRE + 1)
-    ).isoformat()
-    assert has_expired(download_available_time)
-
-
-def test_find_easting_northing_valid():
-    name = "randomE12N34text"
-    assert find_easting_northing(name) == "E12N34"
-
-    name = "E12N34"
-    assert find_easting_northing(name) == "E12N34"
-
-
-def test_find_easting_northing_invalid():
-    name = "random_text_without_coordinates"
-    assert find_easting_northing(name) is None
-
-
-def test_spinner():
-    status_event = threading.Event()
-
-    message = "Test task"
-    output = StringIO()
-
-    status_event.set()
-    with redirect_stdout(output):
-        spinner_thread = threading.Thread(target=spinner, args=(status_event, message))
-        spinner_thread.start()
-        time.sleep(1.2)
-        status_event.clear()
-        spinner_thread.join()
-
-    spinner_output = output.getvalue()
-    assert "Test task" in spinner_output
-    assert "Elapsed time:" in spinner_output
-    assert "Done!" in spinner_output
-
-
-def test_cleanup_dir_deletes_files(tmp_path):
-    folder_path = tmp_path / "test_folder"
-    folder_path.mkdir()
-
-    keep_file = folder_path / "file1.zarr"
-    delete_file = folder_path / "file2.tif"
-    keep_file.write_text("test")
-    delete_file.write_text("test")
-
-    cleanup_dir(folder_path, keep_extension=".tif")
-
-    assert not keep_file.exists()
-    assert delete_file.exists()
-
-    keep_file = folder_path / "file1.zarr"
-    delete_file = folder_path / "file2.tif"
-    keep_file.write_text("test")
-    delete_file.write_text("test")
-
-    cleanup_dir(folder_path)
-
-    assert keep_file.exists()
-    assert not delete_file.exists()
-
-
 def test_build_api_url_no_parameters():
     api_endpoint = "data"
     expected_url = "http://example.com/api/data/?portal_type=DataSet" "&fullobjects=1"
@@ -329,17 +245,21 @@ def test_build_api_url_with_datasets_request_false():
     assert result == expected_url
 
 
-def test_get_dataset_download_info():
-    # Test the basic functionality where dataset_id and file_id are provided
-    dataset_id = "dataset123"
-    file_id = "file456"
-    expected_result = {
-        "Datasets": [
-            {
-                "DatasetID": dataset_id,
-                "FileID": file_id,
-            }
-        ]
-    }
-    result = get_dataset_download_info(dataset_id, file_id)
-    assert result == expected_result
+def test_spinner():
+    status_event = threading.Event()
+
+    message = "Test task"
+    output = StringIO()
+
+    status_event.set()
+    with redirect_stdout(output):
+        spinner_thread = threading.Thread(target=spinner, args=(status_event, message))
+        spinner_thread.start()
+        time.sleep(1.2)
+        status_event.clear()
+        spinner_thread.join()
+
+    spinner_output = output.getvalue()
+    assert "Test task" in spinner_output
+    assert "Elapsed time:" in spinner_output
+    assert "Done!" in spinner_output

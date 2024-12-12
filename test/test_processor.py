@@ -28,7 +28,7 @@ import numpy as np
 import xarray as xr
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
-from xcube_clms.processor import FileProcessor
+from xcube_clms.processor import FileProcessor, cleanup_dir, find_easting_northing
 
 
 class TestProcessor(unittest.TestCase):
@@ -250,3 +250,41 @@ class TestProcessor(unittest.TestCase):
         en_map = processor._prepare_merge(files, data_id)
 
         assert en_map == expected_en_map
+
+
+def test_cleanup_dir_deletes_files(tmp_path):
+    folder_path = tmp_path / "test_folder"
+    folder_path.mkdir()
+
+    keep_file = folder_path / "file1.zarr"
+    delete_file = folder_path / "file2.tif"
+    keep_file.write_text("test")
+    delete_file.write_text("test")
+
+    cleanup_dir(folder_path, keep_extension=".tif")
+
+    assert not keep_file.exists()
+    assert delete_file.exists()
+
+    keep_file = folder_path / "file1.zarr"
+    delete_file = folder_path / "file2.tif"
+    keep_file.write_text("test")
+    delete_file.write_text("test")
+
+    cleanup_dir(folder_path)
+
+    assert keep_file.exists()
+    assert not delete_file.exists()
+
+
+def test_find_easting_northing_valid():
+    name = "randomE12N34text"
+    assert find_easting_northing(name) == "E12N34"
+
+    name = "E12N34"
+    assert find_easting_northing(name) == "E12N34"
+
+
+def test_find_easting_northing_invalid():
+    name = "random_text_without_coordinates"
+    assert find_easting_northing(name) is None

@@ -19,21 +19,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import os
-import re
 import threading
 import time
-from datetime import datetime, timedelta
 from itertools import cycle
-from pathlib import Path
-from threading import Event
 from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
 import requests
 from requests import HTTPError, Timeout, RequestException, Response, \
     JSONDecodeError
-from tqdm.notebook import tqdm
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
 from xcube_clms.constants import (
@@ -42,8 +36,6 @@ from xcube_clms.constants import (
     PORTAL_TYPE,
     FULL_SCHEMA,
     METADATA_FIELDS,
-    TIME_TO_EXPIRE,
-    KEEP_EXTENSION,
 )
 
 
@@ -262,66 +254,7 @@ def get_response_of_type(api_response: Response, data_type: Union[ResponseType, 
     return response
 
 
-def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
-    """Generates download information for a specific dataset ID and file ID.
-
-    This function creates a dictionary containing dataset and file IDs,
-    formatted as required by the CLMS API.
-
-    Args:
-        dataset_id: The identifier for the dataset product.
-        file_id: The identifier for the file within the dataset product.
-
-    Returns:
-        A dictionary containing the dataset and file IDs.
-    """
-    return {
-        "Datasets": [
-            {
-                "DatasetID": dataset_id,
-                "FileID": file_id,
-            }
-        ]
-    }
-
-
-def get_authorization_header(access_token: str) -> dict:
-    """Creates an authorization header using the provided access token.
-
-    This function generates the HTTP authorization header required by the CLMS
-    API requests, formatted with the Bearer token.
-
-    Args:
-        access_token: The access token to include in the header.
-
-    Returns:
-        A dictionary containing the authorization header.
-    """
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-def has_expired(download_available_time: str) -> bool:
-    """Checks if the download availability time has expired.
-
-    This function compares the provided time against the current time to
-    determine whether the download window has expired.
-
-    Args:
-        download_available_time: The string representing the timestamp when the
-        download was made available.
-
-    Returns:
-        True if the download window has expired, otherwise False.
-    """
-    given_time = datetime.fromisoformat(download_available_time)
-    current_time = datetime.now()
-    if (current_time - given_time) > timedelta(hours=TIME_TO_EXPIRE):
-        return True
-    else:
-        return False
-
-
-def spinner(status_event: Event, message: str):
+def spinner(status_event: threading.Event, message: str):
     """Displays a spinner with elapsed time for a single task until the event
     is set.
 
@@ -346,46 +279,3 @@ def spinner(status_event: Event, message: str):
         time.sleep(0.3)
 
     print(f"\rTask: {message}: Done!{' ' * 50}")
-
-
-def find_easting_northing(name: str) -> Optional[str]:
-    """Finds the easting/northing coordinate pattern in the provided filename.
-
-    This function searches for a specific pattern, "E##N##", in a string
-    and returns the first match if found.
-
-    Args:
-        name: The string to search for the easting/northing pattern.
-
-    Returns:
-        The matched coordinate string if found, otherwise None.
-    """
-    match = re.search(r"[E]\d{2}[N]\d{2}", name)
-    if match:
-        return match.group(0)
-    return None
-
-
-def cleanup_dir(folder_path: Path | str, keep_extension=None):
-    """Removes all files from a directory, retaining only those with the
-    specified extension.
-
-    Args:
-        folder_path: The path to the directory to clean up.
-        keep_extension: The file extension to retain. Defaults to the constant
-        `KEEP_EXTENSION`.
-    """
-    if keep_extension is None:
-        keep_extension = KEEP_EXTENSION
-
-    for filename in tqdm(
-        os.listdir(folder_path), desc=f"Cleaning up directory {folder_path}"
-    ):
-        file_path = os.path.join(folder_path, filename)
-
-        if os.path.isfile(file_path) and not filename.endswith(keep_extension):
-            os.remove(file_path)
-            LOG.debug(f"Deleted: {file_path}")
-        else:
-            LOG.debug(f"Kept: {file_path}")
-    LOG.info(f"Cleaning up finished")
