@@ -84,7 +84,7 @@ class Clms:
             CLMS_API_URL, credentials, self.path, cleanup=cleanup
         )
         self.file_store = self._preload_data.file_store
-        self._datasets_info: list[dict[str, Any]] = CLMS._fetch_all_datasets()
+        self._datasets_info: list[dict[str, Any]] = Clms._fetch_all_datasets()
 
     def open_data(
         self,

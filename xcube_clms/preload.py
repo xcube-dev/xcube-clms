@@ -26,7 +26,7 @@ from typing import Any
 
 from xcube.core.store import DataStore
 
-from xcube_clms.api_token_handler import CLMSAPITokenHandler
+from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.cache_manager import CacheManager
 from xcube_clms.constants import (
     LOG,
@@ -70,7 +70,7 @@ class PreloadData:
         self._task_control: dict = {}
         self.cleanup: bool = cleanup or True
 
-        self._token_handler = CLMSAPITokenHandler(credentials)
+        self._token_handler = ClmsApiTokenHandler(credentials)
         self._api_token: str = self._token_handler.api_token
         self._cache_manager = CacheManager(self.path)
         self._cache_manager.refresh_cache()

@@ -27,7 +27,7 @@ from xcube_clms.constants import DATA_STORE_ID
 
 def init_plugin(ext_registry: extension.ExtensionRegistry):
     ext_registry.add_extension(
-        loader=extension.import_component("xcube_clms.store:CLMSDataStore"),
+        loader=extension.import_component("xcube_clms.store:ClmsDataStore"),
         point=EXTENSION_POINT_DATA_STORES,
         name=DATA_STORE_ID,
         description="CLMS DataStore",

@@ -24,7 +24,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 from requests import RequestException
 
-from xcube_clms.api_token_handler import CLMSAPITokenHandler
+from xcube_clms.api_token_handler import ClmsApiTokenHandler
 
 credentials = {
     "client_id": "test_client_id",
@@ -84,7 +84,7 @@ def test_create_jwt_grant(
     mock_get_response_of_type.return_value = {"access_token": "mocked_access_token"}
     mock_time.return_value = 1234567890
 
-    token = CLMSAPITokenHandler(credentials)
+    token = ClmsApiTokenHandler(credentials)
 
     mock_jwt_encode.assert_called_once()
     mock_make_api_request.assert_called_once()
@@ -103,11 +103,11 @@ def test_is_token_expired(
     mock_get_response_of_type.return_value = {"access_token": "mocked_access_token"}
     mock_time.return_value = 1234567890
 
-    token = CLMSAPITokenHandler(credentials)
+    token = ClmsApiTokenHandler(credentials)
     token._token_expiry = 1234567800
     assert token.is_token_expired() is True
 
-    token = CLMSAPITokenHandler(credentials)
+    token = ClmsApiTokenHandler(credentials)
     token._token_expiry = 1234569900
     assert token.is_token_expired() is False
 
@@ -121,7 +121,7 @@ def test_refresh_token(
     )
     mock_get_response_of_type.return_value = {"access_token": "mocked_access_token"}
 
-    handler = CLMSAPITokenHandler(credentials)
+    handler = ClmsApiTokenHandler(credentials)
 
     assert handler.api_token == "mocked_access_token"
     mock_log_info.assert_called_with("Token refreshed successfully.")
@@ -130,13 +130,13 @@ def test_refresh_token(
 def test_refresh_token_failure(mock_jwt_encode, mock_make_api_request, mock_log_error):
     mock_make_api_request.side_effect = RequestException("Mocked request failure")
     with pytest.raises(RequestException, match="Mocked request failure"):
-        CLMSAPITokenHandler(credentials)
+        ClmsApiTokenHandler(credentials)
     mock_log_error.assert_called_with(
         "Token refresh failed: ", mock_make_api_request.side_effect
     )
 
 
-@patch("xcube_clms.api_token_handler.CLMSAPITokenHandler.is_token_expired")
+@patch("xcube_clms.api_token_handler.ClmsApiTokenHandler.is_token_expired")
 @patch("xcube_clms.api_token_handler.LOG")
 def test_refresh_token_expired(
     mock_log,
@@ -154,7 +154,7 @@ def test_refresh_token_expired(
 
     mock_time.return_value = 1000
 
-    handler = CLMSAPITokenHandler(credentials)
+    handler = ClmsApiTokenHandler(credentials)
     assert handler.api_token == "mocked_access_token"
     assert handler._token_expiry == 3600 + 1000
 

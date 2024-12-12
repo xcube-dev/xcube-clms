@@ -26,7 +26,7 @@ from typing import Any
 import fsspec
 from tqdm.notebook import tqdm
 
-from xcube_clms.api_token_handler import CLMSAPITokenHandler
+from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
     NAME_KEY,
     GEO_FILE_EXTS,
@@ -80,7 +80,7 @@ class DownloadTaskManager:
     creation, download request status monitoring, and data extraction.
     """
 
-    def __init__(self, token_handler: CLMSAPITokenHandler, url: str, path: str) -> None:
+    def __init__(self, token_handler: ClmsApiTokenHandler, url: str, path: str) -> None:
         """
         Initializes the DownloadTaskManager with API token handler, base URL,
          and file storage path.

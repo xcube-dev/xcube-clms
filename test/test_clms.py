@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from xcube_clms.clms import CLMS
+from xcube_clms.clms import Clms
 from xcube_clms.constants import DATA_ID_SEPARATOR
 
 
@@ -47,8 +47,8 @@ class TestCLMS(unittest.TestCase):
         }
         self.mock_path = "mockpath"
 
-    @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.preload.CLMSAPITokenHandler")
+    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
+    @patch("xcube_clms.preload.ClmsApiTokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_initialization(
         self,
@@ -71,7 +71,7 @@ class TestCLMS(unittest.TestCase):
             {"dataset_id": "2", "name": "dataset2", "type": "type2"},
         ]
 
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
 
         mock_clms_api_token.assert_called_once_with(self.mock_credentials)
         self.assertEqual(clms.path, os.path.join(os.getcwd(), self.mock_path))
@@ -85,8 +85,8 @@ class TestCLMS(unittest.TestCase):
         )
 
     @patch("xcube_clms.clms.os.listdir")
-    @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.preload.CLMSAPITokenHandler")
+    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
+    @patch("xcube_clms.preload.ClmsApiTokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_open_data(
         self,
@@ -115,7 +115,7 @@ class TestCLMS(unittest.TestCase):
         ]
 
         # mock_file_store.return_value.open_data.return_value = self.mock_dataset
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
         clms._preload_data = mock_preload_instance
 
         mock_file_store = MagicMock()
@@ -125,7 +125,7 @@ class TestCLMS(unittest.TestCase):
         opened_data = clms.open_data(data_id)
         self.assertIsInstance(opened_data, xr.Dataset)
 
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
         mock_preload_instance.view_cache.return_value = {}
         clms._preload_data = mock_preload_instance
 
@@ -142,8 +142,8 @@ class TestCLMS(unittest.TestCase):
         ):
             clms.open_data(data_id)
 
-    @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.preload.CLMSAPITokenHandler")
+    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
+    @patch("xcube_clms.preload.ClmsApiTokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_get_data_ids(
         self,
@@ -179,7 +179,7 @@ class TestCLMS(unittest.TestCase):
             },
         ]
 
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
         clms._preload_data = mock_preload_instance
         data_ids = list(clms.get_data_ids())
         self.assertEqual(data_ids, ["dataset1|file1", "dataset2|file2"])
@@ -202,11 +202,11 @@ class TestCLMS(unittest.TestCase):
             ("dataset2|file2", {"area": "area2"}),
         ]
 
-    @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.preload.CLMSAPITokenHandler")
+    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
+    @patch("xcube_clms.preload.ClmsApiTokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     @patch("xcube_clms.clms.is_valid_data_type")
-    @patch("xcube_clms.clms.CLMS._get_item")
+    @patch("xcube_clms.clms.Clms._get_item")
     def test_has_data(
         self,
         mock_get_item,
@@ -243,7 +243,7 @@ class TestCLMS(unittest.TestCase):
             },
         ]
 
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
 
         # Case 1: Valid data type and dataset exists
         mock_is_valid_data_type.return_value = True
@@ -271,9 +271,9 @@ class TestCLMS(unittest.TestCase):
         mock_is_valid_data_type.assert_called_once_with("invalid_type")
         mock_get_item.assert_not_called()
 
-    @patch("xcube_clms.clms.CLMS._access_item")
-    @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.preload.CLMSAPITokenHandler")
+    @patch("xcube_clms.clms.Clms._access_item")
+    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
+    @patch("xcube_clms.preload.ClmsApiTokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_get_extent(
         self, mock_preload, mock_clms_api_token, mock_fetch_datasets, mock_access_item
@@ -312,7 +312,7 @@ class TestCLMS(unittest.TestCase):
             "format": "geotiff",
         }
 
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
 
         assert (clms.get_extent("dataset1|file1")) == {
             "time_range": (None, None),
@@ -325,15 +325,15 @@ class TestCLMS(unittest.TestCase):
             "temporalExtentStart": "01-12-2022",
             "temporalExtentEnd": "01-12-2024",
         }
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
 
         assert (clms.get_extent("dataset1|file1")) == {
             "time_range": ("01-12-2022", "01-12-2024"),
             "crs": "WGS84",
         }
 
-    @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.preload.CLMSAPITokenHandler")
+    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
+    @patch("xcube_clms.preload.ClmsApiTokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_create_data_ids(
         self,
@@ -371,7 +371,7 @@ class TestCLMS(unittest.TestCase):
 
         mock_fetch_datasets.return_value = mock_dataset
 
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
         clms._datasets_info = mock_dataset
 
         result = list(clms._create_data_ids(include_attrs=None))
@@ -444,7 +444,7 @@ class TestCLMS(unittest.TestCase):
             second_page_response,
         ]
 
-        datasets_info = CLMS._fetch_all_datasets()
+        datasets_info = Clms._fetch_all_datasets()
 
         expected_datasets_info = [
             {"dataset_id": "1", "name": "dataset1"},
@@ -456,9 +456,9 @@ class TestCLMS(unittest.TestCase):
         assert mock_get_response_of_type.call_count == 2
         assert datasets_info == expected_datasets_info
 
-    @patch("xcube_clms.clms.CLMS._get_item")
-    @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.preload.CLMSAPITokenHandler")
+    @patch("xcube_clms.clms.Clms._get_item")
+    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
+    @patch("xcube_clms.preload.ClmsApiTokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_access_item(
         self, mock_preload, mock_clms_api_token, mock_fetch_datasets, mock_get_item
@@ -501,13 +501,13 @@ class TestCLMS(unittest.TestCase):
             }
         ]
 
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
         item = clms._access_item("dataset2|file2")
         expected_item = {"file": "file2", "area": "area2", "format": "geotiff"}
         assert item == expected_item
 
-    @patch("xcube_clms.clms.CLMS._fetch_all_datasets")
-    @patch("xcube_clms.preload.CLMSAPITokenHandler")
+    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
+    @patch("xcube_clms.preload.ClmsApiTokenHandler")
     @patch("xcube_clms.preload.PreloadData")
     def test_get_item(
         self,
@@ -545,7 +545,7 @@ class TestCLMS(unittest.TestCase):
 
         mock_fetch_datasets.return_value = mock_dataset
 
-        clms = CLMS(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.mock_path)
         item = clms._get_item("dataset2|file2")
         expected_item = [{"file": "file2", "area": "area2", "format": "geotiff"}]
         assert item == expected_item

@@ -35,7 +35,7 @@ from xcube.util.jsonschema import (
     JsonBooleanSchema,
 )
 
-from .clms import CLMS
+from .clms import Clms
 from .constants import DATA_OPENER_IDS
 from .utils import assert_valid_data_type
 
@@ -45,7 +45,7 @@ class ClmsDataStore(DataStore, ABC):
     plugin."""
 
     def __init__(self, **clms_kwargs):
-        self._clms = CLMS(**clms_kwargs)
+        self._clms = Clms(**clms_kwargs)
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
