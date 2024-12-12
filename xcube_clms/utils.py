@@ -25,6 +25,8 @@ import threading
 import time
 from datetime import datetime, timedelta
 from itertools import cycle
+from pathlib import Path
+from threading import Event
 from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
@@ -91,6 +93,35 @@ def make_api_request(
     timeout: int = 100,
     show_spinner: bool = True,
 ) -> Response:
+    """Makes an API request with custom configurations.
+
+    Args:
+        url: The URL to which the request will be sent.
+        headers: A dictionary of HTTP headers to include in the request.
+            Defaults to `ACCEPT_HEADER`.
+        data: A dictionary of form data to send in the body of the request.
+            Defaults to `None`.
+        json: A dictionary representing a JSON payload to send in the request.
+            Defaults to `None`.
+        method: The HTTP method to use (e.g., "GET", "POST", "PUT", "DELETE").
+        Defaults to "GET".
+        stream: Whether to stream the response content. Defaults to `False`.
+        timeout: The maximum time (in seconds) to wait for a response.
+        Defaults to `100`.
+        show_spinner: Whether to display a spinner to indicate activity.
+        Defaults to `True`.
+
+    Returns:
+        Response: The HTTP response object returned by the server.
+
+    Raises:
+        HTTPError: If the HTTP request results in an error status code.
+        JSONDecodeError: If the server response contains invalid JSON.
+        Timeout: If the request exceeds the specified timeout.
+        RequestException: For other request-related issues.
+        Exception: For any unexpected errors during the request process.
+    """
+
     session = requests.Session()
     LOG.info(f"Making a request to {url}")
 
@@ -149,6 +180,23 @@ def build_api_url(
     metadata_fields: Optional[list] = None,
     datasets_request: bool = True,
 ) -> str:
+    """Builds a complete API URL by appending the endpoint and query parameters.
+
+    This function constructs a URL by combining the base URL, API endpoint, and
+    optional query parameters based on the provided metadata fields and whether
+    the request targets datasets metadata or not.
+
+    Args:
+        url: The base URL of the API.
+        api_endpoint: The specific endpoint to be appended to the base URL.
+        metadata_fields: Optional list of metadata fields to include as query
+        parameters.
+        datasets_request: Indicates whether the request targets datasets.
+        Defaults to True.
+
+    Returns:
+        A complete API URL string.
+    """
     params = {}
     if datasets_request:
         params = PORTAL_TYPE
@@ -162,7 +210,26 @@ def build_api_url(
 
 
 def get_response_of_type(api_response: Response, data_type: Union[ResponseType, str]):
+    """Extracts and validates the response content based on the specified data
+    type.
 
+    This function retrieves the content from an API response object, ensuring
+    it matches the expected data type. Supported data types include JSON, text,
+    and bytes.
+
+    Args:
+        api_response: The API response object to process.
+        data_type: The expected type of the response content. Must be one of
+            "json", "text", or "bytes".
+
+    Returns:
+        The response content in the specified data type.
+
+    Raises:
+        TypeError: If the provided `api_response` is not a `Response` object.
+        ValueError: If `data_type` is not one of the supported types, or if the
+            actual response content type does not match the expected `data_type`.
+    """
     if not isinstance(api_response, Response):
         raise TypeError(
             f"Invalid input: response_data must be a Response, got "
@@ -196,6 +263,18 @@ def get_response_of_type(api_response: Response, data_type: Union[ResponseType, 
 
 
 def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
+    """Generates download information for a specific dataset ID and file ID.
+
+    This function creates a dictionary containing dataset and file IDs,
+    formatted as required by the CLMS API.
+
+    Args:
+        dataset_id: The identifier for the dataset product.
+        file_id: The identifier for the file within the dataset product.
+
+    Returns:
+        A dictionary containing the dataset and file IDs.
+    """
     return {
         "Datasets": [
             {
@@ -207,10 +286,33 @@ def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
 
 
 def get_authorization_header(access_token: str) -> dict:
+    """Creates an authorization header using the provided access token.
+
+    This function generates the HTTP authorization header required by the CLMS
+    API requests, formatted with the Bearer token.
+
+    Args:
+        access_token: The access token to include in the header.
+
+    Returns:
+        A dictionary containing the authorization header.
+    """
     return {"Authorization": f"Bearer {access_token}"}
 
 
-def has_expired(download_available_time):
+def has_expired(download_available_time: str) -> bool:
+    """Checks if the download availability time has expired.
+
+    This function compares the provided time against the current time to
+    determine whether the download window has expired.
+
+    Args:
+        download_available_time: The string representing the timestamp when the
+        download was made available.
+
+    Returns:
+        True if the download window has expired, otherwise False.
+    """
     given_time = datetime.fromisoformat(download_available_time)
     current_time = datetime.now()
     if (current_time - given_time) > timedelta(hours=TIME_TO_EXPIRE):
@@ -219,9 +321,17 @@ def has_expired(download_available_time):
         return False
 
 
-def spinner(status_event, message):
-    """
-    Displays a spinner with elapsed time for a single task until the event is set.
+def spinner(status_event: Event, message: str):
+    """Displays a spinner with elapsed time for a single task until the event
+    is set.
+
+    This function prints a spinning animation and elapsed time message to the
+    console/jupyter notebook output to indicate progress for a task. It stops
+    when the provided event is cleared.
+
+    Args:
+        status_event: A threading event used to control the spinner's activity.
+        message: A message to display alongside the spinner.
     """
     spinner_cycle = cycle(["◐", "◓", "◑", "◒"])
     start_time = time.time()
@@ -238,14 +348,33 @@ def spinner(status_event, message):
     print(f"\rTask: {message}: Done!{' ' * 50}")
 
 
-def find_easting_northing(name: str):
+def find_easting_northing(name: str) -> Optional[str]:
+    """Finds the easting/northing coordinate pattern in the provided filename.
+
+    This function searches for a specific pattern, "E##N##", in a string
+    and returns the first match if found.
+
+    Args:
+        name: The string to search for the easting/northing pattern.
+
+    Returns:
+        The matched coordinate string if found, otherwise None.
+    """
     match = re.search(r"[E]\d{2}[N]\d{2}", name)
     if match:
         return match.group(0)
     return None
 
 
-def cleanup_dir(folder_path, keep_extension=None):
+def cleanup_dir(folder_path: Path | str, keep_extension=None):
+    """Removes all files from a directory, retaining only those with the
+    specified extension.
+
+    Args:
+        folder_path: The path to the directory to clean up.
+        keep_extension: The file extension to retain. Defaults to the constant
+        `KEEP_EXTENSION`.
+    """
     if keep_extension is None:
         keep_extension = KEEP_EXTENSION
 

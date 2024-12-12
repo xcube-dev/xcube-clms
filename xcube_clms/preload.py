@@ -43,18 +43,12 @@ from xcube_clms.utils import (
 
 
 class PreloadData:
-    """
-    Handles the preloading of data, including cache management, token handling,
-    and file downloading and its processing if required for a given tuple of
-    'data_ids'.
-    """
+    """Handles the preloading of data into the cache store."""
 
     def __init__(
         self, url: str, credentials: dict, path: str, cleanup: bool | None = None
     ) -> None:
-        """
-        Initialize the PreloadData instance with the provided URL,
-        credentials, path and cleanup option.
+        """Initializes the PreloadData instance.
 
         Args:
             url: The base URL for data requests to the CLMS API.
@@ -62,6 +56,8 @@ class PreloadData:
                 following the steps from the CLMS API documentation.
                 https://eea.github.io/clms-api-docs/authentication.html
             path: Local path for caching and file storage.
+            cleanup: Whether to clean up the extracted files from the zip
+            download. Defaults to True.
         """
         self._url: str = url
         self._credentials: dict = {}
@@ -81,8 +77,7 @@ class PreloadData:
         )
 
     def initiate_preload(self, data_id_maps: dict[str, Any]) -> None:
-        """
-        Initiates the preload process for a set of data IDs.
+        """Initiates the preload process for a set of data IDs.
 
         Args:
             data_id_maps : Mapping of data IDs to their metadata. Here,
@@ -108,9 +103,10 @@ class PreloadData:
     def _initiate_preload(
         self, data_id_map: tuple[str, dict[str, Any]], status_event: threading.Event
     ) -> None:
-        """
-        Processes a single preload task on a separate thread with its own
-            status_event to indicate when to proceed further.
+        """Processes a single preload task using a separate thread.
+
+        Each thread has its own status_event to indicate when to proceed to
+        further subtasks like extracting the zip files and processing them.
 
         Args:
             data_id_map: Tuple containing the data ID and its metadata as a
@@ -167,8 +163,7 @@ class PreloadData:
     def download_data(
         self, download_url: str, file_size: int, task_id: str, data_id: str
     ) -> None:
-        """
-        Initiates the download process for a given data item.
+        """Initiates the download process for a given data item.
 
         Args:
             download_url: URL of the data to download. This is obtained from
@@ -181,8 +176,7 @@ class PreloadData:
         self._download_manager.download_data(download_url, file_size, task_id, data_id)
 
     def view_cache(self) -> dict[str, str]:
-        """
-        Retrieve the current cache map.
+        """Retrieves the current cache map.
 
         Returns:
             dict: Cached map.
@@ -190,7 +184,5 @@ class PreloadData:
         return self._cache_manager.cache
 
     def refresh_cache(self) -> None:
-        """
-        Refreshes the cache map.
-        """
+        """Refreshes the cache map."""
         self._cache_manager.refresh_cache()

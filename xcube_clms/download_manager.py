@@ -75,15 +75,10 @@ from xcube_clms.utils import (
 
 
 class DownloadTaskManager:
-    """
-    Manages tasks for downloading datasets from the CLMS API, including task
-    creation, download request status monitoring, and data extraction.
-    """
+    """Manages tasks for downloading datasets from the CLMS API."""
 
     def __init__(self, token_handler: ClmsApiTokenHandler, url: str, path: str) -> None:
-        """
-        Initializes the DownloadTaskManager with API token handler, base URL,
-         and file storage path.
+        """Initializes the DownloadTaskManager
 
         Args:
             token_handler: TokenHandler instance for API authentication.
@@ -96,9 +91,10 @@ class DownloadTaskManager:
         self.path = path
 
     def request_download(self, data_id: str, item: dict, product: dict) -> str:
-        """
-        Submits a download request for a specific dataset if it does not
-        already exist. If it does, it returns the existing task ID.
+        """Submits a download request for a specific dataset.
+
+        If a request does not exist, it sends a new one. If it does, it returns
+        the existing task ID.
 
         Args:
             data_id: Unique identifier of the dataset.
@@ -181,17 +177,19 @@ class DownloadTaskManager:
         return task_id
 
     def get_download_url(self, task_id: str) -> tuple[str, int]:
-        """
-        Retrieves the download URL and file size for a completed download task.
+        """Retrieves the download URL and file size for a completed download
+        task.
 
         Args:
             task_id: Task ID for which to retrieve the download URL.
 
         Returns:
-            tuple[str, int]: A tuple containing the download URL and the file size in bytes.
+            tuple[str, int]: A tuple containing the download URL and the file
+             size in bytes.
 
         Raises:
-            Exception: If the task has not completed or no download URL is available.
+            Exception: If the task has not completed or no download URL is
+            available.
         """
         self._token_handler.refresh_token()
 
@@ -212,14 +210,14 @@ class DownloadTaskManager:
                     )
                 else:
                     raise Exception(
-                        f"Task ID {task_id} has not yet finished. No download url available yet."
+                        f"Task ID {task_id} has not yet finished. "
+                        "No download url available yet."
                     )
 
     def _prepare_download_request(
         self, data_id: str, item: dict, product: dict
     ) -> tuple[str, dict, dict]:
-        """
-        Prepares the API request details for downloading a dataset.
+        """Prepares the API request details for downloading a dataset.
 
         Args:
             data_id: Unique identifier of the dataset.
@@ -253,13 +251,14 @@ class DownloadTaskManager:
         file_id: str | None = None,
         task_id: str | None = None,
     ) -> tuple[str, str]:
-        """
-        Checks the status of existing download request tasks.
+        """Checks the status of existing download request task.
+
         The user can either provide the dataset_id and file_id or just the
         task_id to enquire the status of the request.
 
-        We perform sorting based on the priority and timestamps so that we have
-        the result of the latest requests in the decreasing order of priorities.
+        The sorting is performed based on the priority and timestamps so that
+        we have the result of the latest requests in the decreasing order of
+        priorities.
 
         Args:
             dataset_id: Dataset ID to filter tasks (optional).
@@ -339,9 +338,7 @@ class DownloadTaskManager:
     def download_data(
         self, download_url: str, file_size: int, task_id: str, data_id: str
     ) -> None:
-        """
-        Downloads a dataset from the provided URL, extracts files, and saves
-        them.
+        """Downloads, extracts, and saves the dataset from the provided URL.
 
         Args:
             download_url: URL for downloading the dataset.
@@ -442,8 +439,8 @@ class DownloadTaskManager:
 
     @staticmethod
     def _find_geo_in_dir(path: str, zip_fs: Any) -> list[str]:
-        """
-        Recursively searches a directory within a zip filesystem for geo files.
+        """Searches recursively a directory within a zip filesystem for geo
+        files.
 
         Args:
             path: Path within the zip filesystem to start searching.
@@ -457,7 +454,6 @@ class DownloadTaskManager:
         Notes:
             - A geo file is identified by its extension, which matches entries
                 in `GEO_FILE_EXTS`.
-            - Logs details of each discovered geo file.
         """
         geo_file: list[str] = []
         contents = zip_fs.ls(path)

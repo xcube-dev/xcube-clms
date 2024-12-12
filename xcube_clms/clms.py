@@ -53,13 +53,12 @@ from .utils import (
 
 
 class Clms:
-    """
-    The CLMS class provides an interface to interact with the CLMS API,
-    allowing the user to preload the data in a non-blocking way which is a
-    time-consuming task.
+    """Provides an interface to interact with the CLMS API
 
-    This class enables users to fetch metadata for datasets, preload data
-    into a cache, and open specific datasets for further processing.
+    It also allows the user to preload the data into a cache location in a
+    non-blocking way which would be time-consuming task otherwise using the
+    `preload_data` method. Currently, this is experimental and will change in
+    the further versions.
     """
 
     def __init__(
@@ -68,8 +67,7 @@ class Clms:
         path: str | None = None,
         cleanup: bool | None = None,
     ) -> None:
-        """
-        Initialize the CLMS class with API URL, credentials, and optional path.
+        """Initializes the class.
 
         Args:
             credentials: JSON containing authentication credentials.
@@ -91,8 +89,7 @@ class Clms:
         data_id: str,
         **open_params,
     ) -> xr.Dataset:
-        """
-        Open data associated with a specific data ID.
+        """Opens the data associated with a specific data ID.
 
         Args:
             data_id: Identifier for the data to open.
@@ -105,7 +102,6 @@ class Clms:
             ValueError: If the data ID is invalid or improperly formatted.
             FileNotFoundError: If the data ID is not found in the cache.
         """
-
         try:
             _, file_id = data_id.split(DATA_ID_SEPARATOR)
         except ValueError as e:
@@ -139,8 +135,7 @@ class Clms:
         self,
         include_attrs: Container[str] | bool | None = None,
     ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
-        """
-        Retrieve all data IDs, optionally including additional attributes.
+        """Retrieves all data IDs, optionally including additional attributes.
 
         Args:
             include_attrs: Specifies whether to include attributes.
@@ -155,8 +150,7 @@ class Clms:
             yield data_id
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
-        """
-        Check if data exists for the given data ID and optional type.
+        """Checks if data exists for the given data ID and optional type.
 
         Args:
             data_id: Identifier for the data to check.
@@ -171,8 +165,7 @@ class Clms:
         return False
 
     def get_extent(self, data_id: str) -> dict[str, Any]:
-        """
-        Retrieve the spatial and temporal extent of a dataset.
+        """Retrieves the spatial and temporal extent of a dataset.
 
         Args:
             data_id: Identifier for the dataset.
@@ -193,9 +186,8 @@ class Clms:
         return dict(time_range=time_range, crs=crs[0] if crs else None)
 
     def preload_data(self, *data_ids: str, **preload_params) -> None:
-        """
-        Preload data into a cache for specified data IDs with optional
-        parameters for faster access using open_data.
+        """Preloads the data into a cache for specified data IDs with optional
+        parameters for faster access when using the `open_data` method.
 
         Args:
             *data_ids: One or more data IDs to preload.
@@ -218,9 +210,7 @@ class Clms:
         self,
         include_attrs: Container[str] | bool | None = None,
     ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
-        """
-        Generates a list of data IDs, optionally including attributes. This is
-        the actual implementation of the get_data_ids() method.
+        """Generates a list of data IDs, optionally including attributes.
 
         Args:
             include_attrs: Specifies whether to include attributes.
@@ -249,8 +239,7 @@ class Clms:
 
     @staticmethod
     def _fetch_all_datasets() -> list[dict[str, Any]]:
-        """
-        Fetch all datasets from the API and cache their metadata.
+        """Fetches all datasets from the API and caches their metadata.
 
         Returns:
             A list of dictionaries representing all datasets.
@@ -276,8 +265,7 @@ class Clms:
         return datasets_info
 
     def _access_item(self, data_id) -> dict[str, Any]:
-        """
-        Access an item from the dataset for a given data ID.
+        """Accesses an item from the dataset for a given data ID.
 
         Args:
             data_id: The unique identifier for the dataset.
@@ -297,9 +285,7 @@ class Clms:
         return dataset[0]
 
     def _get_item(self, data_id: str) -> list[dict[str, Any]] | list[any]:
-        """
-        Retrieve a dataset item or its components for a given data ID.
-        This is the actual implementation of the _access_item() method
+        """Retrieves a dataset item or its components for a given data ID.
 
         Args:
             data_id: Identifier for the dataset or its components.

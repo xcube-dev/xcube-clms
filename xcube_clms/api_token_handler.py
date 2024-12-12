@@ -29,17 +29,15 @@ from xcube_clms.utils import make_api_request, get_response_of_type
 
 
 class ClmsApiTokenHandler:
-    """
-    Manages the OAuth2 access token for authenticating with the CLMS API.
-    This class is responsible for refreshing the token when it expires,
-    generating a JWT (JSON Web Token) grant, and checking if the current
-    token is expired.
+    """Manages the OAuth2 access token for authenticating with the CLMS API.
+
+    This class is responsible for generating a JWT (JSON Web Token) grant,
+    checking if the current token is expired and refreshing the token if it
+    expires.
     """
 
     def __init__(self, credentials: dict[str, str]) -> None:
-        """
-        Initializes the CLMSAPIToken object with the given credentials and sets
-        up the necessary values for token management.
+        """Initializes the CLMSAPIToken object.
 
         Args:
             credentials: A dictionary containing the credentials
@@ -52,11 +50,11 @@ class ClmsApiTokenHandler:
         self.refresh_token()
 
     def refresh_token(self) -> str:
-        """
-        Refreshes the access token by requesting a new one from the CLMS API.
-        Updates the token expiry time after a successful refresh.
-        This method checks the current token's status and either refreshes it
-        or logs that the existing token is still valid.
+        """Refreshes the access token by requesting a new one from the CLMS API.
+
+        Updates the token expiry time after a successful refresh. It checks
+        the current token's status and either refreshes it or logs that the
+        existing token is still valid.
 
         Returns:
             str: The new access token.
@@ -79,7 +77,8 @@ class ClmsApiTokenHandler:
         return self.api_token
 
     def _request_access_token(self) -> str:
-        """Make an API request to obtain a new access token using the JWT grant.
+        """Makes an API request to obtain a new access token using the JWT
+        grant.
 
         Returns:
             str: The access token from the response.
@@ -102,8 +101,7 @@ class ClmsApiTokenHandler:
         return response["access_token"]
 
     def _create_jwt_grant(self) -> str:
-        """
-        Creates an encoded JWT used to obtain the access token.
+        """Creates an encoded JWT used to obtain the access token.
 
         Returns:
             str: The JWT grant as a string.
@@ -120,8 +118,7 @@ class ClmsApiTokenHandler:
         return jwt.encode(claim_set, private_key, algorithm="RS256")
 
     def is_token_expired(self) -> bool:
-        """
-        Checks if the current access token has expired.
+        """Checks if the current access token has expired.
 
         Returns:
             bool: True if the token has expired, False otherwise.

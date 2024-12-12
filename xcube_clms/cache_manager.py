@@ -30,8 +30,7 @@ class CacheManager:
     """Manage the cache map for preloaded data."""
 
     def __init__(self, path) -> None:
-        """
-        Initialize the CacheManager with the specified path.
+        """Initializes the CacheManager with the specified path.
 
         Args:
             path: The local path where the cache and file store are managed.
@@ -44,9 +43,9 @@ class CacheManager:
         self.refresh_cache()
 
     def refresh_cache(self) -> None:
-        """
-        Refreshes the cache by updating the names of files and data_ids on the
-        cache path. Since the name of the folder is the actual data_id the
+        """Refreshes the cache dict by looping over the cache directory.
+
+        Since the name of the folder is the actual data_id the
         mapping here is data_id: file_name.
 
         For e.g. if data_id = forest-type-2018|FTY-2018 and a folder exists
@@ -68,8 +67,7 @@ class CacheManager:
 
     @property
     def file_store(self) -> DataStore:
-        """
-        Retrieve the local file store.
+        """Retrieves the local file store.
 
         Returns:
             The file store object used for managing files in the cache like
@@ -79,8 +77,7 @@ class CacheManager:
 
     @property
     def cache(self) -> dict[str, str]:
-        """
-        Retrieve the current cache map.
+        """Retrieves the current cache map.
 
         Returns:
             A dictionary representing the cache, with data IDs as keys and

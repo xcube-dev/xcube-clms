@@ -31,15 +31,10 @@ from xcube_clms.utils import find_easting_northing, cleanup_dir
 
 
 class FileProcessor:
-    """
-    Handles file processing after download completes. Currently, it merges and
-    saves files by stacking the `Easting` and `Northing` coordinates.
-    """
+    """Handles file processing after download completes."""
 
     def __init__(self, path: str, file_store, cleanup: bool = True) -> None:
-        """
-        Initialize the FileProcessor with the given path, file store, and
-        cleanup option.
+        """Initializes the FileProcessor.
 
         Args:
             path: The directory path where files are processed.
@@ -51,12 +46,12 @@ class FileProcessor:
         self.cleanup = cleanup
 
     def postprocess(self, data_id: str) -> None:
-        """
-        Perform postprocessing on the files for a given data ID.
+        """Performs postprocessing on the files for a given data ID.
 
         This includes preparing files for merging, merging them based on their
         Easting and Northing coordinates computed from their file names,
-        and optionally cleaning up the directory.
+        saving the merged file as a `.zarr` file, and optionally cleaning up
+        the directory.
 
         We currently assume that all the datasets that are downloaded which
         contain multiple files will have this information in their
@@ -87,9 +82,8 @@ class FileProcessor:
     def _prepare_merge(
         self, files: list[str], data_id: str
     ) -> defaultdict[str, list[str]]:
-        """
-        Prepare files for merging by grouping them based on their Easting and
-        Northing coordinates.
+        """Prepares files for merging by grouping them based on their Easting
+        and Northing coordinates.
 
         Args:
             files: The list of files to be processed.
@@ -109,9 +103,8 @@ class FileProcessor:
     def _merge_and_save(
         self, en_map: defaultdict[str, list[str]], data_id: str
     ) -> None:
-        """
-        Merge files along Easting and Northing axes and save the final
-        dataset using the file store.
+        """Merges files along Easting and Northing axes and saves the final
+        dataset using the data store.
 
         Args:
             en_map: A dictionary mapping coordinates to file lists.
