@@ -202,9 +202,6 @@ class Clms:
             **preload_params: Additional parameters for preloading (currently
             not supported).
 
-        Returns:
-            None.
-
         Raises:
             ValueError: If any data ID is invalid.
         """
