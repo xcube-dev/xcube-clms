@@ -74,7 +74,7 @@ class PreloadData:
         self._api_token: str = self._token_handler.api_token
         self._cache_manager = CacheManager(self.path)
         self._cache_manager.refresh_cache()
-        self.file_store: DataStore = self._cache_manager.get_file_store()
+        self.file_store: DataStore = self._cache_manager.file_store
         self._file_processor = FileProcessor(self.path, self.file_store)
         self._download_manager = DownloadTaskManager(
             self._token_handler, self._url, self.path
@@ -187,7 +187,7 @@ class PreloadData:
         Returns:
             dict: Cached map.
         """
-        return self._cache_manager.get_cache()
+        return self._cache_manager.cache
 
     def refresh_cache(self) -> None:
         """

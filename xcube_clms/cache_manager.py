@@ -27,8 +27,7 @@ from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
 
 
 class CacheManager:
-    """Manage the cache map for preloaded data.
-    """
+    """Manage the cache map for preloaded data."""
 
     def __init__(self, path) -> None:
         """
@@ -37,11 +36,11 @@ class CacheManager:
         Args:
             path: The local path where the cache and file store are managed.
         """
-        self.cache = None
+        self._cache = None
         self.path = path
         os.makedirs(self.path, exist_ok=True)
         LOG.info(f"Local Filestore for preload cache created at {self.path}")
-        self.file_store = new_data_store("file", root=self.path)
+        self._file_store = new_data_store("file", root=self.path)
         self.refresh_cache()
 
     def refresh_cache(self) -> None:
@@ -61,13 +60,14 @@ class CacheManager:
         We use this for lookup in case the user requests to preload or open the
         data that exists in the cache map already.
         """
-        self.cache = {
+        self._cache = {
             d: os.path.join(self.path, d)
             for d in os.listdir(self.path)
             if DATA_ID_SEPARATOR in d
         }
 
-    def get_file_store(self) -> DataStore:
+    @property
+    def file_store(self) -> DataStore:
         """
         Retrieve the local file store.
 
@@ -75,9 +75,10 @@ class CacheManager:
             The file store object used for managing files in the cache like
             opening or writing.
         """
-        return self.file_store
+        return self._file_store
 
-    def get_cache(self) -> dict[str, str]:
+    @property
+    def cache(self) -> dict[str, str]:
         """
         Retrieve the current cache map.
 
@@ -85,4 +86,4 @@ class CacheManager:
             A dictionary representing the cache, with data IDs as keys and
             their file paths as values.
         """
-        return self.cache
+        return self._cache
