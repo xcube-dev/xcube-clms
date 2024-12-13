@@ -25,7 +25,8 @@ from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
-from requests import Response, JSONDecodeError, RequestException, Timeout, HTTPError
+from requests import Response, JSONDecodeError, RequestException, Timeout, \
+    HTTPError
 
 from xcube_clms.utils import (
     get_response_of_type,
@@ -72,7 +73,7 @@ def test_make_api_request_http_error(mock_session):
     mock_response.raise_for_status.side_effect = HTTPError("HTTP error 404")
     mock_session.return_value.request.return_value = mock_response
 
-    with pytest.raises(HTTPError, match="HTTP error occurred: HTTP error 404"):
+    with pytest.raises(HTTPError, match="HTTP error 404"):
         make_api_request(url)
 
     mock_response = MagicMock()
@@ -86,7 +87,7 @@ def test_make_api_request_http_error(mock_session):
 
     with pytest.raises(
         HTTPError,
-        match="HTTP error occurred: HTTP error 400: {'error': 'Invalid request'}",
+        match="HTTP error 400",
     ):
         make_api_request(url)
 
@@ -101,7 +102,7 @@ def test_make_api_request_json_decode_error(mock_session):
     mock_response.json.side_effect = JSONDecodeError("Cannot decode", "", 0)
 
     mock_session.return_value.request.return_value = mock_response
-    with pytest.raises(JSONDecodeError, match="Invalid JSON: Cannot decode"):
+    with pytest.raises(JSONDecodeError, match="Cannot decode"):
         make_api_request(url)
 
 
@@ -109,7 +110,7 @@ def test_make_api_request_json_decode_error(mock_session):
 def test_make_api_request_timeout_error(mock_session):
     mock_session.return_value.request.side_effect = Timeout("Request timed out")
 
-    with pytest.raises(Timeout, match="Timeout error occurred: Request timed out"):
+    with pytest.raises(Timeout, match="Request timed out"):
         make_api_request(url)
 
 
@@ -117,9 +118,7 @@ def test_make_api_request_timeout_error(mock_session):
 def test_make_api_request_request_exception(mock_session):
     mock_session.return_value.request.side_effect = RequestException("Connection error")
 
-    with pytest.raises(
-        RequestException, match="Request error occurred: Connection error"
-    ):
+    with pytest.raises(RequestException, match="Connection error"):
         make_api_request(url)
 
 
@@ -127,7 +126,7 @@ def test_make_api_request_request_exception(mock_session):
 def test_make_api_request_unknown_exception(mock_session):
     mock_session.return_value.request.side_effect = Exception("Unknown error")
 
-    with pytest.raises(Exception, match="Unknown error occurred"):
+    with pytest.raises(Exception, match="Unknown error"):
         make_api_request(url)
 
 

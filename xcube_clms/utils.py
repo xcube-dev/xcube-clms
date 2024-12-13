@@ -26,7 +26,8 @@ from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
 import requests
-from requests import HTTPError, Timeout, RequestException, Response, JSONDecodeError
+from requests import HTTPError, Timeout, RequestException, Response, \
+    JSONDecodeError
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
 from xcube_clms.constants import (
@@ -138,26 +139,29 @@ def make_api_request(
             stream=stream,
             timeout=timeout,
         )
-        try:
-            response.raise_for_status()
+        response.raise_for_status()
+
+    except HTTPError as e:
         # This is to make sure that the user gets to see the actual error
         # message which raise_for_status does not show
-        except HTTPError:
-            error_details = response.text
-            if "application/json" in response.headers.get("Content-Type", "").lower():
-                error_details = response.json()
-            raise HTTPError(f"HTTP error {response.status_code}: {error_details}")
+        error_details = response.text
+        if "application/json" in response.headers.get("Content-Type", "").lower():
+            error_details = response.json()
+        LOG.error(f"HTTP error {response.status_code}: " f"{error_details}. " f"{e}")
+        raise
 
-    except JSONDecodeError as e:
-        raise JSONDecodeError(f"Invalid JSON: {e}", response.text, 0)
-    except HTTPError as eh:
-        raise HTTPError(f"HTTP error occurred: {eh}")
-    except Timeout as et:
-        raise Timeout(f"Timeout error occurred: {et}")
-    except RequestException as e:
-        raise RequestException(f"Request error occurred: {e}")
+    except (
+        JSONDecodeError,
+        Timeout,
+        RequestException,
+    ) as e:
+        LOG.error(f"An error occurred during the request to {url}: {e}")
+        raise
+
     except Exception as e:
-        raise Exception(f"Unknown error occurred: {e}")
+        LOG.error(f"Unknown error occurred: {e}")
+        raise
+
     finally:
         if show_spinner:
             status_event.clear()
