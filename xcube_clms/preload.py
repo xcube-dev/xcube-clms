@@ -24,7 +24,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from xcube.core.store import DataStore
+from xcube.core.store import MutableDataStore
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.cache_manager import CacheManager
@@ -70,7 +70,7 @@ class PreloadData:
         self._api_token: str = self._token_handler.api_token
         self._cache_manager = CacheManager(self.path)
         self._cache_manager.refresh_cache()
-        self.file_store: DataStore = self._cache_manager.file_store
+        self.file_store: MutableDataStore = self._cache_manager.file_store
         self._file_processor = FileProcessor(self.path, self.file_store)
         self._download_manager = DownloadTaskManager(
             self._token_handler, self._url, self.path

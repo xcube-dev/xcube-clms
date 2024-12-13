@@ -21,7 +21,7 @@
 
 import os
 
-from xcube.core.store import new_data_store, DataStore
+from xcube.core.store import new_data_store, MutableDataStore
 
 from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
 
@@ -66,7 +66,7 @@ class CacheManager:
         }
 
     @property
-    def file_store(self) -> DataStore:
+    def file_store(self) -> MutableDataStore:
         """Retrieves the local file store.
 
         Returns:
