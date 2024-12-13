@@ -93,16 +93,24 @@ def test_make_api_request_http_error(mock_session):
 
 
 @patch("requests.Session")
-def test_make_api_request_json_decode_error(mock_session):
+def test_make_api_request_json_decode_error_raises_http_error_with_orig_error(
+    mock_session,
+):
     mock_response = MagicMock()
     mock_response.status_code = 400
     mock_response.text = "Not a JSON response"
     mock_response.headers = {"Content-Type": "application/json"}
-    mock_response.raise_for_status.side_effect = HTTPError("HTTP error 404")
-    mock_response.json.side_effect = JSONDecodeError("Cannot decode", "", 0)
+    mock_response.raise_for_status.side_effect = HTTPError("HTTP error " "occurred.")
+    mock_response.json.side_effect = JSONDecodeError("", "", 0)
 
+    new_error_message = (
+        "HTTP error 400: Not a JSON response. " "Original error: HTTP error occurred."
+    )
     mock_session.return_value.request.return_value = mock_response
-    with pytest.raises(JSONDecodeError, match="Cannot decode"):
+    with pytest.raises(
+        HTTPError,
+        match=new_error_message,
+    ):
         make_api_request(url)
 
 

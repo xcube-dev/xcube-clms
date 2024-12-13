@@ -146,12 +146,17 @@ def make_api_request(
         # message which raise_for_status does not show
         error_details = response.text
         if "application/json" in response.headers.get("Content-Type", "").lower():
-            error_details = response.json()
-        LOG.error(f"HTTP error {response.status_code}: " f"{error_details}. " f"{e}")
-        raise
+            try:
+                error_details = response.json()
+            except JSONDecodeError as json_e:
+                LOG.error(f"Failed to decode JSON error response: {json_e}")
+        new_error_message = (
+            f"HTTP error {response.status_code}: {error_details}. Original error: {e}"
+        )
+        LOG.error(new_error_message)
+        raise HTTPError(new_error_message, response=e.response) from e
 
     except (
-        JSONDecodeError,
         Timeout,
         RequestException,
     ) as e:
