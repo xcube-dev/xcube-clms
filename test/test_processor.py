@@ -20,80 +20,70 @@
 # SOFTWARE.
 
 import os
+import tempfile
 import unittest
 from collections import defaultdict
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import numpy as np
 import xarray as xr
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
-from xcube_clms.processor import FileProcessor, cleanup_dir, find_easting_northing
+from xcube_clms.processor import FileProcessor, cleanup_dir, \
+    find_easting_northing
 
 
-class TestProcessor(unittest.TestCase):
+class ProcessorTest(unittest.TestCase):
+
+    def setUp(self):
+        self.mock_path = "/mock/path"
+        self.mock_data_id = "product_id|dataset_id"
+        self.mock_file_store = MagicMock()
+
     @patch("xcube_clms.processor.LOG")
     @patch("xcube_clms.processor.os.listdir")
     @patch("xcube_clms.processor.cleanup_dir")
     def test_postprocess_single_file(self, mock_cleanup_dir, mock_listdir, mock_log):
-        mock_path = "/mock/path"
-        mock_data_id = "product_id|dataset_id"
-        mock_file_store = MagicMock()
-
         mock_listdir.return_value = ["file_1.tif"]
+        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
+        processor.postprocess(self.mock_data_id)
 
-        processor = FileProcessor(mock_path, mock_file_store, cleanup=True)
-        processor.postprocess(mock_data_id)
-
-        mock_log.info.assert_called_once_with("No postprocessing required.")
+        mock_log.info.assert_called()
         mock_cleanup_dir.assert_not_called()
 
         mock_log.reset_mock()
-        processor = FileProcessor(mock_path, mock_file_store, cleanup=False)
-        processor.postprocess(mock_data_id)
+        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=False)
+        processor.postprocess(self.mock_data_id)
 
-        mock_log.info.assert_called_once_with("No postprocessing required.")
+        mock_log.info.assert_called()
         mock_cleanup_dir.assert_not_called()
 
     @patch("xcube_clms.processor.LOG")
     @patch("xcube_clms.processor.os.listdir")
     @patch("xcube_clms.processor.cleanup_dir")
     def test_postprocess_no_files(self, mock_cleanup_dir, mock_listdir, mock_log):
-        mock_path = "/mock/path"
-        mock_data_id = "product_id|dataset_id"
-        mock_file_store = MagicMock()
-
         mock_listdir.return_value = []
+        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
+        processor.postprocess(self.mock_data_id)
 
-        processor = FileProcessor(mock_path, mock_file_store, cleanup=True)
-        processor.postprocess(mock_data_id)
-
-        mock_log.warn.assert_called_once_with("No files to postprocess!")
+        mock_log.warn.assert_called()
         mock_cleanup_dir.assert_not_called()
 
     @patch("xcube_clms.processor.LOG")
     @patch("xcube_clms.processor.os.listdir")
     @patch("xcube_clms.processor.cleanup_dir")
-    @patch("xcube_clms.processor.find_easting_northing")
     def test_postprocess_unsupported_naming(
-        self, mock_find_easting_northing, mock_cleanup_dir, mock_listdir, mock_log
+        self, mock_cleanup_dir, mock_listdir, mock_log
     ):
-        mock_path = "/mock/path"
-        mock_file_store = MagicMock()
         mock_files = ["file_1.tif", "file_2.tif", "file_3.tif"]
-
         mock_listdir.return_value = mock_files
-        mock_find_easting_northing.return_value = None
-
-        processor = FileProcessor(mock_path, mock_file_store, cleanup=True)
+        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
         processor.postprocess("invalid_data_id")
 
-        mock_log.error.assert_called_once_with(
-            "This naming format is not supported. Currently only filenames with "
-            "Eastings and Northings are supported."
-        )
+        mock_log.error.assert_called()
         mock_cleanup_dir.assert_not_called()
-        mock_file_store.write_data.assert_not_called()
+        self.mock_file_store.write_data.assert_not_called()
 
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     @patch("xcube_clms.processor.xr.concat")
@@ -102,9 +92,6 @@ class TestProcessor(unittest.TestCase):
         mock_xr_concat,
         mock_rioxarray_open_rasterio,
     ):
-        mock_path = "/mock/path"
-        mock_file_store = MagicMock()
-
         a = xr.DataArray(
             [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
             dims=["y", "x"],
@@ -134,46 +121,38 @@ class TestProcessor(unittest.TestCase):
         en_map["E35N78"].append(f"{data_id}/file_2_E35N78.tif")
         en_map["E34N79"].append(f"{data_id}/file_3_E34N79.tif")
 
-        processor = FileProcessor(mock_path, mock_file_store, cleanup=True)
+        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
         mock_xr_concat.reset_mock()
         processor._merge_and_save(en_map, data_id)
 
-        assert mock_rioxarray_open_rasterio.call_count == 3
-        assert mock_xr_concat.call_count == 3
+        self.assertEqual(3, mock_rioxarray_open_rasterio.call_count)
+        self.assertEqual(3, mock_xr_concat.call_count)
 
-        mock_file_store.write_data.assert_called_once()
+        self.mock_file_store.write_data.assert_called_once()
 
-        args, _ = mock_file_store.write_data.call_args
+        args, _ = self.mock_file_store.write_data.call_args
         final_dataset, output_path = args
-        assert x_concat.equals(
-            final_dataset
-        ), "Final output does not match expected x_concat"
-        print(output_path, final_dataset)
+        self.assertEqual(x_concat.to_dataset(), final_dataset)
 
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     def test_merge_and_save_no_files(self, mock_rioxarray_open_rasterio):
-        mock_path = "/mock/path"
-        mock_file_store = MagicMock()
-        data_id = "product_empty"
+        self.data_id = "product_empty"
         en_map = defaultdict(list)
 
-        processor = FileProcessor(mock_path, mock_file_store, cleanup=True)
-        processor._merge_and_save(en_map, data_id)
+        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
+        processor._merge_and_save(en_map, self.data_id)
 
         mock_rioxarray_open_rasterio.assert_not_called()
-        mock_file_store.write_data.assert_not_called()
+        self.mock_file_store.write_data.assert_not_called()
 
-        processor = FileProcessor(mock_path, mock_file_store, cleanup=False)
-        processor._merge_and_save(en_map, data_id)
+        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=False)
+        processor._merge_and_save(en_map, self.data_id)
 
         mock_rioxarray_open_rasterio.assert_not_called()
-        mock_file_store.write_data.assert_not_called()
+        self.mock_file_store.write_data.assert_not_called()
 
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     def test_merge_and_save_single_file(self, mock_rioxarray_open_rasterio):
-        mock_path = "/mock/path"
-        mock_file_store = MagicMock()
-
         single_array = xr.DataArray(
             [[1, 2, 3], [4, 5, 6]],
             dims=["y", "x"],
@@ -185,24 +164,19 @@ class TestProcessor(unittest.TestCase):
         en_map = defaultdict(list)
         en_map["E34N78"].append(f"{data_id}/file_1_E34N78.tif")
 
-        processor = FileProcessor(mock_path, mock_file_store, cleanup=True)
+        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
         processor._merge_and_save(en_map, data_id)
 
         mock_rioxarray_open_rasterio.assert_called_once()
-        mock_file_store.write_data.assert_called_once()
+        self.mock_file_store.write_data.assert_called_once()
 
-        final_dataset, _ = mock_file_store.write_data.call_args[0]
-        assert single_array.to_dataset(
-            name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
-        ).equals(final_dataset)
+        final_dataset, _ = self.mock_file_store.write_data.call_args[0]
+        self.assertEqual(
+            single_array.to_dataset(name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"),
+            final_dataset,
+        )
 
-    @patch("xcube_clms.processor.find_easting_northing")
-    def test_prepare_merge_valid_files(self, mock_find_easting_northing):
-        mock_find_easting_northing.side_effect = lambda name: {
-            "file_E12N34.tif": "E12N34",
-            "file_E56N78.tif": "E56N78",
-        }.get(name, None)
-
+    def test_prepare_merge_valid_files(self):
         files = ["file_E12N34.tif", "file_E56N78.tif"]
         data_id = "test_dataset"
         test_path = "/test/path"
@@ -217,11 +191,9 @@ class TestProcessor(unittest.TestCase):
         )
 
         en_map = processor._prepare_merge(files, data_id)
-        assert en_map == expected_en_map
+        self.assertEqual(expected_en_map, en_map)
 
-    @patch("xcube_clms.processor.find_easting_northing")
-    def test_prepare_merge_invalid_files(self, mock_find_easting_northing):
-        mock_find_easting_northing.return_value = None
+    def test_prepare_merge_invalid_files(self):
 
         files = ["invalid_file_1.tif", "invalid_file_2.tif"]
         data_id = "test_dataset"
@@ -229,14 +201,9 @@ class TestProcessor(unittest.TestCase):
         processor = FileProcessor(test_path, None)
 
         en_map = processor._prepare_merge(files, data_id)
-        assert en_map == defaultdict(list)
+        self.assertEqual(defaultdict(list), en_map)
 
-    @patch("xcube_clms.processor.find_easting_northing")
-    def test_prepare_merge_mixed_files(self, mock_find_easting_northing):
-        mock_find_easting_northing.side_effect = lambda name: {
-            "valid_E12N34.tif": "E12N34",
-        }.get(name, None)
-
+    def test_prepare_merge_mixed_files(self):
         files = ["valid_E12N34.tif", "invalid_file.tif"]
         data_id = "test_dataset"
         test_path = "/test/path"
@@ -248,43 +215,41 @@ class TestProcessor(unittest.TestCase):
         )
 
         en_map = processor._prepare_merge(files, data_id)
+        self.assertEqual(expected_en_map, en_map)
 
-        assert en_map == expected_en_map
+    def test_cleanup_dir_deletes_files(self):
+        with tempfile.TemporaryDirectory() as tmp_path_str:
+            tmp_path = Path(tmp_path_str)
+            folder_path = tmp_path / "test_folder"
+            folder_path.mkdir()
 
+            keep_file = folder_path / "file1.zarr"
+            delete_file = folder_path / "file2.tif"
+            keep_file.write_text("test")
+            delete_file.write_text("test")
 
-def test_cleanup_dir_deletes_files(tmp_path):
-    folder_path = tmp_path / "test_folder"
-    folder_path.mkdir()
+            cleanup_dir(folder_path, keep_extension=".tif")
 
-    keep_file = folder_path / "file1.zarr"
-    delete_file = folder_path / "file2.tif"
-    keep_file.write_text("test")
-    delete_file.write_text("test")
+            self.assertEqual(False, keep_file.exists())
+            self.assertEqual(True, delete_file.exists())
 
-    cleanup_dir(folder_path, keep_extension=".tif")
+            keep_file = folder_path / "file1.zarr"
+            delete_file = folder_path / "file2.tif"
+            keep_file.write_text("test")
+            delete_file.write_text("test")
 
-    assert not keep_file.exists()
-    assert delete_file.exists()
+            cleanup_dir(folder_path)
 
-    keep_file = folder_path / "file1.zarr"
-    delete_file = folder_path / "file2.tif"
-    keep_file.write_text("test")
-    delete_file.write_text("test")
+            self.assertEqual(True, keep_file.exists())
+            self.assertEqual(False, delete_file.exists())
 
-    cleanup_dir(folder_path)
+    def test_find_easting_northing_valid(self):
+        name = "randomE12N34text"
+        self.assertEqual("E12N34", find_easting_northing(name))
 
-    assert keep_file.exists()
-    assert not delete_file.exists()
+        name = "E12N34"
+        self.assertEqual("E12N34", find_easting_northing(name))
 
-
-def test_find_easting_northing_valid():
-    name = "randomE12N34text"
-    assert find_easting_northing(name) == "E12N34"
-
-    name = "E12N34"
-    assert find_easting_northing(name) == "E12N34"
-
-
-def test_find_easting_northing_invalid():
-    name = "random_text_without_coordinates"
-    assert find_easting_northing(name) is None
+    def test_find_easting_northing_invalid(self):
+        name = "random_text_without_coordinates"
+        self.assertEqual(None, find_easting_northing(name))

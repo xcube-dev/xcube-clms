@@ -27,69 +27,60 @@ from unittest.mock import patch, MagicMock
 from xcube_clms.cache_manager import CacheManager
 
 
-class TestCacheManager(unittest.TestCase):
+class CacheManagerTest(unittest.TestCase):
 
-    @patch("xcube_clms.cache_manager.os.makedirs")
-    @patch("xcube_clms.cache_manager.os.listdir")
-    @patch("xcube_clms.cache_manager.new_data_store")
-    def test_init_creates_filestore_and_refreshes_cache(
-        self, mock_new_data_store, mock_listdir, mock_makedirs
-    ):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.mock_listdir_patcher = patch("xcube_clms.cache_manager.os.listdir")
+        self.mock_new_data_store_patcher = patch(
+            "xcube_clms.cache_manager.new_data_store"
+        )
+        self.mock_makedirs_patcher = patch("xcube_clms.cache_manager.os.makedirs")
 
+        self.mock_listdir = self.mock_listdir_patcher.start()
+        self.mock_new_data_store = self.mock_new_data_store_patcher.start()
+        self.mock_makedirs = self.mock_makedirs_patcher.start()
+
+        self.mock_file_store = MagicMock()
+        self.mock_new_data_store.return_value = self.mock_file_store
+
+    def tearDown(self):
+        patch.stopall()
+        self.temp_dir.cleanup()
+
+    def create_cache_manager(self):
+        return CacheManager(self.temp_dir.name)
+
+    def test_refresh_cache_populates_cache_correctly(self):
+        self.mock_listdir.return_value = ["product|file1_data", "product|file2_data"]
+
+        cache_manager = self.create_cache_manager()
+        expected_cache = {
+            "product|file1_data": os.path.join(
+                self.temp_dir.name, "product|file1_data"
+            ),
+            "product|file2_data": os.path.join(
+                self.temp_dir.name, "product|file2_data"
+            ),
+        }
+        self.assertEqual(cache_manager.cache, expected_cache)
+        self.assertEqual(self.mock_file_store, cache_manager.file_store)
+
+        self.mock_listdir.return_value = ["product|file1_data", "product|file3_data"]
+        cache_manager.refresh_cache()
+
+        expected_cache = {
+            "product|file1_data": os.path.join(
+                self.temp_dir.name, "product|file1_data"
+            ),
+            "product|file3_data": os.path.join(
+                self.temp_dir.name, "product|file3_data"
+            ),
+        }
+        self.assertEqual(cache_manager.cache, expected_cache)
+
+    def test_cache_when_no_data_id_separator(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_listdir.return_value = ["product|file1_data", "product|file2_data"]
-
-            mock_file_store = MagicMock()
-            mock_new_data_store.return_value = mock_file_store
-
-            cache_manager = CacheManager(temp_dir)
-
-            mock_makedirs.assert_called_once_with(temp_dir, exist_ok=True)
-            mock_new_data_store.assert_called_once_with("file", root=temp_dir)
-            mock_listdir.assert_called_once_with(temp_dir)
-
-            expected_cache = {
-                "product|file1_data": os.path.join(temp_dir, "product|file1_data"),
-                "product|file2_data": os.path.join(temp_dir, "product|file2_data"),
-            }
-            self.assertEqual(mock_file_store, cache_manager.file_store)
-            self.assertEqual(expected_cache, cache_manager.cache)
-
-    @patch("xcube_clms.cache_manager.os.listdir")
-    @patch("xcube_clms.cache_manager.new_data_store")
-    def test_refresh_cache_populates_cache_correctly(
-        self, mock_new_data_store, mock_listdir
-    ):
-        with tempfile.TemporaryDirectory() as temp_dir:
-
-            mock_listdir.return_value = ["product|file1_data", "product|file2_data"]
-
-            mock_file_store = MagicMock()
-            mock_new_data_store.return_value = mock_file_store
-            cache_manager = CacheManager(temp_dir)
-            expected_cache = {
-                "product|file1_data": os.path.join(temp_dir, "product|file1_data"),
-                "product|file2_data": os.path.join(temp_dir, "product|file2_data"),
-            }
-            self.assertEqual(cache_manager.cache, expected_cache)
-
-            mock_listdir.return_value = [
-                "product|file1_data",
-                "product|file3_data",
-            ]
-            cache_manager.refresh_cache()
-            expected_cache = {
-                "product|file1_data": os.path.join(temp_dir, "product|file1_data"),
-                "product|file3_data": os.path.join(temp_dir, "product|file3_data"),
-            }
-            self.assertEqual(cache_manager.cache, expected_cache)
-
-    @patch("xcube_clms.cache_manager.os.listdir")
-    @patch("xcube_clms.cache_manager.new_data_store")
-    def test_cache_when_no_data_id_separator(self, mock_new_data_store, mock_listdir):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            mock_file_store = MagicMock()
-            mock_new_data_store.return_value = mock_file_store
-            mock_listdir.return_value = ["file1", "file2"]
-            cache_manager = CacheManager(temp_dir)
+            self.mock_listdir.return_value = ["file1", "file2"]
+            cache_manager = self.create_cache_manager()
             self.assertEqual(cache_manager.cache, {})

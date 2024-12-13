@@ -20,11 +20,11 @@
 # SOFTWARE.
 import threading
 import time
+import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
-import pytest
 from requests import Response, JSONDecodeError, RequestException, Timeout, \
     HTTPError
 
@@ -38,234 +38,222 @@ from xcube_clms.utils import (
 url = "http://example.com/api"
 
 
-@pytest.fixture
-def mock_successful_response():
-    mock_response = MagicMock(spec=Response)
-    mock_response.status_code = 200
-    mock_response.text = '{"key": "value"}'
-    mock_response.json.return_value = {"key": "value"}
-    mock_response.headers = {"Content-Type": "application/json"}
-    return mock_response
-
-
-@patch("requests.Session")
-def test_make_api_request_success(mock_session):
-
-    mock_response = MagicMock()
-    mock_response.raise_for_status.return_value = None
-    mock_response.status_code = 200
-    mock_response.text = '{"key": "value"}'
-    mock_response.json.return_value = {"key": "value"}
-
-    mock_session.return_value.request.return_value = mock_response
-
-    result = make_api_request(url)
-    assert result.json() == {"key": "value"}
-    mock_response.json.assert_called_once()
-
-
-@patch("requests.Session")
-def test_make_api_request_http_error(mock_session):
-    mock_response = MagicMock()
-    mock_response.status_code = 404
-    mock_response.text = "Not Found"
-    mock_response.headers = {"Content-Type": "application/text"}
-    mock_response.raise_for_status.side_effect = HTTPError("HTTP error 404")
-    mock_session.return_value.request.return_value = mock_response
-
-    with pytest.raises(HTTPError, match="HTTP error 404"):
-        make_api_request(url)
-
-    mock_response = MagicMock()
-    mock_response.status_code = 400
-    mock_response.text = "Bad Request"
-    mock_response.headers = {"Content-Type": "application/json"}
-    mock_response.raise_for_status.side_effect = HTTPError("HTTP error 400")
-    mock_response.json.return_value = {"error": "Invalid request"}
-
-    mock_session.return_value.request.return_value = mock_response
-
-    with pytest.raises(
-        HTTPError,
-        match="HTTP error 400",
-    ):
-        make_api_request(url)
-
-
-@patch("requests.Session")
-def test_make_api_request_json_decode_error_raises_http_error_with_orig_error(
-    mock_session,
+def setup_requests_mock(
+    mock_session: MagicMock(),
+    status_code: int = 200,
+    text: str = None,
+    json_data: dict | None = None,
+    headers: dict[str, str] | None = None,
+    raise_for_status_side_effect: Exception | None = None,
 ):
-    mock_response = MagicMock()
-    mock_response.status_code = 400
-    mock_response.text = "Not a JSON response"
-    mock_response.headers = {"Content-Type": "application/json"}
-    mock_response.raise_for_status.side_effect = HTTPError("HTTP error " "occurred.")
-    mock_response.json.side_effect = JSONDecodeError("", "", 0)
 
-    new_error_message = (
-        "HTTP error 400: Not a JSON response. " "Original error: HTTP error occurred."
+    mock_response = MagicMock()
+    mock_response.status_code = status_code
+    mock_response.text = text
+    mock_response.json.return_value = json_data
+    mock_response.headers = headers or {}
+    mock_response.raise_for_status.side_effect = (
+        None
+        if (200 <= status_code < 300 or not raise_for_status_side_effect)
+        else raise_for_status_side_effect
     )
     mock_session.return_value.request.return_value = mock_response
-    with pytest.raises(
-        HTTPError,
-        match=new_error_message,
+
+    return mock_session
+
+
+class UtilsTest(unittest.TestCase):
+    @patch("requests.Session")
+    def test_make_api_request_success(self, mock_session):
+        setup_requests_mock(mock_session, json_data={"key": "value"})
+        result = make_api_request(url)
+        self.assertEqual(result.json(), {"key": "value"})
+
+    @patch("requests.Session")
+    def test_make_api_request_http_error(self, mock_session):
+        setup_requests_mock(
+            mock_session,
+            status_code=400,
+            text="Bad Request",
+            json_data={"error": "Invalid request"},
+            headers={"Content-Type": "application/json"},
+            raise_for_status_side_effect=HTTPError("Mocked HTTP Error"),
+        )
+        with self.assertRaisesRegex(
+            HTTPError,
+            r"HTTP error 400: \{'error': 'Invalid request'\}. Original error: Mocked HTTP Error",
+        ):
+            make_api_request(url)
+
+        setup_requests_mock(
+            mock_session,
+            status_code=404,
+            text="Not found",
+            headers={"Content-Type": "application/text"},
+            raise_for_status_side_effect=HTTPError("Mocked HTTP Error"),
+        )
+        with self.assertRaisesRegex(
+            HTTPError, r"HTTP error 404: Not found. Original error: Mocked HTTP Error"
+        ):
+            make_api_request(url)
+
+    @patch("requests.Session")
+    def test_make_api_request_json_decode_error_raises_http_error_with_orig_error(
+        self,
+        mock_session,
     ):
-        make_api_request(url)
+        mock_session = setup_requests_mock(
+            mock_session,
+            status_code=400,
+            text="Not a JSON response",
+            headers={"Content-Type": "application/json"},
+            raise_for_status_side_effect=HTTPError("Mocked HTTP Error"),
+        )
+        mock_session.return_value.request.return_value.json.side_effect = (
+            JSONDecodeError("", "", 0)
+        )
+        with self.assertRaisesRegex(
+            HTTPError,
+            r"HTTP error 400: Not a JSON response. Original error: Mocked HTTP Error",
+        ):
+            make_api_request(url)
 
+    @patch("requests.Session")
+    def test_make_api_request_timeout_error(self, mock_session):
+        mock_session.return_value.request.side_effect = Timeout("Request timed out")
 
-@patch("requests.Session")
-def test_make_api_request_timeout_error(mock_session):
-    mock_session.return_value.request.side_effect = Timeout("Request timed out")
+        with self.assertRaisesRegex(Timeout, "Request timed out"):
+            make_api_request(url)
 
-    with pytest.raises(Timeout, match="Request timed out"):
-        make_api_request(url)
+    @patch("requests.Session")
+    def test_make_api_request_request_exception(self, mock_session):
+        mock_session.return_value.request.side_effect = RequestException(
+            "Connection error"
+        )
+        with self.assertRaisesRegex(RequestException, "Connection error"):
+            make_api_request(url)
 
+    @patch("requests.Session")
+    def test_make_api_request_unknown_exception(self, mock_session):
+        mock_session.return_value.request.side_effect = Exception("Unknown error")
+        with self.assertRaisesRegex(Exception, "Unknown error"):
+            make_api_request(url)
 
-@patch("requests.Session")
-def test_make_api_request_request_exception(mock_session):
-    mock_session.return_value.request.side_effect = RequestException("Connection error")
+    def test_get_response_of_type_json(self):
+        mock_response = MagicMock(spec=Response)
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"key": "value"}
 
-    with pytest.raises(RequestException, match="Connection error"):
-        make_api_request(url)
+        result = get_response_of_type(mock_response, "json")
+        self.assertEqual(result, {"key": "value"})
 
+    def test_get_response_of_type_text(self):
+        mock_response = MagicMock(spec=Response)
+        mock_response.headers = {"Content-Type": "application/text"}
+        mock_response.text = "This is some text content"
 
-@patch("requests.Session")
-def test_make_api_request_unknown_exception(mock_session):
-    mock_session.return_value.request.side_effect = Exception("Unknown error")
+        result = get_response_of_type(mock_response, "text")
+        self.assertEqual(result, "This is some text content")
 
-    with pytest.raises(Exception, match="Unknown error"):
-        make_api_request(url)
+    def test_get_response_of_type_bytes(self):
+        mock_response = MagicMock(spec=Response)
+        mock_response.headers = {}
+        mock_response.content = b"binary content"
 
+        result = get_response_of_type(mock_response, "bytes")
+        self.assertEqual(result, b"binary content")
 
-def test_get_response_of_type_json(mock_successful_response):
-    mock_successful_response.headers = {"Content-Type": "application/json"}
-    mock_successful_response.json.return_value = {"key": "value"}
+    def test_get_response_of_type_invalid_response_type(self):
+        with self.assertRaisesRegex(
+            TypeError, "Invalid input: response_data must be a Response, got 'dict'."
+        ):
+            get_response_of_type({}, "json")
 
-    result = get_response_of_type(mock_successful_response, "json")
-    assert result == {"key": "value"}
-    mock_successful_response.json.assert_called_once()
+    def test_get_response_of_type_invalid_data_type(self):
+        mock_response = MagicMock(spec=Response)
+        mock_response.headers = {"Content-Type": "application/json"}
+        with self.assertRaisesRegex(
+            ValueError,
+            r"Invalid data_type: xml. Must be one of \{'(json|text|bytes)', '(json|text|bytes)', '(json|text|bytes)'\}.",
+        ):
+            get_response_of_type(mock_response, "xml")
 
+    def test_get_response_of_type_content_type_mismatch(self):
+        mock_response = MagicMock(spec=Response)
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"key": "value"}
+        with self.assertRaisesRegex(
+            ValueError, "Type mismatch: Expected text, but response is of type 'json'."
+        ):
+            get_response_of_type(mock_response, "text")
 
-def test_get_response_of_type_text(mock_successful_response):
-    mock_successful_response.headers = {"Content-Type": "text/html"}
-    mock_successful_response.text = "This is some text content"
+        mock_response.headers = {"Content-Type": "text/html"}
+        mock_response.text = "This is some text content"
 
-    result = get_response_of_type(mock_successful_response, "text")
-    assert result == "This is some text content"
-    mock_successful_response.text = "This is some text content"
+        with self.assertRaisesRegex(
+            ValueError, "Type mismatch: Expected json, but response is of type 'text'."
+        ):
+            get_response_of_type(mock_response, "json")
 
+    def test_get_response_of_type_missing_content_type(self):
+        mock_response = MagicMock(spec=Response)
+        mock_response.headers = {}
+        mock_response.content = b"unknown content"
 
-def test_get_response_of_type_bytes(mock_successful_response):
-    mock_successful_response.headers = {"Content-Type": "application/octet-stream"}
-    mock_successful_response.content = (
-        b"binary content"  # Mocking the content attribute
-    )
+        result = get_response_of_type(mock_response, "bytes")
+        self.assertEqual(result, b"unknown content")
 
-    result = get_response_of_type(mock_successful_response, "bytes")
-    assert result == b"binary content"
-    mock_successful_response.content = b"binary content"
+    def test_get_response_of_type_invalid_content_for_bytes(self):
+        mock_response = MagicMock(spec=Response)
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"data": "value"}  # Mocking the JSON response
 
+        with self.assertRaisesRegex(
+            ValueError, "Type mismatch: Expected bytes, but response is of type 'json'."
+        ):
+            get_response_of_type(mock_response, "bytes")
 
-def test_get_response_of_type_invalid_response_type():
-    with pytest.raises(
-        TypeError, match="Invalid input: response_data must be a Response, got 'dict'."
-    ):
-        get_response_of_type({}, "json")
+    def test_build_api_url_no_parameters(self):
+        api_endpoint = "data"
+        expected_url = (
+            "http://example.com/api/data/?portal_type=DataSet" "&fullobjects=1"
+        )
+        result = build_api_url(url, api_endpoint)
+        self.assertEqual(result, expected_url)
 
+    def test_build_api_url_with_metadata_fields(self):
+        api_endpoint = "data"
+        metadata_fields = ["field1", "field2"]
+        expected_url = (
+            "http://example.com/api/data/?portal_type=DataSet"
+            "&fullobjects=1&metadata_fields=field1%2Cfield2"
+        )
+        result = build_api_url(url, api_endpoint, metadata_fields)
+        self.assertEqual(result, expected_url)
 
-def test_get_response_of_type_invalid_data_type(mock_successful_response):
-    mock_successful_response.headers = {"Content-Type": "application/json"}
+    def test_build_api_url_with_datasets_request_false(self):
+        api_endpoint = "data"
+        expected_url = "http://example.com/api/data"
+        result = build_api_url(url, api_endpoint, datasets_request=False)
+        self.assertEqual(result, expected_url)
 
-    with pytest.raises(
-        ValueError,
-        match=r"Invalid data_type: xml. Must be one of \{'(json|text|bytes)', '(json|text|bytes)', '(json|text|bytes)'\}.",
-    ):
-        get_response_of_type(mock_successful_response, "xml")
+    def test_spinner(self):
+        status_event = threading.Event()
 
+        message = "Test task"
+        output = StringIO()
 
-def test_get_response_of_type_content_type_mismatch(mock_successful_response):
-    mock_successful_response.headers = {"Content-Type": "application/json"}
-    mock_successful_response.json.return_value = {"key": "value"}
+        status_event.set()
+        with redirect_stdout(output):
+            spinner_thread = threading.Thread(
+                target=spinner, args=(status_event, message)
+            )
+            spinner_thread.start()
+            time.sleep(1.2)
+            status_event.clear()
+            spinner_thread.join()
 
-    with pytest.raises(
-        ValueError,
-        match="Type mismatch: Expected text, but response is of type 'json'.",
-    ):
-        get_response_of_type(mock_successful_response, "text")
-
-    mock_successful_response.headers = {"Content-Type": "text/html"}
-    mock_successful_response.text = "This is some text content"
-
-    with pytest.raises(
-        ValueError,
-        match="Type mismatch: Expected json, but response is of type 'text'.",
-    ):
-        get_response_of_type(mock_successful_response, "json")
-
-
-def test_get_response_of_type_missing_content_type(mock_successful_response):
-    mock_successful_response.headers = {}
-    mock_successful_response.content = b"unknown content"
-
-    result = get_response_of_type(mock_successful_response, "bytes")
-    assert result == b"unknown content"
-    assert mock_successful_response.content == b"unknown content"
-
-
-def test_get_response_of_type_invalid_content_for_bytes(mock_successful_response):
-    mock_successful_response.headers = {"Content-Type": "application/json"}
-    mock_successful_response.json.return_value = {
-        "data": "value"
-    }  # Mocking the JSON response
-
-    with pytest.raises(
-        ValueError,
-        match="Type mismatch: Expected bytes, but response is of type 'json'.",
-    ):
-        get_response_of_type(mock_successful_response, "bytes")
-
-
-def test_build_api_url_no_parameters():
-    api_endpoint = "data"
-    expected_url = "http://example.com/api/data/?portal_type=DataSet" "&fullobjects=1"
-    result = build_api_url(url, api_endpoint)
-    assert result == expected_url
-
-
-def test_build_api_url_with_metadata_fields():
-    api_endpoint = "data"
-    metadata_fields = ["field1", "field2"]
-    expected_url = (
-        "http://example.com/api/data/?portal_type=DataSet"
-        "&fullobjects=1&metadata_fields=field1%2Cfield2"
-    )
-    result = build_api_url(url, api_endpoint, metadata_fields)
-    assert result == expected_url
-
-
-def test_build_api_url_with_datasets_request_false():
-    api_endpoint = "data"
-    expected_url = "http://example.com/api/data"
-    result = build_api_url(url, api_endpoint, datasets_request=False)
-    assert result == expected_url
-
-
-def test_spinner():
-    status_event = threading.Event()
-
-    message = "Test task"
-    output = StringIO()
-
-    status_event.set()
-    with redirect_stdout(output):
-        spinner_thread = threading.Thread(target=spinner, args=(status_event, message))
-        spinner_thread.start()
-        time.sleep(1.2)
-        status_event.clear()
-        spinner_thread.join()
-
-    spinner_output = output.getvalue()
-    assert "Test task" in spinner_output
-    assert "Elapsed time:" in spinner_output
-    assert "Done!" in spinner_output
+        spinner_output = output.getvalue()
+        self.assertIn(message, spinner_output)
+        self.assertIn("Elapsed time:", spinner_output)
+        self.assertIn("Done!", spinner_output)

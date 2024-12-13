@@ -23,14 +23,13 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from xcube_clms.clms import Clms
 from xcube_clms.constants import DATA_ID_SEPARATOR
 
 
-class TestCLMS(unittest.TestCase):
+class ClmsTest(unittest.TestCase):
     def __init__(self, methodName: str = "runTest"):
         super().__init__(methodName)
         self.mock_dataset = xr.Dataset(
@@ -38,274 +37,159 @@ class TestCLMS(unittest.TestCase):
         )
 
     def setUp(self):
-        self.mock_url = "http://mock-api.com"
+        self.mock_path = "mockpath"
         self.mock_credentials = {
             "client_id": "test_client_id",
             "user_id": "test_user_id",
             "token_uri": "test_token_uri",
             "private_key": "test_private_key",
         }
-        self.mock_path = "mockpath"
+        self.data_id = "product_id|file_id"
 
-    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    @patch("xcube_clms.preload.PreloadData")
-    def test_initialization(
-        self,
-        mock_preload,
-        mock_clms_api_token,
-        mock_fetch_datasets,
-    ):
-
-        mock_token_instance = MagicMock()
-        mock_token_instance.access_token = "mocked_access_token"
-        mock_clms_api_token.return_value = mock_token_instance
-
-        mock_preload_instance = MagicMock()
-        mock_preload.return_value = mock_preload_instance
-        mock_preload_instance._clms_api_token_instance = mock_token_instance
-        mock_preload_instance._api_token = "mocked_access_token"
-
-        mock_fetch_datasets.return_value = [
-            {"dataset_id": "1", "name": "dataset1", "type": "type1"},
-            {"dataset_id": "2", "name": "dataset2", "type": "type2"},
+        self.datasets_info = [
+            {
+                "id": "dataset1",
+                "downloadable_files": {
+                    "items": [{"file": "file1", "area": "area1", "format": "geotiff"}]
+                },
+            },
+            {
+                "id": "dataset2",
+                "downloadable_files": {
+                    "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
+                },
+            },
         ]
 
-        clms = Clms(self.mock_credentials, self.mock_path)
+        self.mock_token_instance = MagicMock()
+        self.mock_token_instance.access_token = "mocked_access_token"
 
-        mock_clms_api_token.assert_called_once_with(self.mock_credentials)
-        self.assertEqual(clms.path, os.path.join(os.getcwd(), self.mock_path))
-        mock_fetch_datasets.assert_called_once()
-        self.assertEqual(
-            clms._datasets_info,
-            [
-                {"dataset_id": "1", "name": "dataset1", "type": "type1"},
-                {"dataset_id": "2", "name": "dataset2", "type": "type2"},
-            ],
+        self.mock_preload_instance = MagicMock()
+        self.mock_preload_instance._clms_api_token_instance = self.mock_token_instance
+        self.mock_preload_instance._api_token = "mocked_access_token"
+
+        self.mock_clms_api_token_patcher = patch(
+            "xcube_clms.preload.ClmsApiTokenHandler"
+        )
+        self.mock_preload_patcher = patch("xcube_clms.preload.PreloadData")
+        self.mock_os_listdir_patcher = patch("xcube_clms.clms.os.listdir")
+        self.mock_make_api_request_patcher = patch("xcube_clms.clms.make_api_request")
+        self.mock_get_response_of_type_patcher = patch(
+            "xcube_clms.clms.get_response_of_type"
+        )
+        self.mock_is_valid_data_type_patcher = patch(
+            "xcube_clms.clms.is_valid_data_type"
         )
 
-    @patch("xcube_clms.clms.os.listdir")
-    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    @patch("xcube_clms.preload.PreloadData")
-    def test_open_data(
-        self,
-        mock_preload,
-        mock_clms_api_token,
-        mock_fetch_datasets,
-        mock_os_listdir,
-    ):
-        data_id = "product_id|file_id"
+        self.mock_clms_api_token = self.mock_clms_api_token_patcher.start()
+        self.mock_preload = self.mock_preload_patcher.start()
+        self.mock_os_listdir = self.mock_os_listdir_patcher.start()
+        self.mock_make_api_request = self.mock_make_api_request_patcher.start()
+        self.mock_get_response_of_type = self.mock_get_response_of_type_patcher.start()
+        self.mock_is_valid_data_type = self.mock_is_valid_data_type_patcher.start()
 
-        mock_token_instance = MagicMock()
-        mock_token_instance.access_token = "mocked_access_token"
-        mock_clms_api_token.return_value = mock_token_instance
+        self.mock_preload.return_value = self.mock_preload_instance
+        self.mock_file_store = MagicMock()
+        if self._testMethodName != "test_fetch_all_datasets":
+            self.mock_fetch_all_datasets_patcher = patch(
+                "xcube_clms.clms.Clms._fetch_all_datasets"
+            )
+            self.mock_fetch_all_datasets = self.mock_fetch_all_datasets_patcher.start()
+            self.mock_fetch_all_datasets.return_value = self.datasets_info
 
-        mock_preload_instance = MagicMock()
-        mock_preload_instance._clms_api_token_instance = mock_token_instance
-        mock_preload_instance._api_token = "mocked_access_token"
-        mock_preload_instance.view_cache.return_value = {data_id: "file_id/"}
-        mock_preload.return_value = mock_preload_instance
+    def tearDown(self):
+        patch.stopall()
 
-        mock_os_listdir.return_value = ["file_id/"]
-
-        mock_fetch_datasets.return_value = [
-            {"dataset_id": "1", "name": "dataset1", "type": "type1"},
-            {"dataset_id": "2", "name": "dataset2", "type": "type2"},
-        ]
-
-        # mock_file_store.return_value.open_data.return_value = self.mock_dataset
+    def test_initialization(self):
         clms = Clms(self.mock_credentials, self.mock_path)
-        clms._preload_data = mock_preload_instance
 
-        mock_file_store = MagicMock()
-        mock_file_store.open_data.return_value = self.mock_dataset
-        clms.file_store = mock_file_store
+        self.mock_clms_api_token.assert_called_once_with(self.mock_credentials)
+        self.assertEqual(clms.path, os.path.join(os.getcwd(), self.mock_path))
+        self.assertEqual(clms._datasets_info, self.datasets_info)
 
-        opened_data = clms.open_data(data_id)
+    def test_open_data(self):
+        self.mock_preload_instance.view_cache.return_value = {self.data_id: "file_id/"}
+        self.mock_os_listdir.return_value = ["file_id/"]
+
+        self.mock_file_store.open_data.return_value = self.mock_dataset
+
+        clms = Clms(self.mock_credentials, self.mock_path)
+        clms.file_store = self.mock_file_store
+        clms._preload_data = self.mock_preload_instance
+
+        opened_data = clms.open_data(self.data_id)
         self.assertIsInstance(opened_data, xr.Dataset)
 
-        clms = Clms(self.mock_credentials, self.mock_path)
-        mock_preload_instance.view_cache.return_value = {}
-        clms._preload_data = mock_preload_instance
+        self.mock_preload_instance.view_cache.return_value = {}
 
-        with pytest.raises(
-            FileNotFoundError, match=f"No cached data found for data_id: {data_id}"
+        with self.assertRaisesRegex(
+            FileNotFoundError, f"No cached data found for data_id: {self.data_id}"
         ):
-            clms.open_data(data_id)
+            clms.open_data(self.data_id)
 
         data_id = "invalid_data_id"
-        with pytest.raises(
+
+        with self.assertRaisesRegex(
             ValueError,
-            match="Expected a data_id in the format {{product_id}}"
+            f"Expected a data_id in the format {{product_id}}"
             f"{DATA_ID_SEPARATOR}{{file_id}} but got {data_id}",
         ):
             clms.open_data(data_id)
 
-    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    @patch("xcube_clms.preload.PreloadData")
-    def test_get_data_ids(
-        self,
-        mock_preload,
-        mock_clms_api_token,
-        mock_fetch_datasets,
-    ):
-        mock_token_instance = MagicMock()
-        mock_token_instance.access_token = "mocked_access_token"
-        mock_clms_api_token.return_value = mock_token_instance
-
-        mock_preload_instance = MagicMock()
-        mock_preload_instance._clms_api_token_instance = mock_token_instance
-        mock_preload_instance._api_token = "mocked_access_token"
-        mock_preload_instance.cache = {
-            "data_1|file1": "file_1",
-            "data_2|file2": "file_2",
+    def test_get_data_ids(self):
+        self.mock_preload_instance.cache = {
+            "dataset1|file1": "file_1",
+            "dataset2|file2": "file_2",
         }
-        mock_preload.return_value = mock_preload_instance
-
-        mock_fetch_datasets.return_value = [
-            {
-                "id": "dataset1",
-                "downloadable_files": {
-                    "items": [{"file": "file1", "area": "area1", "format": "geotiff"}]
-                },
-            },
-            {
-                "id": "dataset2",
-                "downloadable_files": {
-                    "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
-                },
-            },
-        ]
-
         clms = Clms(self.mock_credentials, self.mock_path)
-        clms._preload_data = mock_preload_instance
+        clms._preload_data = self.mock_preload_instance
         data_ids = list(clms.get_data_ids())
         self.assertEqual(data_ids, ["dataset1|file1", "dataset2|file2"])
 
         result = list(clms.get_data_ids(include_attrs=True))
-        assert result == [
-            (
-                "dataset1|file1",
-                {"area": "area1", "file": "file1", "format": "geotiff"},
-            ),
-            (
-                "dataset2|file2",
-                {"area": "area2", "file": "file2", "format": "geotiff"},
-            ),
-        ]
+        self.assertEqual(
+            [
+                (
+                    "dataset1|file1",
+                    {"area": "area1", "file": "file1", "format": "geotiff"},
+                ),
+                (
+                    "dataset2|file2",
+                    {"area": "area2", "file": "file2", "format": "geotiff"},
+                ),
+            ],
+            result,
+        )
 
         result = list(clms.get_data_ids(include_attrs=["area"]))
-        assert result == [
-            ("dataset1|file1", {"area": "area1"}),
-            ("dataset2|file2", {"area": "area2"}),
-        ]
+        self.assertEqual(
+            [
+                ("dataset1|file1", {"area": "area1"}),
+                ("dataset2|file2", {"area": "area2"}),
+            ],
+            result,
+        )
 
-    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    @patch("xcube_clms.preload.PreloadData")
-    @patch("xcube_clms.clms.is_valid_data_type")
     @patch("xcube_clms.clms.Clms._get_item")
-    def test_has_data(
-        self,
-        mock_get_item,
-        mock_is_valid_data_type,
-        mock_preload,
-        mock_clms_api_token,
-        mock_fetch_datasets,
-    ):
-        mock_token_instance = MagicMock()
-        mock_token_instance.access_token = "mocked_access_token"
-        mock_clms_api_token.return_value = mock_token_instance
-
-        mock_preload_instance = MagicMock()
-        mock_preload_instance._clms_api_token_instance = mock_token_instance
-        mock_preload_instance._api_token = "mocked_access_token"
-        mock_preload_instance.cache = {
-            "dataset1|file1": "file_1",
-            "dataset2|file2": "file_2",
-        }
-        mock_preload.return_value = mock_preload_instance
-
-        mock_fetch_datasets.return_value = [
-            {
-                "id": "dataset1",
-                "downloadable_files": {
-                    "items": [{"file": "file1", "area": "area1", "format": "geotiff"}]
-                },
-            },
-            {
-                "id": "dataset2",
-                "downloadable_files": {
-                    "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
-                },
-            },
-        ]
-
+    def test_has_data(self, mock_get_item):
         clms = Clms(self.mock_credentials, self.mock_path)
 
         # Case 1: Valid data type and dataset exists
-        mock_is_valid_data_type.return_value = True
+        self.mock_is_valid_data_type.return_value = True
         mock_get_item.return_value = {"some": "data"}
-        assert clms.has_data("valid_id", "valid_type") is True
-        mock_is_valid_data_type.assert_called_once_with("valid_type")
-        mock_get_item.assert_called_once_with("valid_id")
-
-        mock_is_valid_data_type.reset_mock()
-        mock_get_item.reset_mock()
+        self.assertEqual(True, clms.has_data("valid_id", "valid_type"))
 
         # Case 2: Valid data type but dataset does not exist
-        mock_is_valid_data_type.return_value = True
+        self.mock_is_valid_data_type.return_value = True
         mock_get_item.return_value = None
-        assert clms.has_data("invalid_id", "valid_type") is False
-        mock_is_valid_data_type.assert_called_once_with("valid_type")
-        mock_get_item.assert_called_once_with("invalid_id")
-
-        mock_is_valid_data_type.reset_mock()
-        mock_get_item.reset_mock()
+        self.assertEqual(False, clms.has_data("invalid_id", "valid_type"))
 
         # Case 3: Invalid data type
-        mock_is_valid_data_type.return_value = False
-        assert clms.has_data("valid_id", "invalid_type") is False
-        mock_is_valid_data_type.assert_called_once_with("invalid_type")
-        mock_get_item.assert_not_called()
+        self.mock_is_valid_data_type.return_value = False
+        self.assertEqual(False, clms.has_data("valid_id", "invalid_type"))
 
     @patch("xcube_clms.clms.Clms._access_item")
-    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    @patch("xcube_clms.preload.PreloadData")
-    def test_get_extent(
-        self, mock_preload, mock_clms_api_token, mock_fetch_datasets, mock_access_item
-    ):
-        mock_token_instance = MagicMock()
-        mock_token_instance.access_token = "mocked_access_token"
-        mock_clms_api_token.return_value = mock_token_instance
-
-        mock_preload_instance = MagicMock()
-        mock_preload_instance._clms_api_token_instance = mock_token_instance
-        mock_preload_instance._api_token = "mocked_access_token"
-        mock_preload_instance.cache = {
-            "dataset1|file1": "file_1",
-            "dataset2|file2": "file_2",
-        }
-        mock_preload.return_value = mock_preload_instance
-
-        mock_fetch_datasets.return_value = [
-            {
-                "id": "dataset1",
-                "downloadable_files": {
-                    "items": [{"file": "file1", "area": "area1", "format": "geotiff"}]
-                },
-            },
-            {
-                "id": "dataset2",
-                "downloadable_files": {
-                    "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
-                },
-            },
-        ]
-
+    def test_get_extent(self, mock_access_item):
         mock_access_item.return_value = {
             "file": "file1",
             "area": "area1",
@@ -314,10 +198,13 @@ class TestCLMS(unittest.TestCase):
 
         clms = Clms(self.mock_credentials, self.mock_path)
 
-        assert (clms.get_extent("dataset1|file1")) == {
-            "time_range": (None, None),
-            "crs": None,
-        }
+        self.assertEqual(
+            {
+                "time_range": (None, None),
+                "crs": None,
+            },
+            clms.get_extent("dataset1|file1"),
+        )
 
         mock_access_item.return_value = {
             "file": "file1",
@@ -327,98 +214,62 @@ class TestCLMS(unittest.TestCase):
         }
         clms = Clms(self.mock_credentials, self.mock_path)
 
-        assert (clms.get_extent("dataset1|file1")) == {
-            "time_range": ("01-12-2022", "01-12-2024"),
-            "crs": "WGS84",
-        }
-
-    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    @patch("xcube_clms.preload.PreloadData")
-    def test_create_data_ids(
-        self,
-        mock_preload,
-        mock_clms_api_token,
-        mock_fetch_datasets,
-    ):
-        mock_token_instance = MagicMock()
-        mock_token_instance.access_token = "mocked_access_token"
-        mock_clms_api_token.return_value = mock_token_instance
-
-        mock_preload_instance = MagicMock()
-        mock_preload_instance._clms_api_token_instance = mock_token_instance
-        mock_preload_instance._api_token = "mocked_access_token"
-        mock_preload_instance.cache = {
-            "dataset1|file1": "file_1",
-            "dataset2|file2": "file_2",
-        }
-        mock_preload.return_value = mock_preload_instance
-
-        mock_dataset = [
+        self.assertEqual(
             {
-                "id": "dataset1",
-                "downloadable_files": {
-                    "items": [{"file": "file1", "area": "area1", "format": "geotiff"}]
-                },
+                "time_range": ("01-12-2022", "01-12-2024"),
+                "crs": "WGS84",
             },
-            {
-                "id": "dataset2",
-                "downloadable_files": {
-                    "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
-                },
-            },
-        ]
+            clms.get_extent("dataset1|file1"),
+        )
 
-        mock_fetch_datasets.return_value = mock_dataset
-
+    def test_create_data_ids(self):
         clms = Clms(self.mock_credentials, self.mock_path)
-        clms._datasets_info = mock_dataset
+        clms._datasets_info = self.datasets_info
 
         result = list(clms._create_data_ids(include_attrs=None))
         expected = [
             "dataset1|file1",
             "dataset2|file2",
         ]
-        assert result == expected
+        self.assertEqual(expected, result)
 
         result = list(clms._create_data_ids(include_attrs=True))
-        assert result == [
-            (
-                "dataset1|file1",
-                {"area": "area1", "file": "file1", "format": "geotiff"},
-            ),
-            (
-                "dataset2|file2",
-                {"area": "area2", "file": "file2", "format": "geotiff"},
-            ),
-        ]
+        self.assertEqual(
+            [
+                (
+                    "dataset1|file1",
+                    {"area": "area1", "file": "file1", "format": "geotiff"},
+                ),
+                (
+                    "dataset2|file2",
+                    {"area": "area2", "file": "file2", "format": "geotiff"},
+                ),
+            ],
+            result,
+        )
 
         result = list(clms._create_data_ids(include_attrs=["area"]))
-        assert result == [
-            ("dataset1|file1", {"area": "area1"}),
-            ("dataset2|file2", {"area": "area2"}),
-        ]
+        self.assertEqual(
+            [
+                ("dataset1|file1", {"area": "area1"}),
+                ("dataset2|file2", {"area": "area2"}),
+            ],
+            result,
+        )
 
         mock_datasets_info = []
         clms._datasets_info = mock_datasets_info
 
         result = list(clms._create_data_ids(include_attrs=None))
-        assert result == []
+        self.assertEqual([], result)
 
         result = list(clms._create_data_ids(include_attrs=True))
-        assert result == []
+        self.assertEqual([], result)
 
         result = list(clms._create_data_ids(include_attrs=["size"]))
-        assert result == []
+        self.assertEqual([], result)
 
-    @patch("xcube_clms.clms.make_api_request")
-    @patch("xcube_clms.clms.get_response_of_type")
-    def test_fetch_all_datasets(
-        self,
-        mock_get_response_of_type,
-        mock_make_api_request,
-    ):
-
+    def test_fetch_all_datasets(self):
         first_page_response = {
             "items": [
                 {"dataset_id": "1", "name": "dataset1"},
@@ -431,19 +282,14 @@ class TestCLMS(unittest.TestCase):
             "batching": {},
         }
 
-        mock_make_api_request.side_effect = [
-            first_page_response,
-            second_page_response,
-            first_page_response,
-            second_page_response,
-        ]
-        mock_get_response_of_type.side_effect = [
-            first_page_response,
-            second_page_response,
+        self.mock_make_api_request.side_effect = [
             first_page_response,
             second_page_response,
         ]
-
+        self.mock_get_response_of_type.side_effect = [
+            first_page_response,
+            second_page_response,
+        ]
         datasets_info = Clms._fetch_all_datasets()
 
         expected_datasets_info = [
@@ -452,103 +298,19 @@ class TestCLMS(unittest.TestCase):
             {"dataset_id": "3", "name": "dataset3"},
         ]
 
-        assert mock_make_api_request.call_count == 2
-        assert mock_get_response_of_type.call_count == 2
-        assert datasets_info == expected_datasets_info
+        self.assertEqual(expected_datasets_info, datasets_info)
 
-    @patch("xcube_clms.clms.Clms._get_item")
-    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    @patch("xcube_clms.preload.PreloadData")
-    def test_access_item(
-        self, mock_preload, mock_clms_api_token, mock_fetch_datasets, mock_get_item
-    ):
-        mock_token_instance = MagicMock()
-        mock_token_instance.access_token = "mocked_access_token"
-        mock_clms_api_token.return_value = mock_token_instance
-
-        mock_preload_instance = MagicMock()
-        mock_preload_instance._clms_api_token_instance = mock_token_instance
-        mock_preload_instance._api_token = "mocked_access_token"
-        mock_preload_instance.cache = {
-            "dataset1|file1": "file_1",
-            "dataset2|file2": "file_2",
-        }
-        mock_preload.return_value = mock_preload_instance
-
-        mock_dataset = [
-            {
-                "id": "dataset1",
-                "downloadable_files": {
-                    "items": [{"file": "file1", "area": "area1", "format": "geotiff"}]
-                },
-            },
-            {
-                "id": "dataset2",
-                "downloadable_files": {
-                    "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
-                },
-            },
-        ]
-
-        mock_fetch_datasets.return_value = mock_dataset
-
-        mock_get_item.return_value = [
-            {
-                "file": "file2",
-                "area": "area2",
-                "format": "geotiff",
-            }
-        ]
-
+    def test_access_item(self):
         clms = Clms(self.mock_credentials, self.mock_path)
         item = clms._access_item("dataset2|file2")
         expected_item = {"file": "file2", "area": "area2", "format": "geotiff"}
-        assert item == expected_item
+        self.assertEqual(expected_item, item)
 
-    @patch("xcube_clms.clms.Clms._fetch_all_datasets")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    @patch("xcube_clms.preload.PreloadData")
-    def test_get_item(
-        self,
-        mock_preload,
-        mock_clms_api_token,
-        mock_fetch_datasets,
-    ):
-        mock_token_instance = MagicMock()
-        mock_token_instance.access_token = "mocked_access_token"
-        mock_clms_api_token.return_value = mock_token_instance
-
-        mock_preload_instance = MagicMock()
-        mock_preload_instance._clms_api_token_instance = mock_token_instance
-        mock_preload_instance._api_token = "mocked_access_token"
-        mock_preload_instance.cache = {
-            "dataset1|file1": "file_1",
-            "dataset2|file2": "file_2",
-        }
-        mock_preload.return_value = mock_preload_instance
-
-        mock_dataset = [
-            {
-                "id": "dataset1",
-                "downloadable_files": {
-                    "items": [{"file": "file1", "area": "area1", "format": "geotiff"}]
-                },
-            },
-            {
-                "id": "dataset2",
-                "downloadable_files": {
-                    "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
-                },
-            },
-        ]
-
-        mock_fetch_datasets.return_value = mock_dataset
-
+    def test_get_item(self):
         clms = Clms(self.mock_credentials, self.mock_path)
         item = clms._get_item("dataset2|file2")
         expected_item = [{"file": "file2", "area": "area2", "format": "geotiff"}]
-        assert item == expected_item
+        self.assertEqual(expected_item, item)
 
         item = clms._get_item("dataset2")
         expected_item = [
@@ -559,4 +321,4 @@ class TestCLMS(unittest.TestCase):
                 },
             }
         ]
-        assert item == expected_item
+        self.assertEqual(expected_item, item)

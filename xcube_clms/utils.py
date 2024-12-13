@@ -246,7 +246,7 @@ def get_response_of_type(api_response: Response, data_type: Union[ResponseType, 
     if "application/json" in content_type:
         response_data_type = "json"
         response = api_response.json()
-    elif "text/html" in content_type:
+    elif "text" in content_type:
         response_data_type = "text"
         response = api_response.text
     else:
