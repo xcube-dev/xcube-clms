@@ -19,12 +19,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from xcube.core.store import MutableDataStore
+from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, \
+    PreloadStatus
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.cache_manager import CacheManager
@@ -37,16 +37,18 @@ from xcube_clms.constants import (
 )
 from xcube_clms.download_manager import DownloadTaskManager
 from xcube_clms.processor import FileProcessor
-from xcube_clms.utils import (
-    spinner,
-)
 
 
-class PreloadData:
+class ClmsPreloadHandle(ExecutorPreloadHandle):
     """Handles the preloading of data into the cache store."""
 
     def __init__(
-        self, url: str, credentials: dict, path: str, cleanup: bool | None = None
+        self,
+        data_id_maps: dict[str, dict[str, dict[str, Any]]],
+        url: str,
+        credentials: dict,
+        path: str,
+        cleanup: bool | None = None,
     ) -> None:
         """Initializes the PreloadData instance.
 
@@ -59,6 +61,8 @@ class PreloadData:
             cleanup: Whether to clean up the extracted files from the zip
             download. Defaults to True.
         """
+        self.data_id_maps = data_id_maps
+        super().__init__(tuple(self.data_id_maps.keys()))
         self._url: str = url
         self._credentials: dict = {}
         self.path: str = path
@@ -71,65 +75,59 @@ class PreloadData:
         self._cache_manager = CacheManager(self.path)
         self._cache_manager.refresh_cache()
         self.file_store: MutableDataStore = self._cache_manager.file_store
-        self._file_processor = FileProcessor(self.path, self.file_store)
+        self._file_processor = FileProcessor(self.path, self.file_store, self.cleanup)
         self._download_manager = DownloadTaskManager(
             self._token_handler, self._url, self.path
         )
 
-    def initiate_preload(self, data_id_maps: dict[str, Any]) -> None:
-        """Initiates the preload process for a set of data IDs.
+    # def initiate_preload(self, data_id_maps: dict[str, Any]) -> None:
+    #     """Initiates the preload process for a set of data IDs.
+    #
+    #     Args:
+    #         data_id_maps : Mapping of data IDs to their metadata. Here,
+    #             we use the item and product keys mapped to their data ids to
+    #             preload the data.
+    #     """
+    #     self.refresh_cache()
+    #     # We create a status event for each of the tasks so that we can
+    #     # signal the thread that it can proceed further from the queue.
+    #     for data_id_map_key in data_id_maps.keys():
+    #         self._task_control[data_id_map_key] = {
+    #             "status_event": threading.Event(),
+    #         }
+    #
+    #     executor = ThreadPoolExecutor()
+    #     for data_id_map in data_id_maps.items():
+    #         executor.submit(
+    #             self._initiate_preload,
+    #             data_id_map,
+    #             self._task_control[data_id_map[0]]["status_event"],
+    #         )
 
-        Args:
-            data_id_maps : Mapping of data IDs to their metadata. Here,
-                we use the item and product keys mapped to their data ids to
-                preload the data.
-        """
-        self.refresh_cache()
-        # We create a status event for each of the tasks so that we can
-        # signal the thread that it can proceed further from the queue.
-        for data_id_map_key in data_id_maps.keys():
-            self._task_control[data_id_map_key] = {
-                "status_event": threading.Event(),
-            }
-
-        executor = ThreadPoolExecutor()
-        for data_id_map in data_id_maps.items():
-            executor.submit(
-                self._initiate_preload,
-                data_id_map,
-                self._task_control[data_id_map[0]]["status_event"],
-            )
-
-    def _initiate_preload(
-        self, data_id_map: tuple[str, dict[str, Any]], status_event: threading.Event
+    def preload_data(
+        self,
+        data_id: str,
     ) -> None:
-        """Processes a single preload task using a separate thread.
-
-        Each thread has its own status_event to indicate when to proceed to
-        further subtasks like extracting the zip files and processing them.
-
-        Args:
-            data_id_map: Tuple containing the data ID and its metadata as a
-                dict.
-            status_event: Event to manage task status and the visibility of
-                the spinner.
-        """
-        data_id = data_id_map[0]
+        """Processes a single preload task using a separate thread."""
+        data_id_info = self.data_id_maps.get(data_id)
         if data_id in self.view_cache().keys():
-            LOG.info(f"The data for {data_id} is already cached at {self.path}")
+            self.notify(
+                PreloadState(
+                    data_id,
+                    status=PreloadStatus.stopped,
+                    progress=100,
+                    message=f"The data for {data_id} is already cached at {self.path}",
+                )
+            )
             return
 
         task_id = self._download_manager.request_download(
             data_id=data_id,
-            item=data_id_map[1].get("item"),
-            product=data_id_map[1].get("product"),
+            item=data_id_info.get("item"),
+            product=data_id_info.get("product"),
         )
 
-        spinner_thread = threading.Thread(
-            target=spinner, args=(status_event, f"{task_id}")
-        )
         status_event.set()
-        spinner_thread.start()
 
         while status_event.is_set():
             status, _ = self._download_manager.get_current_requests_status(
@@ -138,7 +136,6 @@ class PreloadData:
             if status == COMPLETE:
                 LOG.info(f"Status: {status} for {data_id} with task ID {task_id}.")
                 status_event.clear()
-                spinner_thread.join()
                 download_url, file_size = self._download_manager.get_download_url(
                     task_id
                 )

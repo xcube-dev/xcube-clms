@@ -31,7 +31,6 @@ from .constants import (
     DEFAULT_PRELOAD_CACHE_FOLDER,
     CLMS_API_URL,
 )
-from .preload import PreloadData
 from .utils import (
     is_valid_data_type,
     make_api_request,
@@ -78,10 +77,10 @@ class Clms:
                 True.
         """
         self.path: str = os.path.join(os.getcwd(), path or DEFAULT_PRELOAD_CACHE_FOLDER)
-        self._preload_data = PreloadData(
-            CLMS_API_URL, credentials, self.path, cleanup=cleanup
-        )
-        self.file_store = self._preload_data.file_store
+        # self._preload_data = PreloadData(
+        #     CLMS_API_URL, credentials, self.path, cleanup=cleanup
+        # )
+        # self.file_store = self._preload_data.file_store
         self._datasets_info: list[dict[str, Any]] = Clms._fetch_all_datasets()
 
     def open_data(
@@ -204,7 +203,7 @@ class Clms:
             }
             for data_id in data_ids
         }
-        self._preload_data.initiate_preload(data_id_maps)
+        # return ClmsPreloadHandle(data_id_maps)
 
     def _create_data_ids(
         self,

@@ -144,10 +144,6 @@ class ClmsDataStore(DataStore, ABC):
         pass
 
     def preload_data(self, *data_ids: str, **preload_params):
-        schema = self.get_preload_params_schema()
+        schema = self.get_preload_data_params_schema()
         schema.validate_instance(preload_params)
         return self._clms.preload_data(*data_ids, **preload_params)
-
-    @classmethod
-    def get_preload_params_schema(cls):
-        return JsonObjectSchema(additional_properties=False)
