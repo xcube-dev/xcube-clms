@@ -5,7 +5,7 @@ dependencies:
   # Required
   - python>=3.10
   - xarray
-  - xcube >= 1.7.0
+  - xcube >= 1.7.1
   - cryptography
   - tqdm
   - ipywidgets
