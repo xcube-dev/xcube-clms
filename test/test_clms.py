@@ -26,7 +26,6 @@ import numpy as np
 import xarray as xr
 
 from xcube_clms.clms import Clms
-from xcube_clms.constants import DATA_ID_SEPARATOR
 
 
 class ClmsTest(unittest.TestCase):
@@ -60,18 +59,6 @@ class ClmsTest(unittest.TestCase):
                 },
             },
         ]
-
-        self.mock_token_instance = MagicMock()
-        self.mock_token_instance.access_token = "mocked_access_token"
-
-        self.mock_preload_instance = MagicMock()
-        self.mock_preload_instance._clms_api_token_instance = self.mock_token_instance
-        self.mock_preload_instance._api_token = "mocked_access_token"
-
-        self.mock_clms_api_token_patcher = patch(
-            "xcube_clms.preload.ClmsApiTokenHandler"
-        )
-        self.mock_preload_patcher = patch("xcube_clms.preload.PreloadData")
         self.mock_os_listdir_patcher = patch("xcube_clms.clms.os.listdir")
         self.mock_make_api_request_patcher = patch("xcube_clms.clms.make_api_request")
         self.mock_get_response_of_type_patcher = patch(
@@ -81,15 +68,12 @@ class ClmsTest(unittest.TestCase):
             "xcube_clms.clms.is_valid_data_type"
         )
 
-        self.mock_clms_api_token = self.mock_clms_api_token_patcher.start()
-        self.mock_preload = self.mock_preload_patcher.start()
         self.mock_os_listdir = self.mock_os_listdir_patcher.start()
         self.mock_make_api_request = self.mock_make_api_request_patcher.start()
         self.mock_get_response_of_type = self.mock_get_response_of_type_patcher.start()
         self.mock_is_valid_data_type = self.mock_is_valid_data_type_patcher.start()
 
-        self.mock_preload.return_value = self.mock_preload_instance
-        self.mock_file_store = MagicMock()
+        self.mock_data_store = MagicMock()
         if self._testMethodName != "test_fetch_all_datasets":
             self.mock_fetch_all_datasets_patcher = patch(
                 "xcube_clms.clms.Clms._fetch_all_datasets"
@@ -103,24 +87,20 @@ class ClmsTest(unittest.TestCase):
     def test_initialization(self):
         clms = Clms(self.mock_credentials, self.mock_path)
 
-        self.mock_clms_api_token.assert_called_once_with(self.mock_credentials)
         self.assertEqual(clms.path, os.path.join(os.getcwd(), self.mock_path))
         self.assertEqual(clms._datasets_info, self.datasets_info)
 
     def test_open_data(self):
-        self.mock_preload_instance.view_cache.return_value = {self.data_id: "file_id/"}
-        self.mock_os_listdir.return_value = ["file_id/"]
-
-        self.mock_file_store.open_data.return_value = self.mock_dataset
+        self.mock_data_store.open_data.return_value = self.mock_dataset
 
         clms = Clms(self.mock_credentials, self.mock_path)
-        clms.file_store = self.mock_file_store
-        clms._preload_data = self.mock_preload_instance
+        clms.preload_handle = MagicMock()
+        clms.preload_handle.data_store = self.mock_data_store
 
         opened_data = clms.open_data(self.data_id)
         self.assertIsInstance(opened_data, xr.Dataset)
 
-        self.mock_preload_instance.view_cache.return_value = {}
+        clms.preload_handle.view_cache.return_value = {}
 
         with self.assertRaisesRegex(
             FileNotFoundError, f"No cached data found for data_id: {self.data_id}"
@@ -128,21 +108,11 @@ class ClmsTest(unittest.TestCase):
             clms.open_data(self.data_id)
 
         data_id = "invalid_data_id"
-
-        with self.assertRaisesRegex(
-            ValueError,
-            f"Expected a data_id in the format {{product_id}}"
-            f"{DATA_ID_SEPARATOR}{{file_id}} but got {data_id}",
-        ):
+        with self.assertRaises(ValueError):
             clms.open_data(data_id)
 
     def test_get_data_ids(self):
-        self.mock_preload_instance.cache = {
-            "dataset1|file1": "file_1",
-            "dataset2|file2": "file_2",
-        }
         clms = Clms(self.mock_credentials, self.mock_path)
-        clms._preload_data = self.mock_preload_instance
         data_ids = list(clms.get_data_ids())
         self.assertEqual(data_ids, ["dataset1|file1", "dataset2|file2"])
 

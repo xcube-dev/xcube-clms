@@ -36,14 +36,14 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
             "xcube_clms.api_token_handler.get_response_of_type"
         )
         self.mock_time_patcher = patch("time.time")
-        self.mock_log_info_patcher = patch("xcube_clms.api_token_handler.LOG.info")
+        self.mock_log_debug_patcher = patch("xcube_clms.api_token_handler.LOG.debug")
         self.mock_log_error_patcher = patch("xcube_clms.api_token_handler.LOG.error")
 
         self.mock_jwt_encode = self.mock_jwt_encode_patcher.start()
         self.mock_make_api_request = self.mock_make_api_request_patcher.start()
         self.mock_get_response_of_type = self.mock_get_response_of_type_patcher.start()
         self.mock_time = self.mock_time_patcher.start()
-        self.mock_log_info = self.mock_log_info_patcher.start()
+        self.mock_log_debug = self.mock_log_debug_patcher.start()
         self.mock_log_error = self.mock_log_error_patcher.start()
 
         self.credentials = {
@@ -57,7 +57,7 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
         patch.stopall()
 
     def test_create_jwt_grant(self):
-        self.mock_log_info.reset_mock()
+        self.mock_log_debug.reset_mock()
         self.mock_get_response_of_type.return_value = {
             "access_token": "mocked_access_token"
         }
@@ -65,7 +65,7 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
         token_handler = ClmsApiTokenHandler(self.credentials)
 
         self.assertEqual(token_handler.api_token, "mocked_access_token")
-        self.mock_log_info.assert_called()
+        self.mock_log_debug.assert_called()
 
     def test_is_token_expired(self):
         self.mock_time.return_value = 1234567890
@@ -78,7 +78,7 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
         self.assertFalse(token_handler.is_token_expired())
 
     def test_refresh_token(self):
-        self.mock_log_info.reset_mock()
+        self.mock_log_debug.reset_mock()
         self.mock_get_response_of_type.return_value = {
             "access_token": "mocked_access_token"
         }
@@ -87,7 +87,7 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
         token_handler = ClmsApiTokenHandler(self.credentials)
 
         self.assertEqual(token_handler.api_token, "mocked_access_token")
-        self.mock_log_info.assert_called()
+        self.mock_log_debug.assert_called()
 
     def test_refresh_token_failure(self):
         self.mock_log_error.reset_mock()
@@ -100,7 +100,7 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
 
     @patch("xcube_clms.api_token_handler.ClmsApiTokenHandler.is_token_expired")
     def test_refresh_token_expired(self, mock_is_token_expired):
-        self.mock_log_info.reset_mock()
+        self.mock_log_debug.reset_mock()
         self.mock_get_response_of_type.return_value = {
             "access_token": "mocked_access_token"
         }
@@ -117,5 +117,5 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
         token_handler.refresh_token()
 
         self.assertTrue(token_handler.is_token_expired())
-        self.mock_log_info.assert_called()
+        self.mock_log_debug.assert_called()
         self.assertEqual(token_handler.api_token, "new_mocked_access_token")

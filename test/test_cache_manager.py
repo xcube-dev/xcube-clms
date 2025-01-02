@@ -64,7 +64,7 @@ class CacheManagerTest(unittest.TestCase):
             ),
         }
         self.assertEqual(cache_manager.cache, expected_cache)
-        self.assertEqual(self.mock_file_store, cache_manager.file_store)
+        self.assertEqual(self.mock_file_store, cache_manager.data_store)
 
         self.mock_listdir.return_value = ["product|file1_data", "product|file3_data"]
         cache_manager.refresh_cache()

@@ -49,14 +49,14 @@ class ProcessorTest(unittest.TestCase):
         processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
         processor.postprocess(self.mock_data_id)
 
-        mock_log.info.assert_called()
+        mock_log.debug.assert_called()
         mock_cleanup_dir.assert_not_called()
 
         mock_log.reset_mock()
         processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=False)
         processor.postprocess(self.mock_data_id)
 
-        mock_log.info.assert_called()
+        mock_log.debug.assert_called()
         mock_cleanup_dir.assert_not_called()
 
     @patch("xcube_clms.processor.LOG")
@@ -223,15 +223,21 @@ class ProcessorTest(unittest.TestCase):
             folder_path = tmp_path / "test_folder"
             folder_path.mkdir()
 
-            keep_file = folder_path / "file1.zarr"
-            delete_file = folder_path / "file2.tif"
-            keep_file.write_text("test")
+            delete_file = folder_path / "file1.tif"
+            keep_file = folder_path / "file2.zarr"
             delete_file.write_text("test")
+            keep_file.write_text("test")
 
-            cleanup_dir(folder_path, keep_extension=".tif")
+            cleanup_dir(folder_path, keep_extension=".zarr")
 
-            self.assertEqual(False, keep_file.exists())
-            self.assertEqual(True, delete_file.exists())
+            self.assertFalse(delete_file.exists())
+            self.assertTrue(keep_file.exists())
+
+    def test_cleanup_dir_deletes_all_files_without_keep_extension(self):
+        with tempfile.TemporaryDirectory() as tmp_path_str:
+            tmp_path = Path(tmp_path_str)
+            folder_path = tmp_path / "test_folder"
+            folder_path.mkdir()
 
             keep_file = folder_path / "file1.zarr"
             delete_file = folder_path / "file2.tif"
@@ -240,8 +246,24 @@ class ProcessorTest(unittest.TestCase):
 
             cleanup_dir(folder_path)
 
-            self.assertEqual(True, keep_file.exists())
-            self.assertEqual(False, delete_file.exists())
+            self.assertFalse(keep_file.exists())
+            self.assertFalse(delete_file.exists())
+
+    def test_cleanup_dir_deletes_nested_directories(self):
+        with tempfile.TemporaryDirectory() as tmp_path_str:
+            tmp_path = Path(tmp_path_str)
+            folder_path = tmp_path / "test_folder"
+            folder_path.mkdir()
+            nested_folder = folder_path / "nested_folder"
+            nested_folder.mkdir()
+
+            nested_file = nested_folder / "file.txt"
+            nested_file.write_text("test")
+
+            cleanup_dir(folder_path)
+
+            self.assertFalse(nested_folder.exists())
+            self.assertFalse(nested_file.exists())
 
     def test_find_easting_northing_valid(self):
         name = "randomE12N34text"
