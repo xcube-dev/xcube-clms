@@ -25,20 +25,26 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
+import fsspec
 import rioxarray
 import xarray as xr
 from tqdm.notebook import tqdm
 
 from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
 
-_KEEP_EXTENSION = ".zarr"
 _ZARR_FORMAT = ".zarr"
 
 
 class FileProcessor:
     """Handles file processing after download completes."""
 
-    def __init__(self, path: str, file_store, cleanup: bool = True) -> None:
+    def __init__(
+        self,
+        path: str,
+        file_store,
+        cleanup: bool = True,
+        disable_tqdm_progress: bool = False,
+    ) -> None:
         """Initializes the FileProcessor.
 
         Args:
@@ -49,6 +55,7 @@ class FileProcessor:
         self.path = path
         self.file_store = file_store
         self.cleanup = cleanup
+        self.disable_tqdm_progress = disable_tqdm_progress
 
     def postprocess(self, data_id: str) -> None:
         """Performs postprocessing on the files for a given data ID.
@@ -68,7 +75,7 @@ class FileProcessor:
         target_folder = os.path.join(self.path, data_id)
         files = os.listdir(target_folder)
         if len(files) == 1:
-            LOG.info("No postprocessing required.")
+            LOG.debug("No postprocessing required.")
         elif len(files) == 0:
             LOG.warn("No files to postprocess!")
         else:
@@ -82,7 +89,11 @@ class FileProcessor:
                 return
             self._merge_and_save(en_map, data_id)
             if self.cleanup:
-                cleanup_dir(target_folder)
+                cleanup_dir(
+                    folder_path=target_folder,
+                    keep_extension=".zarr",
+                    disable_progress=self.disable_tqdm_progress,
+                )
 
     def _prepare_merge(
         self, files: list[str], data_id: str
@@ -132,11 +143,12 @@ class FileProcessor:
         # Step 3: Merge files along the Y-axis (Northings) for each Easting
         # group. xarray takes care of the missing tiles and fills it with NaN
         # values
-        chunk_size = {"x": 1000, "y": 1000}
+        chunk_size = {"x": 10000, "y": 10000}
         merged_eastings = {}
         for easting, file_list in tqdm(
             sorted_east_groups.items(),
             desc=f"Concatenating along the Y-axis (Northings)",
+            disable=self.disable_tqdm_progress,
         ):
             datasets = []
             for file in file_list:
@@ -178,26 +190,46 @@ def find_easting_northing(name: str) -> Optional[str]:
     return None
 
 
-def cleanup_dir(folder_path: Path | str, keep_extension=None):
+def cleanup_dir(
+    folder_path: Path | str, fs=None, keep_extension=None, disable_progress=False
+):
     """Removes all files from a directory, retaining only those with the
-    specified extension.
+    specified extension in the root directory.
 
     Args:
         folder_path: The path to the directory to clean up.
-        keep_extension: The file extension to retain. Defaults to the constant
-        `KEEP_EXTENSION`.
+        fs: A fsspec filesystem object. If None, the local filesystem is used.
+            Optional.
+        keep_extension: The file extension to retain. Optional
+        disable_progress: Option to either show or hide the tqdm progress bar
     """
-    if keep_extension is None:
-        keep_extension = _KEEP_EXTENSION
+    folder_path = str(folder_path)
+    fs = fs or fsspec.filesystem("file")
 
-    for filename in tqdm(
-        os.listdir(folder_path), desc=f"Cleaning up directory {folder_path}"
+    if not fs.isdir(folder_path):
+        raise ValueError(f"The specified path {folder_path} is not a directory.")
+
+    for item in tqdm(
+        fs.listdir(folder_path),
+        desc=f"Cleaning up directory {folder_path}",
+        disable=disable_progress,
     ):
-        file_path = os.path.join(folder_path, filename)
-
-        if os.path.isfile(file_path) and not filename.endswith(keep_extension):
-            os.remove(file_path)
-            LOG.debug(f"Deleted: {file_path}")
-        else:
-            LOG.debug(f"Kept: {file_path}")
-    LOG.info(f"Cleaning up finished")
+        item_path = item["name"]
+        try:
+            # Adding the not item_path.endswith(keep_extension) condition
+            # here as `.zarr` files are recognized as folders
+            if fs.isdir(item_path) and (
+                keep_extension is None
+                or (keep_extension and not item_path.endswith(keep_extension))
+            ):
+                fs.rm(item_path, recursive=True)
+                LOG.debug(f"Deleted directory: {item_path}")
+            else:
+                if keep_extension and item_path.endswith(keep_extension):
+                    LOG.debug(f"Kept file: {item_path}")
+                else:
+                    fs.rm(item_path)
+                    LOG.debug(f"Deleted file: {item_path}")
+        except Exception as e:
+            LOG.error(f"Failed to delete {item_path}: {e}")
+    LOG.debug(f"Cleaning up finished")

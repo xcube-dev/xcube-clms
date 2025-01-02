@@ -65,16 +65,16 @@ class ClmsApiTokenHandler:
             RequestException: If the token refresh fails.
         """
         if not self.api_token or self.is_token_expired():
-            LOG.info("Token expired or not present. Refreshing token.")
+            LOG.debug("Token expired or not present. Refreshing token.")
             try:
                 self.api_token = self._request_access_token()
                 self._token_expiry = time.time() + self._token_lifetime
-                LOG.info("Token refreshed successfully.")
+                LOG.debug("Token refreshed successfully.")
             except RequestException as e:
                 LOG.error("Token refresh failed: ", e)
                 raise e
         else:
-            LOG.info("Current token valid. Reusing it.")
+            LOG.debug("Current token valid. Reusing it.")
 
         return self.api_token
 

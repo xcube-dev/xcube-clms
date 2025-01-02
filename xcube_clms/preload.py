@@ -18,7 +18,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
+import threading
 import time
 from typing import Any
 
@@ -29,14 +29,12 @@ from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, \
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.cache_manager import CacheManager
 from xcube_clms.constants import (
-    LOG,
     COMPLETE,
-    PENDING,
     RETRY_TIMEOUT,
     CANCELLED,
 )
 from xcube_clms.download_manager import DownloadTaskManager
-from xcube_clms.processor import FileProcessor
+from xcube_clms.processor import FileProcessor, cleanup_dir
 
 
 class ClmsPreloadHandle(ExecutorPreloadHandle):
@@ -48,7 +46,11 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         url: str,
         credentials: dict,
         path: str,
+        blocking: bool = None,
+        silent: bool | None = None,
         cleanup: bool | None = None,
+        disable_tqdm_progress: bool | None = None,
+        data_store: str | None = None,
     ) -> None:
         """Initializes the PreloadData instance.
 
@@ -62,7 +64,6 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             download. Defaults to True.
         """
         self.data_id_maps = data_id_maps
-        super().__init__(tuple(self.data_id_maps.keys()))
         self._url: str = url
         self._credentials: dict = {}
         self.path: str = path
@@ -72,50 +73,33 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
 
         self._token_handler = ClmsApiTokenHandler(credentials)
         self._api_token: str = self._token_handler.api_token
-        self._cache_manager = CacheManager(self.path)
+        self._cache_manager = CacheManager(self.path, data_store)
         self._cache_manager.refresh_cache()
-        self.file_store: MutableDataStore = self._cache_manager.file_store
-        self._file_processor = FileProcessor(self.path, self.file_store, self.cleanup)
-        self._download_manager = DownloadTaskManager(
-            self._token_handler, self._url, self.path
+        self.data_store: MutableDataStore = self._cache_manager.data_store
+        self._file_processor = FileProcessor(
+            self.path, self.data_store, self.cleanup, disable_tqdm_progress
         )
-
-    # def initiate_preload(self, data_id_maps: dict[str, Any]) -> None:
-    #     """Initiates the preload process for a set of data IDs.
-    #
-    #     Args:
-    #         data_id_maps : Mapping of data IDs to their metadata. Here,
-    #             we use the item and product keys mapped to their data ids to
-    #             preload the data.
-    #     """
-    #     self.refresh_cache()
-    #     # We create a status event for each of the tasks so that we can
-    #     # signal the thread that it can proceed further from the queue.
-    #     for data_id_map_key in data_id_maps.keys():
-    #         self._task_control[data_id_map_key] = {
-    #             "status_event": threading.Event(),
-    #         }
-    #
-    #     executor = ThreadPoolExecutor()
-    #     for data_id_map in data_id_maps.items():
-    #         executor.submit(
-    #             self._initiate_preload,
-    #             data_id_map,
-    #             self._task_control[data_id_map[0]]["status_event"],
-    #         )
+        self._download_manager = DownloadTaskManager(
+            self._token_handler, self._url, self.path, disable_tqdm_progress
+        )
+        super().__init__(
+            data_ids=tuple(self.data_id_maps.keys()), blocking=blocking, silent=silent
+        )
 
     def preload_data(
         self,
         data_id: str,
     ) -> None:
-        """Processes a single preload task using a separate thread."""
+        """Processes a single preload task on a separate thread."""
+        status_event = threading.Event()
+        self.refresh_cache()
         data_id_info = self.data_id_maps.get(data_id)
         if data_id in self.view_cache().keys():
             self.notify(
                 PreloadState(
                     data_id,
                     status=PreloadStatus.stopped,
-                    progress=100,
+                    progress=1.0,
                     message=f"The data for {data_id} is already cached at {self.path}",
                 )
             )
@@ -127,6 +111,13 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             product=data_id_info.get("product"),
         )
 
+        self.notify(
+            PreloadState(
+                data_id=data_id,
+                progress=0.1,
+                message="Download request in queue.",
+            )
+        )
         status_event.set()
 
         while status_event.is_set():
@@ -134,43 +125,58 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                 task_id=task_id
             )
             if status == COMPLETE:
-                LOG.info(f"Status: {status} for {data_id} with task ID {task_id}.")
                 status_event.clear()
-                download_url, file_size = self._download_manager.get_download_url(
-                    task_id
+                self.notify(
+                    PreloadState(
+                        data_id=data_id,
+                        progress=0.4,
+                        message="Download link created. Downloading now...",
+                    )
                 )
-                self.download_data(download_url, file_size, task_id, data_id)
+                download_url, _ = self._download_manager.get_download_url(task_id)
+                self.download_data(download_url, data_id)
+                self.notify(
+                    PreloadState(
+                        data_id=data_id,
+                        progress=0.8,
+                        message="Zip file downloaded. Extracting now...",
+                    )
+                )
                 self._file_processor.postprocess(data_id)
-            if status in PENDING:
-                LOG.info(
-                    f"Status: {status} for {data_id} with task ID {task_id}. Will "
-                    f"recheck status in "
-                    f"{RETRY_TIMEOUT} seconds"
+                self.notify(
+                    PreloadState(
+                        data_id=data_id,
+                        progress=1.0,
+                        message="Preloading Complete.",
+                    )
                 )
+                return
             if status in CANCELLED:
-                LOG.info(
-                    f"Status: {status} for {data_id} with task ID {task_id}. Exiting now"
-                )
                 status_event.clear()
-                spinner_thread.join()
+                self.cancel()
+                self.close()
                 return
 
             time.sleep(RETRY_TIMEOUT)
 
-    def download_data(
-        self, download_url: str, file_size: int, task_id: str, data_id: str
-    ) -> None:
+    def close(self) -> None:
+        for data_id in self.data_id_maps.keys():
+            self.notify(
+                PreloadState(data_id=data_id, message="Cleaning up in Progress...")
+            )
+        cleanup_dir(self.path)
+        for data_id in self.data_id_maps.keys():
+            self.notify(PreloadState(data_id=data_id, message="Cleaning up Finished."))
+
+    def download_data(self, download_url: str, data_id: str) -> None:
         """Initiates the download process for a given data item.
 
         Args:
             download_url: URL of the data to download. This is obtained from
                 the completed request of a dataset.
-            file_size: Size of the file to download which is used in the
-                progress bar display.
-            task_id: Task ID of the download request.
             data_id: Identifier of the data being downloaded.
         """
-        self._download_manager.download_data(download_url, file_size, task_id, data_id)
+        self._download_manager.download_data(download_url, data_id)
 
     def view_cache(self) -> dict[str, str]:
         """Retrieves the current cache map.

@@ -29,7 +29,7 @@ from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
 class CacheManager:
     """Manage the cache map for preloaded data."""
 
-    def __init__(self, path) -> None:
+    def __init__(self, path, data_store: str = "file", **data_store_params) -> None:
         """Initializes the CacheManager with the specified path.
 
         Args:
@@ -38,8 +38,8 @@ class CacheManager:
         self._cache = None
         self.path = path
         os.makedirs(self.path, exist_ok=True)
-        LOG.info(f"Local Filestore for preload cache created at {self.path}")
-        self._file_store = new_data_store("file", root=self.path)
+        LOG.debug(f"Local Filestore for preload cache created at {self.path}")
+        self._data_store = new_data_store(data_store, root=self.path)
         self.refresh_cache()
 
     def refresh_cache(self) -> None:
@@ -66,14 +66,13 @@ class CacheManager:
         }
 
     @property
-    def file_store(self) -> MutableDataStore:
-        """Retrieves the local file store.
+    def data_store(self) -> MutableDataStore:
+        """Retrieves the local data store.
 
         Returns:
-            The file store object used for managing files in the cache like
-            opening or writing.
+            The data store object used for managing files in the cache.
         """
-        return self._file_store
+        return self._data_store
 
     @property
     def cache(self) -> dict[str, str]:

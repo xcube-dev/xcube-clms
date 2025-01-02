@@ -28,6 +28,7 @@ from xcube.core.store import (
     DataTypeLike,
     DATASET_TYPE,
     DatasetDescriptor,
+    PreloadHandle,
 )
 from xcube.util.jsonschema import (
     JsonObjectSchema,
@@ -70,7 +71,11 @@ class ClmsDataStore(DataStore, ABC):
             cleanup=JsonBooleanSchema(
                 title="Option to cleanup the directory in case there were "
                 "multiple files downloaded for the same data_id. "
-                "Defaults to True ",
+                "Defaults to True.",
+            ),
+            disable_tqdm_progress=JsonBooleanSchema(
+                title="Option to show/hide the tqdm progress bars for various "
+                "download/extraction operations. Defaults to False."
             ),
         )
         return JsonObjectSchema(
@@ -143,7 +148,15 @@ class ClmsDataStore(DataStore, ABC):
     ) -> JsonObjectSchema:
         pass
 
-    def preload_data(self, *data_ids: str, **preload_params):
+    def preload_data(
+        self,
+        *data_ids: str,
+        blocking: bool | None = None,
+        silent: bool | None = None,
+        **preload_params,
+    ) -> PreloadHandle:
         schema = self.get_preload_data_params_schema()
         schema.validate_instance(preload_params)
-        return self._clms.preload_data(*data_ids, **preload_params)
+        return self._clms.preload_data(
+            *data_ids, blocking=blocking, silent=silent, **preload_params
+        )

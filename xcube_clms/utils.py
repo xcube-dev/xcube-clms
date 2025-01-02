@@ -26,8 +26,7 @@ from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
 import requests
-from requests import HTTPError, Timeout, RequestException, Response, \
-    JSONDecodeError
+from requests import HTTPError, Timeout, RequestException, Response, JSONDecodeError
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
 from xcube_clms.constants import (
@@ -115,19 +114,19 @@ def make_api_request(
     """
 
     session = requests.Session()
-    LOG.info(f"Making a request to {url}")
+    LOG.debug(f"Making a request to {url}")
 
-    status_event = threading.Event()
-    spinner_thread = threading.Thread(
-        target=spinner,
-        args=(
-            status_event,
-            "Waiting for response for server for " f"the request: {url}",
-        ),
-    )
-    if show_spinner:
-        status_event.set()
-        spinner_thread.start()
+    # status_event = threading.Event()
+    # spinner_thread = threading.Thread(
+    #     target=spinner,
+    #     args=(
+    #         status_event,
+    #         "Waiting for response for server for " f"the request: {url}",
+    #     ),
+    # )
+    # if show_spinner:
+    #     status_event.set()
+    # spinner_thread.start()
     response = None
     try:
         response = session.request(
@@ -167,10 +166,10 @@ def make_api_request(
         LOG.error(f"Unknown error occurred: {e}")
         raise
 
-    finally:
-        if show_spinner:
-            status_event.clear()
-            spinner_thread.join()
+    # finally:
+    # if show_spinner:
+    #     status_event.clear()
+    #     spinner_thread.join()
     return response
 
 

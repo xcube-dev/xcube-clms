@@ -22,7 +22,7 @@ import os
 from typing import Any, Container, Union, Iterator
 
 import xarray as xr
-from xcube.core.store import DataTypeLike
+from xcube.core.store import DataTypeLike, PreloadHandle
 
 from .constants import (
     SEARCH_ENDPOINT,
@@ -31,6 +31,7 @@ from .constants import (
     DEFAULT_PRELOAD_CACHE_FOLDER,
     CLMS_API_URL,
 )
+from .preload import ClmsPreloadHandle
 from .utils import (
     is_valid_data_type,
     make_api_request,
@@ -65,6 +66,7 @@ class Clms:
         credentials: dict,
         path: str | None = None,
         cleanup: bool | None = None,
+        disable_tqdm_progress: bool | None = None,
     ) -> None:
         """Initializes the class.
 
@@ -77,11 +79,11 @@ class Clms:
                 True.
         """
         self.path: str = os.path.join(os.getcwd(), path or DEFAULT_PRELOAD_CACHE_FOLDER)
-        # self._preload_data = PreloadData(
-        #     CLMS_API_URL, credentials, self.path, cleanup=cleanup
-        # )
-        # self.file_store = self._preload_data.file_store
+        self.credentials = credentials
+        self.cleanup = cleanup
+        self.disable_tqdm_progress = disable_tqdm_progress
         self._datasets_info: list[dict[str, Any]] = Clms._fetch_all_datasets()
+        self.preload_handle: ClmsPreloadHandle | None = None
 
     def open_data(
         self,
@@ -104,19 +106,20 @@ class Clms:
         try:
             _, file_id = data_id.split(DATA_ID_SEPARATOR)
         except ValueError as e:
-            raise ValueError(
+            LOG.error(
                 f"The format of the data ID is wrong. Expected it in "
                 f"the format {{product_id}}{DATA_ID_SEPARATOR}{{file_id}} but "
-                f"got {data_id}"
+                f"got {data_id}. {e}"
             )
-        if not self.file_store:
+            raise
+        if not self.preload_handle.data_store:
             raise ValueError(
-                "File store does not exist yet. Please preload "
+                "Cache data store does not exist yet. Please preload "
                 "data first using the preload_data() method."
             )
 
-        self._preload_data.refresh_cache()
-        cache_entry = self._preload_data.view_cache().get(data_id)
+        self.preload_handle.refresh_cache()
+        cache_entry = self.preload_handle.view_cache().get(data_id)
         if not cache_entry:
             raise FileNotFoundError(f"No cached data found for data_id: {data_id}")
 
@@ -126,7 +129,7 @@ class Clms:
                 f"Expected 1 file in the folder {cache_entry}, "
                 f"got {len(data_id_file)}. Opening the first file."
             )
-        return self.file_store.open_data(
+        return self.preload_handle.data_store.open_data(
             os.path.join(data_id, data_id_file[0]), **open_params
         )
 
@@ -184,7 +187,9 @@ class Clms:
 
         return dict(time_range=time_range, crs=crs[0] if crs else None)
 
-    def preload_data(self, *data_ids: str, **preload_params) -> None:
+    def preload_data(
+        self, *data_ids: str, blocking: bool, silent: bool, **preload_params
+    ) -> PreloadHandle:
         """Preloads the data into a cache for specified data IDs with optional
         parameters for faster access when using the `open_data` method.
 
@@ -203,7 +208,17 @@ class Clms:
             }
             for data_id in data_ids
         }
-        # return ClmsPreloadHandle(data_id_maps)
+
+        return ClmsPreloadHandle(
+            data_id_maps=data_id_maps,
+            blocking=blocking,
+            silent=silent,
+            url=CLMS_API_URL,
+            credentials=self.credentials,
+            path=self.path,
+            cleanup=self.cleanup,
+            disable_tqdm_progress=self.disable_tqdm_progress,
+        )
 
     def _create_data_ids(
         self,

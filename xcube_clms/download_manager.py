@@ -76,7 +76,13 @@ _ITEMS_KEY = "items"
 class DownloadTaskManager:
     """Manages tasks for downloading datasets from the CLMS API."""
 
-    def __init__(self, token_handler: ClmsApiTokenHandler, url: str, path: str) -> None:
+    def __init__(
+        self,
+        token_handler: ClmsApiTokenHandler,
+        url: str,
+        path: str,
+        disable_tqdm_progress: bool | None = None,
+    ) -> None:
         """Initializes the DownloadTaskManager
 
         Args:
@@ -88,6 +94,7 @@ class DownloadTaskManager:
         self._api_token = self._token_handler.api_token
         self._url = url
         self.path = path
+        self.disable_tqdm_progress = disable_tqdm_progress
 
     def request_download(self, data_id: str, item: dict, product: dict) -> str:
         """Submits a download request for a specific dataset.
@@ -139,21 +146,21 @@ class DownloadTaskManager:
         )
 
         if status == COMPLETE or status == PENDING:
-            LOG.info(
+            LOG.debug(
                 f"Download request with task id {task_id} "
                 f"{'already completed' if status == 'COMPLETE' 
                 else 'is in queue'} for data id: {data_id}"
             )
             return task_id
         if status == _UNDEFINED:
-            LOG.info(
+            LOG.debug(
                 f"Download request does not exists or has expired for "
                 f"data id:"
                 f" {data_id}"
             )
 
         if status == CANCELLED:
-            LOG.info(
+            LOG.debug(
                 f"Download request was cancelled for "
                 f"data id:"
                 f" {data_id}. Re-requesting now."
@@ -172,7 +179,7 @@ class DownloadTaskManager:
             len(task_ids) == 1
         ), f"Expected API response with 1 task_id, got {len(task_ids)}"
         task_id = task_ids[0].get(_TASK_ID_KEY)
-        LOG.info(f"Download Requested with Task ID : {task_id}")
+        LOG.debug(f"Download Requested with Task ID : {task_id}")
         return task_id
 
     def get_download_url(self, task_id: str) -> tuple[str, int]:
@@ -227,7 +234,7 @@ class DownloadTaskManager:
             tuple[str, dict, dict]: A tuple containing the request URL,
                 headers, and JSON payload.
         """
-        LOG.info(f"Preparing download request for {data_id}")
+        LOG.debug(f"Preparing download request for {data_id}")
 
         dataset_id = product[_UID_KEY]
         file_id = item[_ID_KEY]
@@ -334,38 +341,25 @@ class DownloadTaskManager:
 
         return _UNDEFINED, ""
 
-    def download_data(
-        self, download_url: str, file_size: int, task_id: str, data_id: str
-    ) -> None:
+    def download_data(self, download_url: str, data_id: str) -> None:
         """Downloads, extracts, and saves the dataset from the provided URL.
 
         Args:
             download_url: URL for downloading the dataset.
-            file_size: Size of the dataset in bytes.
-            task_id: Task ID associated with the dataset.
             data_id: Unique identifier of the dataset.
         """
-        LOG.info(f"Downloading zip file from {download_url}")
+        LOG.debug(f"Downloading zip file from {download_url}")
 
         response = make_api_request(download_url, timeout=600, stream=True)
         chunk_size = 1024 * 1024  # 1 MB chunks
 
         with tempfile.NamedTemporaryFile(mode="wb", delete=True) as temp_file:
             temp_file_path = temp_file.name
-            LOG.info(f"Temporary file created at {temp_file_path}")
+            LOG.debug(f"Temporary file created at {temp_file_path}")
 
-            progress_bar = tqdm(
-                response.iter_content(chunk_size=chunk_size),
-                desc=f"Downloading zip file for task: {task_id}",
-                total=file_size // chunk_size,
-                unit_scale=True,
-            )
-
-            for chunk in progress_bar:
+            for chunk in response.iter_content(chunk_size=chunk_size):
                 temp_file.write(chunk)
-                progress_bar.update(len(chunk))
                 del chunk
-            progress_bar.close()
 
             fs = fsspec.filesystem("zip", fo=temp_file_path)
             zip_contents = fs.ls(_RESULTS)
@@ -378,7 +372,7 @@ class DownloadTaskManager:
             else:
                 LOG.warn("No downloadable zip file found inside.")
             if actual_zip_file:
-                LOG.info(
+                LOG.debug(
                     f"Found one zip file "
                     f"{actual_zip_file.get(_ORIGINAL_FILENAME_KEY)}."
                 )
@@ -398,6 +392,7 @@ class DownloadTaskManager:
                         for geo_file in tqdm(
                             geo_files,
                             desc="Extracting geo files for task_id {task_id}",
+                            disable=self.disable_tqdm_progress,
                         ):
                             try:
                                 with zip_fs.open(geo_file, "rb") as source_file:
@@ -415,21 +410,25 @@ class DownloadTaskManager:
                                                 b"",
                                             ),
                                             desc=f"Extracting geo file {geo_file_name}",
+                                            disable=self.disable_tqdm_progress,
                                         ):
                                             dest_file.write(chunk)
-                                LOG.info(
+                                LOG.debug(
                                     f"The file {geo_file_name} has been successfully "
                                     f"downloaded to {geo_file_path}"
                                 )
                             except OSError as e:
-                                raise OSError(f"Error occurred while writing data. {e}")
+                                LOG.error(f"Error occurred while writing data. {e}")
+                                raise
                             except UnicodeDecodeError as e:
-                                raise ValueError(
+                                LOG.error(
                                     f"Decoding error: {e}. File might not be text "
                                     f"or encoding is incorrect."
                                 )
+                                raise
                             except Exception as e:
-                                raise Exception(f"An unexpected error occurred: {e}")
+                                LOG.error(f"An unexpected error occurred: {e}")
+                                raise
 
                     else:
                         raise FileNotFoundError(
@@ -466,7 +465,7 @@ class DownloadTaskManager:
                 )
             else:
                 if item[_NAME_KEY].endswith(_GEO_FILE_EXTS):
-                    LOG.info(f"Found geo file: {item[_NAME_KEY]}")
+                    LOG.debug(f"Found geo file: {item[_NAME_KEY]}")
                     filename = item[_NAME_KEY]
                     geo_file.append(filename)
         return geo_file
