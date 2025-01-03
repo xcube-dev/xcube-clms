@@ -42,15 +42,17 @@ class ProcessorTest(unittest.TestCase):
         self.mock_file_store = MagicMock()
 
     @patch("xcube_clms.processor.LOG")
-    @patch("xcube_clms.processor.os.listdir")
+    @patch("xcube_clms.processor.fsspec.filesystem")
     @patch("xcube_clms.processor.cleanup_dir")
-    def test_postprocess_single_file(self, mock_cleanup_dir, mock_listdir, mock_log):
-        mock_listdir.return_value = ["file_1.tif"]
+    def test_postprocess_single_file(self, mock_cleanup_dir, mock_fsspec, mock_log):
+        mock_fsspec.return_value.ls.return_value = [
+            "/mock/path/product_id|dataset_id/file_1.tif"
+        ]
         processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
         processor.postprocess(self.mock_data_id)
 
-        mock_log.debug.assert_called()
         mock_cleanup_dir.assert_not_called()
+        mock_log.debug.assert_called()
 
         mock_log.reset_mock()
         processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=False)
@@ -60,10 +62,10 @@ class ProcessorTest(unittest.TestCase):
         mock_cleanup_dir.assert_not_called()
 
     @patch("xcube_clms.processor.LOG")
-    @patch("xcube_clms.processor.os.listdir")
+    @patch("xcube_clms.processor.fsspec.filesystem")
     @patch("xcube_clms.processor.cleanup_dir")
-    def test_postprocess_no_files(self, mock_cleanup_dir, mock_listdir, mock_log):
-        mock_listdir.return_value = []
+    def test_postprocess_no_files(self, mock_cleanup_dir, mock_fsspec, mock_log):
+        mock_fsspec.return_value.ls.return_value = []
         processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
         processor.postprocess(self.mock_data_id)
 
@@ -71,13 +73,13 @@ class ProcessorTest(unittest.TestCase):
         mock_cleanup_dir.assert_not_called()
 
     @patch("xcube_clms.processor.LOG")
-    @patch("xcube_clms.processor.os.listdir")
+    @patch("xcube_clms.processor.fsspec.filesystem")
     @patch("xcube_clms.processor.cleanup_dir")
     def test_postprocess_unsupported_naming(
-        self, mock_cleanup_dir, mock_listdir, mock_log
+        self, mock_cleanup_dir, mock_fsspec, mock_log
     ):
         mock_files = ["file_1.tif", "file_2.tif", "file_3.tif"]
-        mock_listdir.return_value = mock_files
+        mock_fsspec.return_value.ls.return_value = mock_files
         processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
         processor.postprocess("invalid_data_id")
 

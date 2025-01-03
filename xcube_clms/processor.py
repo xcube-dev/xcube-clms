@@ -19,7 +19,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import os
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -54,6 +53,7 @@ class FileProcessor:
         """
         self.path = path
         self.file_store = file_store
+        self.fs = fsspec.filesystem("file")
         self.cleanup = cleanup
         self.disable_tqdm_progress = disable_tqdm_progress
 
@@ -72,8 +72,10 @@ class FileProcessor:
         Args:
             data_id: The identifier for the dataset being post-processed.
         """
-        target_folder = os.path.join(self.path, data_id)
-        files = os.listdir(target_folder)
+        target_folder = f"{self.path}/{data_id}"
+        files = [entry.split("/")[-1] for entry in self.fs.ls(target_folder)]
+        print(files, target_folder, self.fs.ls(target_folder))
+        # files = self.fs.listdir(target_folder)
         if len(files) == 1:
             LOG.debug("No postprocessing required.")
         elif len(files) == 0:
@@ -109,11 +111,11 @@ class FileProcessor:
             A dictionary mapping coordinates to lists of file paths.
         """
         en_map = defaultdict(list)
-        data_id_folder = os.path.join(self.path, data_id)
+        data_id_folder = f"{self.path}/{data_id}"
         for file in files:
             en = find_easting_northing(file)
             if en:
-                en_map[en].append(os.path.join(data_id_folder, file))
+                en_map[en].append(f"{data_id_folder}/{file}")
         return en_map
 
     def _merge_and_save(
@@ -165,8 +167,8 @@ class FileProcessor:
         final_cube = concat_cube.to_dataset(
             name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
         )
-        new_filename = os.path.join(
-            data_id, data_id.split(DATA_ID_SEPARATOR)[-1] + _ZARR_FORMAT
+        new_filename = (
+            f"{data_id}/{data_id.split(DATA_ID_SEPARATOR)[-1]}/{_ZARR_FORMAT}"
         )
 
         self.file_store.write_data(final_cube, new_filename)

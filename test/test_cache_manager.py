@@ -19,7 +19,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import os
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
@@ -31,15 +30,13 @@ class CacheManagerTest(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.mock_listdir_patcher = patch("xcube_clms.cache_manager.os.listdir")
+        self.mock_fsspec_patcher = patch("xcube_clms.cache_manager.fsspec.filesystem")
         self.mock_new_data_store_patcher = patch(
             "xcube_clms.cache_manager.new_data_store"
         )
-        self.mock_makedirs_patcher = patch("xcube_clms.cache_manager.os.makedirs")
 
-        self.mock_listdir = self.mock_listdir_patcher.start()
+        self.mock_fsspec = self.mock_fsspec_patcher.start()
         self.mock_new_data_store = self.mock_new_data_store_patcher.start()
-        self.mock_makedirs = self.mock_makedirs_patcher.start()
 
         self.mock_file_store = MagicMock()
         self.mock_new_data_store.return_value = self.mock_file_store
@@ -52,35 +49,32 @@ class CacheManagerTest(unittest.TestCase):
         return CacheManager(self.temp_dir.name)
 
     def test_refresh_cache_populates_cache_correctly(self):
-        self.mock_listdir.return_value = ["product|file1_data", "product|file2_data"]
+        self.mock_fsspec.return_value.ls.return_value = [
+            "product|file1_data",
+            "product|file2_data",
+        ]
 
         cache_manager = self.create_cache_manager()
         expected_cache = {
-            "product|file1_data": os.path.join(
-                self.temp_dir.name, "product|file1_data"
-            ),
-            "product|file2_data": os.path.join(
-                self.temp_dir.name, "product|file2_data"
-            ),
+            "product|file1_data": f"{self.temp_dir.name}/product|file1_data",
+            "product|file2_data": f"{self.temp_dir.name}/product|file2_data",
         }
-        self.assertEqual(cache_manager.cache, expected_cache)
+        self.assertEqual(expected_cache, cache_manager.cache)
         self.assertEqual(self.mock_file_store, cache_manager.data_store)
 
-        self.mock_listdir.return_value = ["product|file1_data", "product|file3_data"]
+        self.mock_fsspec.return_value.ls.return_value = [
+            "product|file1_data",
+            "product|file3_data",
+        ]
         cache_manager.refresh_cache()
 
         expected_cache = {
-            "product|file1_data": os.path.join(
-                self.temp_dir.name, "product|file1_data"
-            ),
-            "product|file3_data": os.path.join(
-                self.temp_dir.name, "product|file3_data"
-            ),
+            "product|file1_data": f"{self.temp_dir.name}/product|file1_data",
+            "product|file3_data": f"{self.temp_dir.name}/product|file3_data",
         }
-        self.assertEqual(cache_manager.cache, expected_cache)
+        self.assertEqual(expected_cache, cache_manager.cache)
 
     def test_cache_when_no_data_id_separator(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            self.mock_listdir.return_value = ["file1", "file2"]
-            cache_manager = self.create_cache_manager()
-            self.assertEqual(cache_manager.cache, {})
+        self.mock_fsspec.ls.return_value = ["file1", "file2"]
+        cache_manager = self.create_cache_manager()
+        self.assertEqual({}, cache_manager.cache)

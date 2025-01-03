@@ -18,12 +18,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-import os
-
+import fsspec
 from xcube.core.store import new_data_store, MutableDataStore
 
-from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
+from xcube_clms.constants import DATA_ID_SEPARATOR
 
 
 class CacheManager:
@@ -37,8 +35,9 @@ class CacheManager:
         """
         self._cache = None
         self.path = path
-        os.makedirs(self.path, exist_ok=True)
-        LOG.debug(f"Local Filestore for preload cache created at {self.path}")
+        self.fs = fsspec.filesystem("file")
+        self.fs.makedirs(self.path, exist_ok=True)
+        print(f"Local Filestore for preload cache created at {self.path}")
         self._data_store = new_data_store(data_store, root=self.path)
         self.refresh_cache()
 
@@ -60,8 +59,8 @@ class CacheManager:
         data that exists in the cache map already.
         """
         self._cache = {
-            d: os.path.join(self.path, d)
-            for d in os.listdir(self.path)
+            d.split("/")[-1]: f"{self.path}/{d.split("/")[-1]}"
+            for d in self.fs.ls(self.path)
             if DATA_ID_SEPARATOR in d
         }
 
