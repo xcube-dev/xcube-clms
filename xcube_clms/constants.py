@@ -28,7 +28,7 @@ CLMS_API_URL = "https://land.copernicus.eu/api"
 TIME_TO_EXPIRE = 24  # (in hours)
 RETRY_TIMEOUT = 60  # (in seconds)
 
-DEFAULT_PRELOAD_CACHE_FOLDER = "preload_cache/"
+DEFAULT_PRELOAD_CACHE_FOLDER = "clms_cache/"
 
 # CLMS API Constants
 SEARCH_ENDPOINT = "@search"
@@ -63,7 +63,6 @@ if not LOG.hasHandlers():
 
 # DataOpener IDs
 DATA_OPENER_IDS = (
-    f"dataset:netcdf:{DATA_STORE_ID}",
     f"dataset:geotiff:{DATA_STORE_ID}",
     f"dataset:zarr:{DATA_STORE_ID}",
 )

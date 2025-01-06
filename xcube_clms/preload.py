@@ -22,12 +22,11 @@ import threading
 import time
 from typing import Any
 
-from xcube.core.store import MutableDataStore
-from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, \
-    PreloadStatus
+import fsspec
+from xcube.core.store.fs.store import FsDataStore
+from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, PreloadStatus
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.cache_manager import CacheManager
 from xcube_clms.constants import (
     COMPLETE,
     RETRY_TIMEOUT,
@@ -50,34 +49,33 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         data_id_maps: dict[str, dict[str, dict[str, Any]]],
         url: str,
         credentials: dict,
-        path: str,
-        blocking: bool = None,
-        silent: bool | None = None,
+        cache_store: FsDataStore,
         cleanup: bool | None = None,
         disable_tqdm_progress: bool | None = None,
-        data_store: str | None = None,
+        **preload_params: dict[str, Any],
     ) -> None:
         self.data_id_maps = data_id_maps
         self._url: str = url
         self._credentials: dict = {}
-        self.path: str = path
+        self.cache_store = cache_store
+        self.cache_root = cache_store.root
+        self._cache_fs: fsspec.AbstractFileSystem = cache_store.fs
 
         self._task_control: dict = {}
         self.cleanup: bool = cleanup or True
 
         self._token_handler = ClmsApiTokenHandler(credentials)
         self._api_token: str = self._token_handler.api_token
-        self._cache_manager = CacheManager(self.path, data_store)
-        self._cache_manager.refresh_cache()
-        self.data_store: MutableDataStore = self._cache_manager.data_store
         self._file_processor = FileProcessor(
-            self.path, self.data_store, self.cleanup, disable_tqdm_progress
+            self.cache_store, self.cleanup, disable_tqdm_progress
         )
         self._download_manager = DownloadTaskManager(
-            self._token_handler, self._url, self.path, disable_tqdm_progress
+            self._token_handler, self._url, self.cache_store, disable_tqdm_progress
         )
         super().__init__(
-            data_ids=tuple(self.data_id_maps.keys()), blocking=blocking, silent=silent
+            data_ids=tuple(self.data_id_maps.keys()),
+            blocking=preload_params.pop("blocking", False),
+            silent=preload_params.pop("silent", True),
         )
 
     def preload_data(
@@ -86,15 +84,14 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
     ) -> None:
         """Processes a single preload task on a separate thread."""
         status_event = threading.Event()
-        self.refresh_cache()
         data_id_info = self.data_id_maps.get(data_id)
-        if data_id in self.view_cache().keys():
+        if data_id in self.cache_store.list_data_ids():
             self.notify(
                 PreloadState(
                     data_id,
                     status=PreloadStatus.stopped,
                     progress=1.0,
-                    message=f"The data for {data_id} is already cached at {self.path}",
+                    message=f"The data for {data_id} is already cached at {self.cache_root}",
                 )
             )
             return
@@ -158,7 +155,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             self.notify(
                 PreloadState(data_id=data_id, message="Cleaning up in Progress...")
             )
-        cleanup_dir(self.path)
+        cleanup_dir(self.cache_root)
         for data_id in self.data_id_maps.keys():
             self.notify(PreloadState(data_id=data_id, message="Cleaning up Finished."))
 
@@ -171,15 +168,3 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             data_id: Identifier of the data being downloaded.
         """
         self._download_manager.download_data(download_url, data_id)
-
-    def view_cache(self) -> dict[str, str]:
-        """Retrieves the current cache map.
-
-        Returns:
-            dict: Cached map.
-        """
-        return self._cache_manager.cache
-
-    def refresh_cache(self) -> None:
-        """Refreshes the cache map."""
-        self._cache_manager.refresh_cache()

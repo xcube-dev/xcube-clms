@@ -37,7 +37,7 @@ from xcube.util.jsonschema import (
 )
 
 from .clms import Clms
-from .constants import DATA_OPENER_IDS
+from .constants import DATA_OPENER_IDS, DEFAULT_PRELOAD_CACHE_FOLDER
 from .utils import assert_valid_data_type
 
 
@@ -63,10 +63,17 @@ class ClmsDataStore(DataStore, ABC):
         params = dict(
             credentials=JsonObjectSchema(
                 dict(**credentials_params),
+                title="CLMS API credentials that can be obtained following "
+                "the steps outlined here. https://eea.github.io/clms-api-docs/authentication.html",
                 required=("client_id", "user_id", "token_uri", "private_key"),
             ),
-            path=JsonStringSchema(
-                title="Temporary path to store the downloaded data.",
+            cache_id=JsonStringSchema(
+                title="Preload cache folder.",
+                description=(
+                    "Datasets which are preloaded using `preload_data` method "
+                    "will be stored in this folder in a prepared way."
+                ),
+                default=DEFAULT_PRELOAD_CACHE_FOLDER,
             ),
             cleanup=JsonBooleanSchema(
                 title="Option to cleanup the directory in case there were "
@@ -157,6 +164,28 @@ class ClmsDataStore(DataStore, ABC):
     ) -> PreloadHandle:
         schema = self.get_preload_data_params_schema()
         schema.validate_instance(preload_params)
-        return self._clms.preload_data(
-            *data_ids, blocking=blocking, silent=silent, **preload_params
+        return self._clms.preload_data(*data_ids, **preload_params)
+
+    def get_preload_data_params_schema(self) -> JsonObjectSchema:
+        params = dict(
+            blocking=JsonBooleanSchema(
+                title="Option to make the preload_data method blocking or "
+                "non-blocking",
+                description=(
+                    "If True, (the default) if the constructor should wait for"
+                    "all preload task to finish before the calling thread"
+                ),
+                default=True,
+            ),
+            silent=JsonBooleanSchema(
+                title="Silence the output of Preload API",
+                description="If True, you don't want any preload state output."
+                "               Defaults to `False`",
+                default=False,
+            ),
+        )
+        return JsonObjectSchema(
+            properties=dict(**params),
+            required=[],
+            additional_properties=False,
         )

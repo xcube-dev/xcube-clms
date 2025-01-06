@@ -39,14 +39,12 @@ class FileProcessor:
 
     def __init__(
         self,
-        path: str,
-        file_store,
+        cache_store,
         cleanup: bool = True,
         disable_tqdm_progress: bool = False,
     ) -> None:
-        self.path = path
-        self.file_store = file_store
-        self.fs = fsspec.filesystem("file")
+        self.cache_store = cache_store
+        self.fs = cache_store.fs
         self.cleanup = cleanup
         self.disable_tqdm_progress = disable_tqdm_progress
 
@@ -65,16 +63,16 @@ class FileProcessor:
         Args:
             data_id: The identifier for the dataset being post-processed.
         """
-        target_folder = f"{self.path}/{data_id}"
+        target_folder = self.fs.sep.join([self.cache_store.root, data_id])
         files = [entry.split("/")[-1] for entry in self.fs.ls(target_folder)]
-        print(files, target_folder, self.fs.ls(target_folder))
-        # files = self.fs.listdir(target_folder)
+        print("files", files, target_folder)
         if len(files) == 1:
             LOG.debug("No postprocessing required.")
         elif len(files) == 0:
             LOG.warn("No files to postprocess!")
         else:
             en_map = self._prepare_merge(files, data_id)
+            print("en_map", en_map)
             if not en_map:
                 LOG.error(
                     "This naming format is not supported. Currently "
@@ -104,11 +102,11 @@ class FileProcessor:
             A dictionary mapping coordinates to lists of file paths.
         """
         en_map = defaultdict(list)
-        data_id_folder = f"{self.path}/{data_id}"
+        data_id_folder = self.fs.sep.join([self.cache_store.root, data_id])
         for file in files:
             en = find_easting_northing(file)
             if en:
-                en_map[en].append(f"{data_id_folder}/{file}")
+                en_map[en].append(self.fs.sep.join([data_id_folder, file]))
         return en_map
 
     def _merge_and_save(
@@ -160,11 +158,11 @@ class FileProcessor:
         final_cube = concat_cube.to_dataset(
             name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
         )
-        new_filename = (
-            f"{data_id}/{data_id.split(DATA_ID_SEPARATOR)[-1]}/{_ZARR_FORMAT}"
+        new_filename = self.fs.sep.join(
+            [data_id, data_id.split(DATA_ID_SEPARATOR)[-1], _ZARR_FORMAT]
         )
 
-        self.file_store.write_data(final_cube, new_filename)
+        self.cache_store.write_data(final_cube, new_filename)
 
 
 def find_easting_northing(name: str) -> Optional[str]:

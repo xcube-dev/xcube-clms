@@ -25,6 +25,7 @@ from typing import Any
 
 import fsspec
 from tqdm.notebook import tqdm
+from xcube.core.store.fs.store import FsDataStore
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
@@ -79,13 +80,13 @@ class DownloadTaskManager:
         self,
         token_handler: ClmsApiTokenHandler,
         url: str,
-        path: str,
+        cache_store: FsDataStore,
         disable_tqdm_progress: bool | None = None,
     ) -> None:
         self._token_handler = token_handler
         self._api_token = self._token_handler.api_token
         self._url = url
-        self.path = path
+        self.cache_store = cache_store
         self.disable_tqdm_progress = disable_tqdm_progress
 
     def request_download(self, data_id: str, item: dict, product: dict) -> str:
@@ -377,7 +378,9 @@ class DownloadTaskManager:
                         inner_zip_fs,
                     )
                     if geo_files:
-                        target_folder = f"{self.path}/{data_id}"
+                        target_folder = self.cache_store.fs.sep.join(
+                            [self.cache_store.root, data_id]
+                        )
                         file_fs.makedirs(
                             file_fs.dirname(target_folder),
                             exist_ok=True,
@@ -390,7 +393,9 @@ class DownloadTaskManager:
                             try:
                                 with inner_zip_fs.open(geo_file, "rb") as source_file:
                                     geo_file_name = geo_file.split("/")[-1]
-                                    geo_file_path = f"{target_folder}/{geo_file_name}"
+                                    geo_file_path = self.cache_store.fs.sep.join(
+                                        [target_folder, geo_file_name]
+                                    )
                                     with open(
                                         geo_file_path,
                                         "wb",
