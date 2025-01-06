@@ -77,13 +77,6 @@ class DownloadTaskManager:
     """Manages tasks for downloading datasets from the CLMS API."""
 
     def __init__(self, token_handler: ClmsApiTokenHandler, url: str, path: str) -> None:
-        """Initializes the DownloadTaskManager
-
-        Args:
-            token_handler: TokenHandler instance for API authentication.
-            url: Base URL for the API.
-            path: Path where downloaded data will be stored.
-        """
         self._token_handler = token_handler
         self._api_token = self._token_handler.api_token
         self._url = url

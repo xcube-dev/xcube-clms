@@ -39,13 +39,6 @@ class FileProcessor:
     """Handles file processing after download completes."""
 
     def __init__(self, path: str, file_store, cleanup: bool = True) -> None:
-        """Initializes the FileProcessor.
-
-        Args:
-            path: The directory path where files are processed.
-            file_store: The file store object used for saving processed files.
-            cleanup: Whether to clean up the directory after processing.
-        """
         self.path = path
         self.file_store = file_store
         self.cleanup = cleanup

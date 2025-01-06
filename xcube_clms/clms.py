@@ -67,16 +67,6 @@ class Clms:
         path: str | None = None,
         cleanup: bool | None = None,
     ) -> None:
-        """Initializes the class.
-
-        Args:
-            credentials: JSON containing authentication credentials.
-            path: Optional cache path for storing preloaded data. If not
-                provided, it will be stored in the predefined folder.
-            cleanup: Option to clean up the directory after downloading the
-                datasets and if they contain multiple datasets. Defaults to
-                True.
-        """
         self.path: str = os.path.join(os.getcwd(), path or DEFAULT_PRELOAD_CACHE_FOLDER)
         self._preload_data = PreloadData(
             CLMS_API_URL, credentials, self.path, cleanup=cleanup

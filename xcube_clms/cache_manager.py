@@ -30,11 +30,6 @@ class CacheManager:
     """Manage the cache map for preloaded data."""
 
     def __init__(self, path) -> None:
-        """Initializes the CacheManager with the specified path.
-
-        Args:
-            path: The local path where the cache and file store are managed.
-        """
         self._cache = None
         self.path = path
         os.makedirs(self.path, exist_ok=True)
