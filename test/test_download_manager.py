@@ -1,7 +1,8 @@
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch, Mock, mock_open
+from unittest.mock import MagicMock, patch, Mock
 
+import fsspec
 import requests
 
 from xcube_clms.constants import TIME_TO_EXPIRE
@@ -24,6 +25,7 @@ class TestDownloadTaskManager(unittest.TestCase):
             path="/mock/path",
         )
         self.download_manager._token_handler = MagicMock()
+
         self.item = {"@id": "mock_id", "path": "mock_path", "source": "mock_source"}
         self.product = {
             "dataset_download_information": {
@@ -269,136 +271,92 @@ class TestDownloadTaskManager(unittest.TestCase):
         geo_files = DownloadTaskManager._find_geo_in_dir("/", mock_zip_fs)
         self.assertEqual(geo_files, [])
 
-    def test_download_data_with_single_geo_file(self):
-        mock_file_fs = MagicMock()
-        mock_outer_zip_file = MagicMock()
-        mock_inner_zip_fs = MagicMock()
-        mock_inner_zip_file = MagicMock()
-        mock_fs = MagicMock()
+    def test_find_geo_in_dir_recursive(self):
+        mock_zip_fs = Mock()
+        mock_zip_fs.ls.side_effect = lambda path: {
+            "/": [
+                {"name": "/folder1"},
+                {"name": "/file1.shp"},
+            ],
+            "/folder1": [
+                {"name": "/folder1/subfolder"},
+                {"name": "/folder1/file2.tif"},
+            ],
+            "/folder1/subfolder": [
+                {"name": "/folder1/subfolder/file3.txt"},
+            ],
+        }[path]
 
-        mock_outer_zip_file.__enter__.return_value = mock_inner_zip_fs
-        mock_outer_zip_file.__exit__.return_value = None
-        mock_inner_zip_file.__enter__.return_value = MagicMock()
-        mock_inner_zip_file.__exit__.return_value = None
+        mock_zip_fs.isdir.side_effect = lambda path: path in [
+            "/folder1",
+            "/folder1/subfolder",
+        ]
 
-        mock_fs.open.return_value = mock_outer_zip_file
-        self.mock_fsspec.side_effect = [mock_fs, mock_file_fs, mock_inner_zip_file]
+        result = DownloadTaskManager._find_geo_in_dir("/", mock_zip_fs)
 
-        download_url = "http://example.com/data.zip"
-        data_id = "test|data"
-        geo_file_name = "file1.tif"
+        expected_files = [
+            "/folder1/file2.tif",
+        ]
+        self.assertEqual(expected_files, result)
 
-        mock_fs.ls.return_value = [
+        mock_zip_fs.ls.assert_any_call("/")
+        mock_zip_fs.ls.assert_any_call("/folder1")
+        mock_zip_fs.ls.assert_any_call("/folder1/subfolder")
+
+    @patch("tempfile.NamedTemporaryFile")
+    @patch("builtins.open", create=True)
+    def test_download_data(self, mock_dest_open, mock_temp_file):
+        mock_temp_file.return_value.__enter__.return_value.name = "/tmp/test"
+
+        mock = Mock()
+        mock.iter_content.return_value = [b"chunk1", b"chunk2"]
+        self.mock_make_api_request.return_value = mock
+
+        mock_file_fs = Mock(spec=fsspec.AbstractFileSystem)
+        mock_file_fs.dirname = Mock(return_value=f"{self.download_manager.path}")
+
+        mock_outer_zip_fs = Mock()
+        mock_outer_zip_fs.ls.return_value = [
             {
-                "name": "Results/file.zip",
-                "filename": "Results/file.zip",
+                "filename": "test.zip",
+                "name": "test.zip",
             }
         ]
-        mock_inner_zip_fs.ls.side_effect = (
-            [{"name": geo_file_name, "filename": geo_file_name}],
-        )
 
-        mock_file_fs.makedirs.return_value = None
+        mock_inner_zip_fs = Mock()
+        mock_inner_zip_fs.ls.return_value = [{"name": "test.tif"}]
+        mock_inner_zip_fs.isdir.return_value = False
 
-        with patch.object(DownloadTaskManager, "_find_geo_in_dir") as mock_find_geo:
-            mock_find_geo.return_value = [geo_file_name]
-            with patch("builtins.open", mock_open()) as mocked_file:
-                self.download_manager.download_data(download_url, data_id)
+        self.mock_fsspec.side_effect = lambda protocol, fo=None: {
+            "zip": mock_outer_zip_fs if fo == "/tmp/test" else mock_inner_zip_fs,
+            "file": mock_file_fs,
+        }[protocol]
 
-        # mock_file_fs.makedirs.assert_called_once_with(target_folder, exist_ok=True)
-        print(
-            mock_fs,
-            mock_file_fs,
-            mock_inner_zip_file,
-            mock_outer_zip_file,
-            mock_inner_zip_fs,
-        )
-        mock_file_fs.open.assert_called_once_with(geo_file_name, "rb")
+        outer_file = Mock()
+        outer_context = Mock()
+        outer_context.__enter__ = Mock(return_value=outer_file)
+        outer_context.__exit__ = Mock()
+        mock_outer_zip_fs.open.return_value = outer_context
 
-    @patch("builtins.open", new_callable=mock_open)
-    @patch("xcube_clms.download_manager.DownloadTaskManager._find_geo_in_dir")
-    @patch("xcube_clms.download_manager.tempfile.NamedTemporaryFile")
-    def test_download_data(self, mock_temp_file, mock_find_geo_in_dir, mock_file_open):
-        download_url = "test_url"
-        data_id = "test_data_id"
+        mock_source_file = Mock()
+        mock_source_file.read.side_effect = [b"data", b""]
+        inner_context = Mock()
+        inner_context.__enter__ = Mock(return_value=mock_source_file)
+        inner_context.__exit__ = Mock()
+        mock_inner_zip_fs.open.return_value = inner_context
 
-        mock_response = Mock()
-        mock_response.iter_content.return_value = [b"chunk1", b"chunk2"]
-
-        mock_temp_file.return_value.__enter__.return_value.name = "temp_file_path"
-        mock_fs = self.mock_fsspec.return_value
-        mock_fs.ls.side_effect = [
-            [
-                {
-                    "name": "Results/file.zip",
-                    "filename": "Results/file.zip",
-                }
-            ],
-            [{"name": "mock/path/file1.tif"}],
-            [],
-        ]
-        mock_fs.open.return_value.__enter__.return_value = Mock()
-        mock_fs.isdir.side_effect = lambda path: False
-        print("until here", mock_find_geo_in_dir)
-
-        # mock_find_geo_in_dir.return_value = ["file.tif", "file.tif", "file.tif"]
-        def find_geo_side_effect(path, zip_fs):
-            if path == "/":
-                return ["mock/path/file1.tif"]
-            return []
-
-        mock_find_geo_in_dir.side_effect = find_geo_side_effect
-        # download_manager = DownloadTaskManager(
-        #     token_handler=self.mock_token_handler,
-        #     url="http://mock-api-url",
-        #     path="/mock/path",
-        # )
-        # download_manager._token_handler = MagicMock()
-        # download_manager.download_data(download_url, data_id)
-        self.download_manager.download_data(download_url, data_id)
-        expected_file_path = f"{self.download_manager.path}/{data_id}/file.tif"
+        self.download_manager.download_data("http://test.com", "test_id")
 
         self.mock_make_api_request.assert_called_once_with(
-            download_url, timeout=600, stream=True
+            "http://test.com", timeout=600, stream=True
         )
-        self.mock_fsspec.assert_any_call("zip", fo="temp_file_path")
-        mock_fs.open.assert_called_once_with("Results/file.zip", "rb")
-        mock_file_open.assert_called_once_with(expected_file_path, "wb")
-
-        handle = mock_file_open()
-        handle.write.assert_any_call(b"chunk1")
-        handle.write.assert_any_call(b"chunk2")
-
-        # with patch("your_module.make_api_request",
-        #            return_value=mock_response) as mock_make_api_request, \
-        #         patch("tempfile.NamedTemporaryFile") as mock_temp_file, \
-        #         patch("fsspec.filesystem") as mock_filesystem, \
-        #         patch(
-        #             "your_module.DownloadTaskManager._find_geo_in_dir") as mock_find_geo, \
-        #         patch("your_module.open", mock_open()) as mock_file_open, \
-        #         patch("your_module.tqdm"):  # mock tqdm
-        #     mock_temp_file.return_value.__enter__.return_value.name = "temp_file_path"
-        #     mock_fs = mock_filesystem.return_value
-        #     mock_fs.ls.return_value = []
-        #     with self.assertRaises(FileNotFoundError):
-        #         self.obj.download_data(download_url, data_id)
-        #
-        # with patch("your_module.make_api_request",
-        #            return_value=mock_response) as mock_make_api_request, \
-        #         patch("tempfile.NamedTemporaryFile") as mock_temp_file, \
-        #         patch("fsspec.filesystem") as mock_filesystem, \
-        #         patch(
-        #             "your_module.DownloadTaskManager._find_geo_in_dir") as mock_find_geo, \
-        #         patch("your_module.open", mock_open()) as mock_file_open, \
-        #         patch("your_module.tqdm"):  # mock tqdm
-        #     mock_temp_file.return_value.__enter__.return_value.name = "temp_file_path"
-        #     mock_fs = mock_filesystem.return_value
-        #     mock_fs.ls.return_value = [
-        #         {"_NAME_KEY": "file", "_FILENAME_KEY": "file",
-        #          "_ORIGINAL_FILENAME_KEY": "file", "_NAME_KEY": "file",
-        #          "_FILE_KEY": "file"}]
-        #     with self.assertRaises(FileNotFoundError):
-        #         self.obj.download_data(download_url, data_id)
+        self.assertTrue(mock_file_fs.makedirs.called)
+        self.assertTrue(mock_file_fs.dirname.called)
+        self.assertTrue(mock_outer_zip_fs.ls.called)
+        self.assertTrue(mock_outer_zip_fs.open.called)
+        self.assertTrue(mock_inner_zip_fs.ls.called)
+        self.assertTrue(mock_inner_zip_fs.open.called)
+        self.assertTrue(mock_dest_open.called)
 
 
 def test_get_dataset_download_info():

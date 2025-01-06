@@ -19,7 +19,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import os
 import tempfile
 from datetime import datetime, timedelta
 from typing import Any
@@ -361,8 +360,9 @@ class DownloadTaskManager:
                 temp_file.write(chunk)
                 del chunk
 
-            fs = fsspec.filesystem("zip", fo=temp_file_path)
-            zip_contents = fs.ls(_RESULTS)
+            outer_zip_fs = fsspec.filesystem("zip", fo=temp_file_path)
+            file_fs = fsspec.filesystem("file")
+            zip_contents = outer_zip_fs.ls(_RESULTS)
             actual_zip_file = None
             if len(zip_contents) == 1:
                 if ".zip" in zip_contents[0][_FILENAME_KEY]:
@@ -376,17 +376,17 @@ class DownloadTaskManager:
                     f"Found one zip file "
                     f"{actual_zip_file.get(_ORIGINAL_FILENAME_KEY)}."
                 )
-                with fs.open(actual_zip_file[_NAME_KEY], "rb") as f:
-                    zip_fs = fsspec.filesystem("zip", fo=f)
+                with outer_zip_fs.open(actual_zip_file[_NAME_KEY], "rb") as f:
+                    inner_zip_fs = fsspec.filesystem("zip", fo=f)
 
                     geo_files = DownloadTaskManager._find_geo_in_dir(
                         "/",
-                        zip_fs,
+                        inner_zip_fs,
                     )
                     if geo_files:
-                        target_folder = os.path.join(self.path, data_id + "/").__str__()
-                        os.makedirs(
-                            os.path.dirname(target_folder),
+                        target_folder = f"{self.path}/{data_id}"
+                        file_fs.makedirs(
+                            file_fs.dirname(target_folder),
                             exist_ok=True,
                         )
                         for geo_file in tqdm(
@@ -395,11 +395,9 @@ class DownloadTaskManager:
                             disable=self.disable_tqdm_progress,
                         ):
                             try:
-                                with zip_fs.open(geo_file, "rb") as source_file:
+                                with inner_zip_fs.open(geo_file, "rb") as source_file:
                                     geo_file_name = geo_file.split("/")[-1]
-                                    geo_file_path = os.path.join(
-                                        target_folder, geo_file_name
-                                    )
+                                    geo_file_path = f"{target_folder}/{geo_file_name}"
                                     with open(
                                         geo_file_path,
                                         "wb",
