@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch, Mock
 
 import fsspec
 import requests
+from xcube.core.store import new_fs_data_store
 
 from xcube_clms.constants import TIME_TO_EXPIRE
 from xcube_clms.download_manager import (
@@ -19,10 +20,12 @@ class TestDownloadTaskManager(unittest.TestCase):
     def setUp(self):
         self.mock_token_handler = MagicMock()
         self.mock_token_handler.api_token = "mock_token"
+        self.test_path = "/mock/path"
+        self.file_store = new_fs_data_store("file", root=self.test_path)
         self.download_manager = DownloadTaskManager(
             token_handler=self.mock_token_handler,
             url="http://mock-api-url",
-            path="/mock/path",
+            cache_store=self.file_store,
         )
         self.download_manager._token_handler = MagicMock()
 
@@ -313,7 +316,9 @@ class TestDownloadTaskManager(unittest.TestCase):
         self.mock_make_api_request.return_value = mock
 
         mock_file_fs = Mock(spec=fsspec.AbstractFileSystem)
-        mock_file_fs.dirname = Mock(return_value=f"{self.download_manager.path}")
+        mock_file_fs.dirname = Mock(
+            return_value=f"{self.download_manager.cache_store.root}"
+        )
 
         mock_outer_zip_fs = Mock()
         mock_outer_zip_fs.ls.return_value = [

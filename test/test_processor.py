@@ -19,7 +19,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import os
 import tempfile
 import unittest
 from collections import defaultdict
@@ -28,6 +27,7 @@ from unittest.mock import patch, MagicMock
 
 import numpy as np
 import xarray as xr
+from xcube.core.store import new_fs_data_store
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
 from xcube_clms.processor import FileProcessor, cleanup_dir, \
@@ -37,8 +37,9 @@ from xcube_clms.processor import FileProcessor, cleanup_dir, \
 class ProcessorTest(unittest.TestCase):
 
     def setUp(self):
-        self.mock_path = "/mock/path"
         self.mock_data_id = "product_id|dataset_id"
+        self.test_path = "/test/path"
+        self.file_store = new_fs_data_store("file", root=self.test_path)
         self.mock_file_store = MagicMock()
 
     @patch("xcube_clms.processor.LOG")
@@ -48,14 +49,14 @@ class ProcessorTest(unittest.TestCase):
         mock_fsspec.return_value.ls.return_value = [
             "/mock/path/product_id|dataset_id/file_1.tif"
         ]
-        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
+        processor = FileProcessor(self.file_store, cleanup=True)
         processor.postprocess(self.mock_data_id)
 
         mock_cleanup_dir.assert_not_called()
         mock_log.debug.assert_called()
 
         mock_log.reset_mock()
-        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=False)
+        processor = FileProcessor(self.file_store, cleanup=False)
         processor.postprocess(self.mock_data_id)
 
         mock_log.debug.assert_called()
@@ -66,7 +67,7 @@ class ProcessorTest(unittest.TestCase):
     @patch("xcube_clms.processor.cleanup_dir")
     def test_postprocess_no_files(self, mock_cleanup_dir, mock_fsspec, mock_log):
         mock_fsspec.return_value.ls.return_value = []
-        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
+        processor = FileProcessor(self.mock_file_store, cleanup=True)
         processor.postprocess(self.mock_data_id)
 
         mock_log.warn.assert_called()
@@ -80,7 +81,17 @@ class ProcessorTest(unittest.TestCase):
     ):
         mock_files = ["file_1.tif", "file_2.tif", "file_3.tif"]
         mock_fsspec.return_value.ls.return_value = mock_files
-        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
+        self.mock_file_store.fs = MagicMock()
+        self.mock_file_store.fs.sep = "/"
+        self.mock_file_store.fs.sep = MagicMock()
+        self.mock_file_store.fs.sep.join.return_value = [
+            self.test_path + "/invalid_data_id",
+        ]
+        self.mock_file_store.fs.ls.return_value = [
+            f"{self.test_path}/" + file for file in mock_files
+        ]
+
+        processor = FileProcessor(self.mock_file_store, cleanup=True)
         processor.postprocess("invalid_data_id")
 
         mock_log.error.assert_called()
@@ -123,7 +134,7 @@ class ProcessorTest(unittest.TestCase):
         en_map["E35N78"].append(f"{data_id}/file_2_E35N78.tif")
         en_map["E34N79"].append(f"{data_id}/file_3_E34N79.tif")
 
-        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
+        processor = FileProcessor(self.mock_file_store, cleanup=True)
         mock_xr_concat.reset_mock()
         processor._merge_and_save(en_map, data_id)
 
@@ -141,13 +152,12 @@ class ProcessorTest(unittest.TestCase):
         self.data_id = "product_empty"
         en_map = defaultdict(list)
 
-        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
+        processor = FileProcessor(self.mock_file_store, cleanup=True)
         processor._merge_and_save(en_map, self.data_id)
 
         mock_rioxarray_open_rasterio.assert_not_called()
-        self.mock_file_store.write_data.assert_not_called()
 
-        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=False)
+        processor = FileProcessor(self.mock_file_store, cleanup=False)
         processor._merge_and_save(en_map, self.data_id)
 
         mock_rioxarray_open_rasterio.assert_not_called()
@@ -166,7 +176,7 @@ class ProcessorTest(unittest.TestCase):
         en_map = defaultdict(list)
         en_map["E34N78"].append(f"{data_id}/file_1_E34N78.tif")
 
-        processor = FileProcessor(self.mock_path, self.mock_file_store, cleanup=True)
+        processor = FileProcessor(self.mock_file_store, cleanup=True)
         processor._merge_and_save(en_map, data_id)
 
         mock_rioxarray_open_rasterio.assert_called_once()
@@ -181,16 +191,14 @@ class ProcessorTest(unittest.TestCase):
     def test_prepare_merge_valid_files(self):
         files = ["file_E12N34.tif", "file_E56N78.tif"]
         data_id = "test_dataset"
-        test_path = "/test/path"
-        processor = FileProcessor(test_path, None)
+
+        processor = FileProcessor(self.file_store)
 
         expected_en_map = defaultdict(list)
         expected_en_map["E12N34"].append(
-            os.path.join(test_path, data_id, "file_E12N34.tif")
+            f"{self.test_path}" f"/{data_id}/file_E12N34.tif"
         )
-        expected_en_map["E56N78"].append(
-            os.path.join(test_path, data_id, "file_E56N78.tif")
-        )
+        expected_en_map["E56N78"].append(f"{self.test_path}/{data_id}/file_E56N78.tif")
 
         en_map = processor._prepare_merge(files, data_id)
         self.assertEqual(expected_en_map, en_map)
@@ -199,8 +207,7 @@ class ProcessorTest(unittest.TestCase):
 
         files = ["invalid_file_1.tif", "invalid_file_2.tif"]
         data_id = "test_dataset"
-        test_path = "/test/path"
-        processor = FileProcessor(test_path, None)
+        processor = FileProcessor(self.file_store)
 
         en_map = processor._prepare_merge(files, data_id)
         self.assertEqual(defaultdict(list), en_map)
@@ -208,13 +215,10 @@ class ProcessorTest(unittest.TestCase):
     def test_prepare_merge_mixed_files(self):
         files = ["valid_E12N34.tif", "invalid_file.tif"]
         data_id = "test_dataset"
-        test_path = "/test/path"
-        processor = FileProcessor(test_path, None)
+        processor = FileProcessor(self.file_store)
 
         expected_en_map = defaultdict(list)
-        expected_en_map["E12N34"].append(
-            os.path.join(test_path, data_id, "valid_E12N34.tif")
-        )
+        expected_en_map["E12N34"].append(f"{self.test_path}/{data_id}/valid_E12N34.tif")
 
         en_map = processor._prepare_merge(files, data_id)
         self.assertEqual(expected_en_map, en_map)

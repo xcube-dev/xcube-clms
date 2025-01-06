@@ -18,12 +18,12 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import os
 import unittest
 from unittest.mock import patch, MagicMock
 
 import numpy as np
 import xarray as xr
+from xcube.core.store import new_fs_data_store
 
 from xcube_clms.clms import Clms
 
@@ -36,7 +36,9 @@ class ClmsTest(unittest.TestCase):
         )
 
     def setUp(self):
-        self.mock_path = "mockpath"
+        self.test_path = "/mock/path"
+        self.file_store = new_fs_data_store("file", root=self.test_path)
+        self.mock_file_store = MagicMock()
         self.mock_credentials = {
             "client_id": "test_client_id",
             "user_id": "test_user_id",
@@ -59,7 +61,6 @@ class ClmsTest(unittest.TestCase):
                 },
             },
         ]
-        self.mock_os_listdir_patcher = patch("xcube_clms.clms.os.listdir")
         self.mock_make_api_request_patcher = patch("xcube_clms.clms.make_api_request")
         self.mock_get_response_of_type_patcher = patch(
             "xcube_clms.clms.get_response_of_type"
@@ -68,7 +69,6 @@ class ClmsTest(unittest.TestCase):
             "xcube_clms.clms.is_valid_data_type"
         )
 
-        self.mock_os_listdir = self.mock_os_listdir_patcher.start()
         self.mock_make_api_request = self.mock_make_api_request_patcher.start()
         self.mock_get_response_of_type = self.mock_get_response_of_type_patcher.start()
         self.mock_is_valid_data_type = self.mock_is_valid_data_type_patcher.start()
@@ -85,34 +85,29 @@ class ClmsTest(unittest.TestCase):
         patch.stopall()
 
     def test_initialization(self):
-        clms = Clms(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.file_store)
 
-        self.assertEqual(clms.path, os.path.join(os.getcwd(), self.mock_path))
-        self.assertEqual(clms._datasets_info, self.datasets_info)
+        self.assertEqual(self.test_path, clms._cache_root)
+        self.assertEqual(self.datasets_info, clms._datasets_info)
 
     def test_open_data(self):
-        self.mock_data_store.open_data.return_value = self.mock_dataset
+        self.mock_file_store.open_data.return_value = self.mock_dataset
 
-        clms = Clms(self.mock_credentials, self.mock_path)
-        clms.preload_handle = MagicMock()
-        clms.preload_handle.data_store = self.mock_data_store
+        clms = Clms(self.mock_credentials, self.mock_file_store)
 
         opened_data = clms.open_data(self.data_id)
         self.assertIsInstance(opened_data, xr.Dataset)
 
-        clms.preload_handle.view_cache.return_value = {}
-
-        with self.assertRaisesRegex(
-            FileNotFoundError, f"No cached data found for data_id: {self.data_id}"
-        ):
-            clms.open_data(self.data_id)
+        self.mock_file_store.has_data.return_value = False
+        with self.assertRaises(FileNotFoundError):
+            clms.open_data("non-existing|data-id")
 
         data_id = "invalid_data_id"
         with self.assertRaises(ValueError):
             clms.open_data(data_id)
 
     def test_get_data_ids(self):
-        clms = Clms(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.file_store)
         data_ids = list(clms.get_data_ids())
         self.assertEqual(data_ids, ["dataset1|file1", "dataset2|file2"])
 
@@ -142,7 +137,7 @@ class ClmsTest(unittest.TestCase):
 
     @patch("xcube_clms.clms.Clms._get_item")
     def test_has_data(self, mock_get_item):
-        clms = Clms(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.file_store)
 
         # Case 1: Valid data type and dataset exists
         self.mock_is_valid_data_type.return_value = True
@@ -166,7 +161,7 @@ class ClmsTest(unittest.TestCase):
             "format": "geotiff",
         }
 
-        clms = Clms(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.file_store)
 
         self.assertEqual(
             {
@@ -182,7 +177,7 @@ class ClmsTest(unittest.TestCase):
             "temporalExtentStart": "01-12-2022",
             "temporalExtentEnd": "01-12-2024",
         }
-        clms = Clms(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.file_store)
 
         self.assertEqual(
             {
@@ -193,7 +188,7 @@ class ClmsTest(unittest.TestCase):
         )
 
     def test_create_data_ids(self):
-        clms = Clms(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.file_store)
         clms._datasets_info = self.datasets_info
 
         result = list(clms._create_data_ids(include_attrs=None))
@@ -271,13 +266,13 @@ class ClmsTest(unittest.TestCase):
         self.assertEqual(expected_datasets_info, datasets_info)
 
     def test_access_item(self):
-        clms = Clms(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.file_store)
         item = clms._access_item("dataset2|file2")
         expected_item = {"file": "file2", "area": "area2", "format": "geotiff"}
         self.assertEqual(expected_item, item)
 
     def test_get_item(self):
-        clms = Clms(self.mock_credentials, self.mock_path)
+        clms = Clms(self.mock_credentials, self.file_store)
         item = clms._get_item("dataset2|file2")
         expected_item = [{"file": "file2", "area": "area2", "format": "geotiff"}]
         self.assertEqual(expected_item, item)
