@@ -38,7 +38,12 @@ from xcube_clms.processor import FileProcessor, cleanup_dir
 
 
 class ClmsPreloadHandle(ExecutorPreloadHandle):
-    """Handles the preloading of data into the cache store."""
+    """Handles the preloading of data into the cache store.
+
+    Authentication credentials can be obtained following the steps from the
+    CLMS API documentation
+    https://eea.github.io/clms-api-docs/authentication.html
+    """
 
     def __init__(
         self,
@@ -52,17 +57,6 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         disable_tqdm_progress: bool | None = None,
         data_store: str | None = None,
     ) -> None:
-        """Initializes the PreloadData instance.
-
-        Args:
-            url: The base URL for data requests to the CLMS API.
-            credentials: Authentication credentials that are obtained
-                following the steps from the CLMS API documentation.
-                https://eea.github.io/clms-api-docs/authentication.html
-            path: Local path for caching and file storage.
-            cleanup: Whether to clean up the extracted files from the zip
-            download. Defaults to True.
-        """
         self.data_id_maps = data_id_maps
         self._url: str = url
         self._credentials: dict = {}

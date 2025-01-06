@@ -44,13 +44,6 @@ class FileProcessor:
         cleanup: bool = True,
         disable_tqdm_progress: bool = False,
     ) -> None:
-        """Initializes the FileProcessor.
-
-        Args:
-            path: The directory path where files are processed.
-            file_store: The file store object used for saving processed files.
-            cleanup: Whether to clean up the directory after processing.
-        """
         self.path = path
         self.file_store = file_store
         self.fs = fsspec.filesystem("file")
@@ -218,7 +211,7 @@ def cleanup_dir(
     ):
         item_path = item["name"]
         try:
-            # Adding the not item_path.endswith(keep_extension) condition
+            # Adding the `not item_path.endswith(keep_extension)` condition
             # here as `.zarr` files are recognized as folders
             if fs.isdir(item_path) and (
                 keep_extension is None

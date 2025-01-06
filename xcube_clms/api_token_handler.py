@@ -39,11 +39,6 @@ class ClmsApiTokenHandler:
     """
 
     def __init__(self, credentials: dict[str, str]) -> None:
-        """Initializes the CLMSAPIToken object.
-
-        Args:
-            credentials: A dictionary containing the credentials
-        """
         self._credentials: dict = credentials
         self._token_expiry: int = 0
         self._token_lifetime: int = 3600  # Token lifetime in seconds

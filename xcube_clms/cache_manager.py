@@ -28,11 +28,6 @@ class CacheManager:
     """Manage the cache map for preloaded data."""
 
     def __init__(self, path, data_store: str = "file", **data_store_params) -> None:
-        """Initializes the CacheManager with the specified path.
-
-        Args:
-            path: The local path where the cache and file store are managed.
-        """
         self._cache = None
         self.path = path
         self.fs = fsspec.filesystem("file")

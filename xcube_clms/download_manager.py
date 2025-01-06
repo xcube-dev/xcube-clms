@@ -82,13 +82,6 @@ class DownloadTaskManager:
         path: str,
         disable_tqdm_progress: bool | None = None,
     ) -> None:
-        """Initializes the DownloadTaskManager
-
-        Args:
-            token_handler: TokenHandler instance for API authentication.
-            url: Base URL for the API.
-            path: Path where downloaded data will be stored.
-        """
         self._token_handler = token_handler
         self._api_token = self._token_handler.api_token
         self._url = url
