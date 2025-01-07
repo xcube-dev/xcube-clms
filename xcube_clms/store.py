@@ -75,6 +75,9 @@ class ClmsDataStore(DataStore, ABC):
                 ),
                 default=DEFAULT_PRELOAD_CACHE_FOLDER,
             ),
+            cache_store_params=JsonObjectSchema(
+                title="Parameters for creating new cache data store"
+            ),
             cleanup=JsonBooleanSchema(
                 title="Option to cleanup the directory in case there were "
                 "multiple files downloaded for the same data_id. "
