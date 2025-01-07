@@ -156,7 +156,7 @@ class ClmsDataStore(DataStore, ABC):
     def get_search_params_schema(
         cls, data_type: DataTypeLike = None
     ) -> JsonObjectSchema:
-        pass
+        return JsonObjectSchema()
 
     def preload_data(
         self,

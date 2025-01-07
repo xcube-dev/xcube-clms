@@ -65,14 +65,12 @@ class FileProcessor:
         """
         target_folder = self.fs.sep.join([self.cache_store.root, data_id])
         files = [entry.split("/")[-1] for entry in self.fs.ls(target_folder)]
-        print("files", files, target_folder)
         if len(files) == 1:
             LOG.debug("No postprocessing required.")
         elif len(files) == 0:
             LOG.warn("No files to postprocess!")
         else:
             en_map = self._prepare_merge(files, data_id)
-            print("en_map", en_map)
             if not en_map:
                 LOG.error(
                     "This naming format is not supported. Currently "

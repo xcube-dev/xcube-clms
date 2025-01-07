@@ -22,12 +22,14 @@ from typing import Any, Container, Union, Iterator
 
 import xarray as xr
 from xcube.core.store import DataTypeLike, PreloadHandle, new_fs_data_store
+from xcube.core.store.fs.store import FsDataStore
 
 from .constants import (
     SEARCH_ENDPOINT,
     LOG,
     DATA_ID_SEPARATOR,
     CLMS_API_URL,
+    DEFAULT_PRELOAD_CACHE_FOLDER,
 )
 from .preload import ClmsPreloadHandle
 from .utils import (
@@ -63,11 +65,15 @@ class Clms:
         self,
         credentials: dict,
         cache_store_id: str = "file",
-        cache_store_params: dict = None,
+        cache_store_params: dict | None = None,
         cleanup: bool | None = None,
         disable_tqdm_progress: bool | None = None,
     ) -> None:
-        self.cache_store = new_fs_data_store(cache_store_id, **cache_store_params)
+        if cache_store_params is None:
+            cache_store_params = dict(root=DEFAULT_PRELOAD_CACHE_FOLDER)
+        self.cache_store: FsDataStore = new_fs_data_store(
+            cache_store_id, **cache_store_params
+        )
         self.fs = self.cache_store.fs
         self._cache_root = self.cache_store.root
         self.credentials = credentials
@@ -108,11 +114,10 @@ class Clms:
                 "Cache data store does not exist yet. Please preload "
                 "data first using the preload_data() method."
             )
-
         if not self.cache_store.has_data(data_id):
             raise FileNotFoundError(f"No cached data found for data_id: {data_id}")
 
-        return self.cache_store.open_data(data_id, **open_params)
+        return self.cache_store.open_data(data_id=data_id, **open_params)
 
     def get_data_ids(
         self,
@@ -192,6 +197,7 @@ class Clms:
             data_id_maps=data_id_maps,
             url=CLMS_API_URL,
             credentials=self.credentials,
+            cache_store=self.cache_store,
             cleanup=self.cleanup,
             disable_tqdm_progress=self.disable_tqdm_progress,
             **preload_params,
