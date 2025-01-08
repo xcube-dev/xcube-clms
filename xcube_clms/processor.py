@@ -156,9 +156,7 @@ class FileProcessor:
         final_cube = concat_cube.to_dataset(
             name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
         )
-        new_filename = self.fs.sep.join(
-            [data_id, data_id.split(DATA_ID_SEPARATOR)[-1], _ZARR_FORMAT]
-        )
+        new_filename = self.fs.sep.join([data_id, data_id + _ZARR_FORMAT])
 
         self.cache_store.write_data(final_cube, new_filename)
 

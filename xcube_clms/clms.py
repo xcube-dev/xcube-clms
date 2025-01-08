@@ -21,8 +21,12 @@
 from typing import Any, Container, Union, Iterator
 
 import xarray as xr
-from xcube.core.store import DataTypeLike, PreloadHandle, new_fs_data_store
-from xcube.core.store.fs.store import FsDataStore
+from xcube.core.store import (
+    DataTypeLike,
+    new_data_store,
+    MutableDataStore,
+)
+from xcube.core.store.preload import PreloadHandle
 
 from .constants import (
     SEARCH_ENDPOINT,
@@ -69,9 +73,10 @@ class Clms:
         cleanup: bool | None = None,
         disable_tqdm_progress: bool | None = None,
     ) -> None:
-        if cache_store_params is None:
+        if cache_store_params.get("root") is None:
             cache_store_params = dict(root=DEFAULT_PRELOAD_CACHE_FOLDER)
-        self.cache_store: FsDataStore = new_fs_data_store(
+        cache_store_params["max_depth"] = cache_store_params.pop("max_depth", 2)
+        self.cache_store: MutableDataStore = new_data_store(
             cache_store_id, **cache_store_params
         )
         self.fs = self.cache_store.fs
@@ -87,7 +92,8 @@ class Clms:
         data_id: str,
         **open_params,
     ) -> xr.Dataset:
-        """Opens the data associated with a specific data ID.
+        """Opens the data associated with a specific data ID from the cache
+        store.
 
         Args:
             data_id: Identifier for the data to open.
@@ -97,20 +103,14 @@ class Clms:
             The opened data object.
 
         Raises:
-            ValueError: If the data ID is invalid or improperly formatted.
             FileNotFoundError: If the data ID is not found in the cache.
         """
-        try:
-            _, file_id = data_id.split(DATA_ID_SEPARATOR)
-        except ValueError as e:
-            LOG.error(
-                f"The format of the data ID is wrong. Expected it in "
-                f"the format {{product_id}}{DATA_ID_SEPARATOR}{{file_id}} but "
-                f"got {data_id}. {e}"
-            )
-            raise
         if not self.cache_store.has_data(data_id):
-            raise FileNotFoundError(f"No cached data found for data_id: {data_id}")
+            raise FileNotFoundError(
+                f"No cached data found for data_id: "
+                f"{data_id}. Please preload the data "
+                f"first using the `preload_data()` method"
+            )
 
         return self.cache_store.open_data(data_id=data_id, **open_params)
 

@@ -85,7 +85,9 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         """Processes a single preload task on a separate thread."""
         status_event = threading.Event()
         data_id_info = self.data_id_maps.get(data_id)
-        if data_id in self.cache_store.list_data_ids():
+        if data_id in (
+            element.split("/")[0] for element in self.cache_store.list_data_ids()
+        ):
             self.notify(
                 PreloadState(
                     data_id,

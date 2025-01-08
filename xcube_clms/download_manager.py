@@ -353,7 +353,6 @@ class DownloadTaskManager:
                 del chunk
 
             outer_zip_fs = fsspec.filesystem("zip", fo=temp_file_path)
-            file_fs = fsspec.filesystem("file")
             zip_contents = outer_zip_fs.ls(_RESULTS)
             actual_zip_file = None
             if len(zip_contents) == 1:
@@ -379,8 +378,8 @@ class DownloadTaskManager:
                         target_folder = self.cache_store.fs.sep.join(
                             [self.cache_store.root, data_id]
                         )
-                        file_fs.makedirs(
-                            file_fs.dirname(target_folder),
+                        self.cache_store.fs.makedirs(
+                            target_folder,
                             exist_ok=True,
                         )
                         for geo_file in tqdm(
@@ -390,17 +389,14 @@ class DownloadTaskManager:
                         ):
                             try:
                                 with inner_zip_fs.open(geo_file, "rb") as source_file:
-                                    # print("source_file", source_file)
                                     geo_file_name = geo_file.split("/")[-1]
                                     geo_file_path = self.cache_store.fs.sep.join(
                                         [target_folder, geo_file_name]
                                     )
-                                    # print("geo_file_path", geo_file_path)
                                     with open(
                                         geo_file_path,
                                         "wb",
                                     ) as dest_file:
-                                        print("inside dest")
                                         for chunk in tqdm(
                                             iter(
                                                 lambda: source_file.read(chunk_size),
@@ -409,8 +405,6 @@ class DownloadTaskManager:
                                             desc=f"Extracting geo file {geo_file_name}",
                                             disable=self.disable_tqdm_progress,
                                         ):
-                                            # print(dest_file, dest_file.write, chunk)
-                                            # print(dest_file.write(chunk))
                                             dest_file.write(chunk)
                                 LOG.debug(
                                     f"The file {geo_file_name} has been successfully "
@@ -424,7 +418,6 @@ class DownloadTaskManager:
                                 )
                                 raise
                             except Exception as e:
-                                print("here", e)
                                 LOG.error(f"An unexpected error occurred: {e}")
                                 raise
 
