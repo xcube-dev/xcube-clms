@@ -97,6 +97,30 @@ class ProcessorTest(unittest.TestCase):
         mock_cleanup_dir.assert_not_called()
         self.mock_file_store.write_data.assert_not_called()
 
+    @patch("xcube_clms.processor.FileProcessor._prepare_merge")
+    @patch("xcube_clms.processor.FileProcessor._merge_and_save")
+    @patch("xcube_clms.processor.LOG")
+    @patch("xcube_clms.processor.fsspec.filesystem")
+    @patch("xcube_clms.processor.cleanup_dir")
+    def test_postprocess_multiple_files(
+        self,
+        mock_cleanup_dir,
+        mock_fsspec,
+        mock_log,
+        mock_merge_and_save,
+        mock_prepare_merge,
+    ):
+        mock_fsspec.return_value.ls.return_value = [
+            "/mock/path/product_id|dataset_id1/file_1.tif",
+            "/mock/path/product_id|dataset_id2/file_2.tif",
+        ]
+        processor = FileProcessor(self.file_store, cleanup=True)
+        processor.postprocess(self.mock_data_id)
+
+        mock_log.debug.assert_not_called()
+        mock_merge_and_save.assert_called()
+        mock_cleanup_dir.assert_called()
+
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     @patch("xcube_clms.processor.xr.concat")
     def test_postprocess_merge_and_save(
@@ -269,6 +293,18 @@ class ProcessorTest(unittest.TestCase):
 
             self.assertFalse(nested_folder.exists())
             self.assertFalse(nested_file.exists())
+
+    def test_cleanup_dir_non_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_path_str:
+            tmp_path = Path(tmp_path_str)
+            folder_path = tmp_path / "test_folder"
+            folder_path.mkdir()
+
+            delete_file = folder_path / "file1.tif"
+            delete_file.write_text("test")
+
+            with self.assertRaises(ValueError):
+                cleanup_dir(delete_file, keep_extension=".zarr")
 
     def test_find_easting_northing_valid(self):
         name = "randomE12N34text"

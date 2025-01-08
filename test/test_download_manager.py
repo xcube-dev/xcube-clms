@@ -57,21 +57,19 @@ class TestDownloadTaskManager(unittest.TestCase):
             "UID": "mock_uid",
         }
 
-        self.mock_fsspec_patcher = patch(
-            "xcube_clms.download_manager.fsspec.filesystem"
-        )
-        self.mock_make_api_request_patcher = patch(
+        mock_fsspec_patcher = patch("xcube_clms.download_manager.fsspec.filesystem")
+        mock_make_api_request_patcher = patch(
             "xcube_clms.download_manager.make_api_request"
         )
-        self.mock_get_response_of_type_patcher = patch(
+        mock_get_response_of_type_patcher = patch(
             "xcube_clms.download_manager.get_response_of_type"
         )
-        self.mock_has_expired_patcher = patch("xcube_clms.download_manager.has_expired")
+        mock_has_expired_patcher = patch("xcube_clms.download_manager.has_expired")
 
-        self.mock_fsspec = self.mock_fsspec_patcher.start()
-        self.mock_make_api_request = self.mock_make_api_request_patcher.start()
-        self.mock_get_response_of_type = self.mock_get_response_of_type_patcher.start()
-        self.mock_has_expired = self.mock_has_expired_patcher.start()
+        self.mock_fsspec = mock_fsspec_patcher.start()
+        self.mock_make_api_request = mock_make_api_request_patcher.start()
+        self.mock_get_response_of_type = mock_get_response_of_type_patcher.start()
+        self.mock_has_expired = mock_has_expired_patcher.start()
 
     def tearDown(self):
         patch.stopall()
@@ -327,7 +325,7 @@ class TestDownloadTaskManager(unittest.TestCase):
         mock_zip_fs.ls.assert_any_call("/folder1/subfolder")
 
     @patch("tempfile.NamedTemporaryFile")
-    @patch("builtins.open", create=True)
+    @patch("builtins.open")
     def test_download_data(self, mock_dest_open, mock_temp_file):
         mock_temp_file.return_value.__enter__.return_value.name = "/tmp/test"
 

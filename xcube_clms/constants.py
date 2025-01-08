@@ -28,7 +28,7 @@ CLMS_API_URL = "https://land.copernicus.eu/api"
 TIME_TO_EXPIRE = 24  # (in hours)
 RETRY_TIMEOUT = 60  # (in seconds)
 
-DEFAULT_PRELOAD_CACHE_FOLDER = "clms_cache/"
+DEFAULT_PRELOAD_CACHE_FOLDER = "/clms_cache"
 
 # CLMS API Constants
 SEARCH_ENDPOINT = "@search"

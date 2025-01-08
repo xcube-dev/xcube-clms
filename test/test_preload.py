@@ -18,54 +18,184 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import time
 import unittest
 from unittest.mock import patch, MagicMock
+
+from xcube.core.store import PreloadStatus
 
 from xcube_clms.preload import ClmsPreloadHandle
 
 
 class TestClmsPreloadHandle(unittest.TestCase):
 
-    @patch("xcube_clms.preload.ExecutorPreloadHandle.notify")
-    @patch("xcube_clms.preload.DownloadTaskManager")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    def test_preload_data_cached(
-        self,
-        mock_api_token_handler,
-        mock_download_task_manager,
-        mock_notify,
-    ):
-        mock_api_token_handler.api_token = MagicMock()
-        mock_fs_data_store = MagicMock()
-        mock_fs_data_store.list_data_ids.return_value = []
-        data_id_maps = {
-            "cached_data|id": {
-                "item": {"id": "item_id"},
-                "product": {"id": "product_id"},
-            }
-        }
-        download_manager_instance = MagicMock()
-        mock_download_task_manager.return_value = download_manager_instance
-        download_manager_instance.request_download.return_value = "mock_task_id"
-        download_manager_instance.get_current_requests_status.return_value = (
+    def setUp(self):
+        self.mock_notify_patcher = patch(
+            "xcube_clms.preload.ExecutorPreloadHandle.notify"
+        )
+        self.mock_download_task_manager_patcher = patch(
+            "xcube_clms.preload.DownloadTaskManager"
+        )
+        self.mock_api_token_handler_patcher = patch(
+            "xcube_clms.preload.ClmsApiTokenHandler"
+        )
+        self.mock_file_processor_patcher = patch("xcube_clms.preload.FileProcessor")
+        self.mock_cleanup_dir_patcher = patch("xcube_clms.preload.cleanup_dir")
+
+        self.mock_notify = self.mock_notify_patcher.start()
+        self.mock_download_task_manager = (
+            self.mock_download_task_manager_patcher.start()
+        )
+        self.mock_api_token_handler = self.mock_api_token_handler_patcher.start()
+        self.mock_file_processor = self.mock_file_processor_patcher.start()
+        self.mock_cleanup_dir = self.mock_cleanup_dir_patcher.start()
+
+        self.mock_api_token_handler.return_value.api_token = "test_token"
+
+        self.mock_download_manager = MagicMock()
+        self.mock_download_manager.request_download.return_value = "task_123"
+        self.mock_download_manager.get_current_requests_status.return_value = (
             "COMPLETE",
             "",
         )
-        download_manager_instance.get_download_url.return_value = ("download_url", "")
-        download_manager_instance.download_data = MagicMock()
+        self.mock_download_manager.get_download_url.return_value = ("download_url", "")
+        self.mock_download_task_manager.return_value = self.mock_download_manager
 
-        preload_handle = ClmsPreloadHandle(
-            data_id_maps=data_id_maps,
-            url="http://mock-url",
-            credentials={},
-            cache_store=mock_fs_data_store,
+        self.mock_file_processor_instance = MagicMock()
+        self.mock_file_processor.return_value = self.mock_file_processor_instance
+
+        self.data_id_maps = {
+            "test_data_id": {
+                "item": {"id": "item_123"},
+                "product": {"id": "product_456"},
+            }
+        }
+        self.url = "http://mock-url.com"
+        self.mock_fs_data_store = MagicMock()
+        self.mock_fs_data_store.root = "/cache/root"
+        self.mock_fs_data_store.fs = MagicMock()
+        self.mock_fs_data_store.list_data_ids.return_value = []
+
+    def tearDown(self):
+        patch.stopall()
+
+    def test_init(self):
+        handle = ClmsPreloadHandle(
+            data_id_maps=self.data_id_maps,
+            url=self.url,
+            credentials={"client_id": "test"},
+            cache_store=self.mock_fs_data_store,
+            cleanup=True,
+            disable_tqdm_progress=True,
         )
 
-        call_args = mock_notify.call_args
+        self.assertEqual(handle.data_id_maps, self.data_id_maps)
+        self.assertEqual(handle._url, self.url)
+        self.assertEqual(handle.cache_store, self.mock_fs_data_store)
+        self.assertTrue(handle.cleanup)
 
-        mock_fs_data_store.list_data_ids.assert_called()
-        self.assertIsNotNone(call_args)
-        args, _ = call_args
-        self.assertEqual(args[0].data_id, "cached_data|id")
-        self.assertEqual(args[0].progress, 1.0)
-        self.assertEqual(args[0].message, "Preloading Complete.")
+        self.mock_api_token_handler.assert_called_once_with({"client_id": "test"})
+        self.mock_download_task_manager.assert_called_once()
+        self.mock_file_processor.assert_called_once()
+
+    def test_preload_data_cached(self):
+        self.mock_fs_data_store.list_data_ids.return_value = ["test_data_id"]
+
+        ClmsPreloadHandle(
+            data_id_maps=self.data_id_maps,
+            url=self.url,
+            credentials={},
+            cache_store=self.mock_fs_data_store,
+        )
+
+        self.mock_notify.assert_called()
+        notification = self.mock_notify.call_args[0][0]
+        self.assertEqual(notification.data_id, "test_data_id")
+        self.assertEqual(notification.status, PreloadStatus.stopped)
+        self.assertEqual(notification.progress, 1.0)
+        self.assertIn("already cached", notification.message)
+
+    def test_preload_data_new(self):
+        ClmsPreloadHandle(
+            data_id_maps=self.data_id_maps,
+            url=self.url,
+            credentials={},
+            cache_store=self.mock_fs_data_store,
+        )
+
+        self.mock_download_manager.request_download.assert_called_once_with(
+            data_id="test_data_id",
+            item={"id": "item_123"},
+            product={"id": "product_456"},
+        )
+        self.mock_download_manager.get_current_requests_status.assert_called()
+        self.mock_download_manager.get_download_url.assert_called_once_with("task_123")
+        self.mock_download_manager.download_data.assert_called_once()
+
+        notification_calls = self.mock_notify.call_args_list
+        self.assertGreaterEqual(len(notification_calls), 4)
+
+        final_notification = notification_calls[-1][0][0]
+        self.assertEqual(final_notification.data_id, "test_data_id")
+        self.assertEqual(final_notification.progress, 1.0)
+        self.assertEqual(final_notification.message, "Preloading Complete.")
+        self.mock_file_processor_instance.postprocess.assert_called_once()
+
+    def test_preload_data_cancel(self):
+        self.mock_notify.reset_mock()
+        self.mock_download_manager.get_current_requests_status.return_value = (
+            "CANCELLED",
+            "",
+        )
+        ClmsPreloadHandle(
+            data_id_maps=self.data_id_maps,
+            url=self.url,
+            credentials={},
+            cache_store=self.mock_fs_data_store,
+        )
+
+        self.mock_download_manager.request_download.assert_called_once_with(
+            data_id="test_data_id",
+            item={"id": "item_123"},
+            product={"id": "product_456"},
+        )
+        self.mock_download_manager.get_current_requests_status.assert_called()
+        time.sleep(1.5)
+        notification_calls = self.mock_notify.call_args_list
+        self.assertEqual(notification_calls[-1][0][0].data_id, "test_data_id")
+        self.assertEqual(notification_calls[-1][0][0].status, PreloadStatus.stopped)
+        self.assertEqual(notification_calls[-2][0][0].message, "Cleaning up Finished.")
+        self.assertEqual(
+            notification_calls[-3][0][0].message, "Cleaning up in Progress..."
+        )
+
+    def test_close(self):
+        handle = ClmsPreloadHandle(
+            data_id_maps=self.data_id_maps,
+            url=self.url,
+            credentials={},
+            cache_store=self.mock_fs_data_store,
+        )
+        self.mock_notify.reset_mock()
+        handle.close()
+
+        self.mock_cleanup_dir.assert_called_once_with(self.mock_fs_data_store.root)
+
+        self.assertEqual(self.mock_notify.call_count, 2)
+        notifications = [call[0][0] for call in self.mock_notify.call_args_list]
+        self.assertIn("Cleaning up in Progress", notifications[0].message)
+        self.assertIn("Cleaning up Finished", notifications[1].message)
+
+    def test_download_data(self):
+        handle = ClmsPreloadHandle(
+            data_id_maps=self.data_id_maps,
+            url=self.url,
+            credentials={},
+            cache_store=self.mock_fs_data_store,
+        )
+
+        handle.download_data("download_url", "test_data_id")
+
+        self.mock_download_manager.download_data.assert_called_with(
+            "download_url", "test_data_id"
+        )

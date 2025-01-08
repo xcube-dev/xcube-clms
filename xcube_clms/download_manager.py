@@ -236,8 +236,6 @@ class DownloadTaskManager:
             file_id=file_id,
         )
         url = build_api_url(self._url, DOWNLOAD_ENDPOINT, datasets_request=False)
-        if not self._api_token:
-            self._token_handler.refresh_token()
         headers = ACCEPT_HEADER.copy()
         headers.update(CONTENT_TYPE_HEADER)
         headers.update(get_authorization_header(self._api_token))
@@ -392,14 +390,17 @@ class DownloadTaskManager:
                         ):
                             try:
                                 with inner_zip_fs.open(geo_file, "rb") as source_file:
+                                    # print("source_file", source_file)
                                     geo_file_name = geo_file.split("/")[-1]
                                     geo_file_path = self.cache_store.fs.sep.join(
                                         [target_folder, geo_file_name]
                                     )
+                                    # print("geo_file_path", geo_file_path)
                                     with open(
                                         geo_file_path,
                                         "wb",
                                     ) as dest_file:
+                                        print("inside dest")
                                         for chunk in tqdm(
                                             iter(
                                                 lambda: source_file.read(chunk_size),
@@ -408,21 +409,22 @@ class DownloadTaskManager:
                                             desc=f"Extracting geo file {geo_file_name}",
                                             disable=self.disable_tqdm_progress,
                                         ):
+                                            # print(dest_file, dest_file.write, chunk)
+                                            # print(dest_file.write(chunk))
                                             dest_file.write(chunk)
                                 LOG.debug(
                                     f"The file {geo_file_name} has been successfully "
                                     f"downloaded to {geo_file_path}"
                                 )
+
                             except OSError as e:
-                                LOG.error(f"Error occurred while writing data. {e}")
-                                raise
-                            except UnicodeDecodeError as e:
                                 LOG.error(
-                                    f"Decoding error: {e}. File might not be text "
-                                    f"or encoding is incorrect."
+                                    f"Error occurred while "
+                                    f"reading/writing data. {e}"
                                 )
                                 raise
                             except Exception as e:
+                                print("here", e)
                                 LOG.error(f"An unexpected error occurred: {e}")
                                 raise
 

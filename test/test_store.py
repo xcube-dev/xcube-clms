@@ -54,6 +54,7 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     def tearDown(self):
         patch.stopall()
+        self.store = None
 
     @pytest.mark.vcr
     def test_get_data_types(self):
@@ -69,6 +70,58 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertIsNot(data_ids, [])
         for data_id in data_ids:
             self.assertEqual(len(data_id.split(DATA_ID_SEPARATOR)), 2)
+
+    @pytest.mark.vcr()
+    def test_get_data_ids(self):
+        data_ids = list(self.store.get_data_ids())
+        self.assertEqual(data_ids[0], "clc-backbone-2021|CLMS_CLCplus_RASTER_2021")
+
+    @pytest.mark.vcr()
+    def test_get_data_ids_with_all_attrs(self):
+        store = new_data_store(
+            DATA_STORE_ID,
+            credentials=self.mock_credentials,
+            cache_store_params={"root": "preload_clms_cache"},
+        )
+        result = list(store.get_data_ids(include_attrs=True))
+        self.assertEqual(
+            (
+                "clc-backbone-2021|CLMS_CLCplus_RASTER_2021",
+                {
+                    "@id": "b813d203-d09b-4663-95f7-65dc6d53789e",
+                    "area": "Europe",
+                    "file": "CLMS_CLCplus_RASTER_2021",
+                    "format": "Geotiff",
+                    "path": "H:\\Corine_Land_Cover_Backbone\\Corine_Land_Cover_Backbone_CLCBB_2021\\CLC_BB_2021\\Data\\data-details\\raster\\CLMS_CLCplus_RASTER_2021.zip",
+                    "resolution": "10 m",
+                    "size": "7 GB",
+                    "source": "EEA",
+                    "title": "",
+                    "type": "Raster",
+                    "version": "V1_1",
+                    "year": "",
+                },
+            ),
+            result[0],
+        )
+
+    @pytest.mark.vcr()
+    def test_get_data_ids_with_specific_attrs(self):
+        store = new_data_store(
+            DATA_STORE_ID,
+            credentials=self.mock_credentials,
+            cache_store_params={"root": "preload_clms_cache"},
+        )
+        result = list(store.get_data_ids(include_attrs=["area"]))
+        self.assertEqual(
+            (
+                "clc-backbone-2021|CLMS_CLCplus_RASTER_2021",
+                {
+                    "area": "Europe",
+                },
+            ),
+            result[0],
+        )
 
     @pytest.mark.vcr()
     def test_describe_data(self):
@@ -89,7 +142,7 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertEqual(data_types, expected_data_types)
 
     @pytest.mark.vcr()
-    def test_get_get_data_store_params_schema(self):
+    def test_get_data_store_params_schema(self):
         data_store_params_schem = self.store.get_data_store_params_schema()
         self.assertIsInstance(data_store_params_schem, JsonObjectSchema)
         self.assertIn("credentials", data_store_params_schem.properties)

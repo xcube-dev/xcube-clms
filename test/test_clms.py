@@ -25,6 +25,7 @@ import numpy as np
 import xarray as xr
 
 from xcube_clms.clms import Clms
+from xcube_clms.constants import DEFAULT_PRELOAD_CACHE_FOLDER
 
 
 class ClmsTest(unittest.TestCase):
@@ -60,24 +61,22 @@ class ClmsTest(unittest.TestCase):
                 },
             },
         ]
-        self.mock_make_api_request_patcher = patch("xcube_clms.clms.make_api_request")
-        self.mock_get_response_of_type_patcher = patch(
+        mock_make_api_request_patcher = patch("xcube_clms.clms.make_api_request")
+        mock_get_response_of_type_patcher = patch(
             "xcube_clms.clms.get_response_of_type"
         )
-        self.mock_is_valid_data_type_patcher = patch(
-            "xcube_clms.clms.is_valid_data_type"
-        )
+        mock_is_valid_data_type_patcher = patch("xcube_clms.clms.is_valid_data_type")
 
-        self.mock_make_api_request = self.mock_make_api_request_patcher.start()
-        self.mock_get_response_of_type = self.mock_get_response_of_type_patcher.start()
-        self.mock_is_valid_data_type = self.mock_is_valid_data_type_patcher.start()
+        self.mock_make_api_request = mock_make_api_request_patcher.start()
+        self.mock_get_response_of_type = mock_get_response_of_type_patcher.start()
+        self.mock_is_valid_data_type = mock_is_valid_data_type_patcher.start()
 
         self.mock_data_store = MagicMock()
         if self._testMethodName != "test_fetch_all_datasets":
-            self.mock_fetch_all_datasets_patcher = patch(
+            mock_fetch_all_datasets_patcher = patch(
                 "xcube_clms.clms.Clms._fetch_all_datasets"
             )
-            self.mock_fetch_all_datasets = self.mock_fetch_all_datasets_patcher.start()
+            self.mock_fetch_all_datasets = mock_fetch_all_datasets_patcher.start()
             self.mock_fetch_all_datasets.return_value = self.datasets_info
 
     def tearDown(self):
@@ -87,6 +86,11 @@ class ClmsTest(unittest.TestCase):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
 
         self.assertEqual(self.test_path, clms._cache_root)
+        self.assertEqual(self.datasets_info, clms._datasets_info)
+
+        clms = Clms(self.mock_credentials)
+
+        self.assertEqual(DEFAULT_PRELOAD_CACHE_FOLDER, clms._cache_root)
         self.assertEqual(self.datasets_info, clms._datasets_info)
 
     @patch("xcube_clms.clms.new_fs_data_store")
@@ -187,6 +191,22 @@ class ClmsTest(unittest.TestCase):
             clms.get_extent("dataset1|file1"),
         )
 
+        mock_access_item.return_value = {
+            "file": "file1",
+            "coordinateReferenceSystemList": ["WGS84", "EPSG:3032"],
+            "temporalExtentStart": "01-12-2022",
+            "temporalExtentEnd": "01-12-2024",
+        }
+        clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
+
+        self.assertEqual(
+            {
+                "time_range": ("01-12-2022", "01-12-2024"),
+                "crs": "WGS84",
+            },
+            clms.get_extent("dataset1|file1"),
+        )
+
     def test_create_data_ids(self):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
         clms._datasets_info = self.datasets_info
@@ -270,6 +290,25 @@ class ClmsTest(unittest.TestCase):
         item = clms._access_item("dataset2|file2")
         expected_item = {"file": "file2", "area": "area2", "format": "geotiff"}
         self.assertEqual(expected_item, item)
+
+        datasets_info = [
+            {
+                "id": "dataset2",
+                "downloadable_files": {
+                    "items": [{"file": "file2", "area": "area1", "format": "geotiff"}]
+                },
+            },
+            {
+                "id": "dataset2",
+                "downloadable_files": {
+                    "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
+                },
+            },
+        ]
+        self.mock_fetch_all_datasets.return_value = datasets_info
+        clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
+        with self.assertRaises(ValueError):
+            clms._access_item("dataset2|file2")
 
     def test_get_item(self):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)

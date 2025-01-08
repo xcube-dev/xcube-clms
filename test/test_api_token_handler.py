@@ -28,23 +28,23 @@ from xcube_clms.api_token_handler import ClmsApiTokenHandler
 
 class ClmsApiTokenHandlerTest(unittest.TestCase):
     def setUp(self):
-        self.mock_jwt_encode_patcher = patch("xcube_clms.api_token_handler.jwt.encode")
-        self.mock_make_api_request_patcher = patch(
+        mock_jwt_encode_patcher = patch("xcube_clms.api_token_handler.jwt.encode")
+        mock_make_api_request_patcher = patch(
             "xcube_clms.api_token_handler.make_api_request"
         )
-        self.mock_get_response_of_type_patcher = patch(
+        mock_get_response_of_type_patcher = patch(
             "xcube_clms.api_token_handler.get_response_of_type"
         )
-        self.mock_time_patcher = patch("time.time")
-        self.mock_log_debug_patcher = patch("xcube_clms.api_token_handler.LOG.debug")
-        self.mock_log_error_patcher = patch("xcube_clms.api_token_handler.LOG.error")
+        mock_time_patcher = patch("time.time")
+        mock_log_debug_patcher = patch("xcube_clms.api_token_handler.LOG.debug")
+        mock_log_error_patcher = patch("xcube_clms.api_token_handler.LOG.error")
 
-        self.mock_jwt_encode = self.mock_jwt_encode_patcher.start()
-        self.mock_make_api_request = self.mock_make_api_request_patcher.start()
-        self.mock_get_response_of_type = self.mock_get_response_of_type_patcher.start()
-        self.mock_time = self.mock_time_patcher.start()
-        self.mock_log_debug = self.mock_log_debug_patcher.start()
-        self.mock_log_error = self.mock_log_error_patcher.start()
+        self.mock_jwt_encode = mock_jwt_encode_patcher.start()
+        self.mock_make_api_request = mock_make_api_request_patcher.start()
+        self.mock_get_response_of_type = mock_get_response_of_type_patcher.start()
+        self.mock_time = mock_time_patcher.start()
+        self.mock_log_debug = mock_log_debug_patcher.start()
+        self.mock_log_error = mock_log_error_patcher.start()
 
         self.credentials = {
             "private_key": "mock_private_key",
@@ -57,7 +57,6 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
         patch.stopall()
 
     def test_create_jwt_grant(self):
-        self.mock_log_debug.reset_mock()
         self.mock_get_response_of_type.return_value = {
             "access_token": "mocked_access_token"
         }
@@ -78,7 +77,6 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
         self.assertFalse(token_handler.is_token_expired())
 
     def test_refresh_token(self):
-        self.mock_log_debug.reset_mock()
         self.mock_get_response_of_type.return_value = {
             "access_token": "mocked_access_token"
         }
@@ -89,8 +87,20 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
         self.assertEqual(token_handler.api_token, "mocked_access_token")
         self.mock_log_debug.assert_called()
 
+    @patch("xcube_clms.api_token_handler.ClmsApiTokenHandler.is_token_expired")
+    def test_refresh_token_but_valid(self, mock_is_token_expired):
+        self.mock_get_response_of_type.return_value = {
+            "access_token": "mocked_access_token"
+        }
+
+        token_handler = ClmsApiTokenHandler(self.credentials)
+        mock_is_token_expired.return_value = False
+        token_handler.refresh_token()
+
+        self.assertEqual(token_handler.api_token, "mocked_access_token")
+        self.mock_log_debug.assert_called()
+
     def test_refresh_token_failure(self):
-        self.mock_log_error.reset_mock()
         self.mock_make_api_request.side_effect = RequestException(
             "Mocked request failure"
         )
@@ -100,7 +110,6 @@ class ClmsApiTokenHandlerTest(unittest.TestCase):
 
     @patch("xcube_clms.api_token_handler.ClmsApiTokenHandler.is_token_expired")
     def test_refresh_token_expired(self, mock_is_token_expired):
-        self.mock_log_debug.reset_mock()
         self.mock_get_response_of_type.return_value = {
             "access_token": "mocked_access_token"
         }

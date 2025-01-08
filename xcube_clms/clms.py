@@ -109,11 +109,6 @@ class Clms:
                 f"got {data_id}. {e}"
             )
             raise
-        if not self.cache_store:
-            raise ValueError(
-                "Cache data store does not exist yet. Please preload "
-                "data first using the preload_data() method."
-            )
         if not self.cache_store.has_data(data_id):
             raise FileNotFoundError(f"No cached data found for data_id: {data_id}")
 
