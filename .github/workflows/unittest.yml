@@ -3,7 +3,7 @@ name: Unittest xcube-clms
 on:
   push:
   release:
-    types: [published]
+    types: [ published ]
 
 jobs:
   unittest:
@@ -16,6 +16,17 @@ jobs:
         uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: environment.yml
+
+      - name: Checkout xcube
+        uses: actions/checkout@v4
+        with:
+          repository: xcube-dev/xcube
+          path: xcube
+
+      - name: Install xcube from repo
+        run: |
+          cd xcube
+          pip install -e .
 
       - name: Run unit tests
         shell: bash -l {0}
