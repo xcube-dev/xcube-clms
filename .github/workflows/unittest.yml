@@ -31,6 +31,7 @@ jobs:
           path: xcube
 
       - name: Install xcube from repo
+        shell: bash -l {0}
         run: |
           cd xcube
           pip install -e . --no-deps
