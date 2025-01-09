@@ -9,6 +9,7 @@ dependencies:
   - cryptography
   - tqdm
   - ipywidgets
+  - requests
   # for testing
   - numpy
   - black

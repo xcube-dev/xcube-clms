@@ -23,7 +23,8 @@ dependencies = [
     "xcube",
     "tqdm",
     "cryptography",
-    "ipywidgets"
+    "ipywidgets",
+    "requests"
 ]
 
 [tool.setuptools.dynamic]
