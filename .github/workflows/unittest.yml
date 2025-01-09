@@ -34,6 +34,18 @@ jobs:
         run: |
           cd xcube
           pip install -e . --no-deps
+          echo "All installed packages:"
+          pip list
+
+      - name: Debug imports
+        shell: bash -l {0}
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Python path:"
+          python -c "import sys; print('\n'.join(sys.path))"
+          echo "Try importing both packages:"
+          python -c "import xcube; import xcube_clms; print(f'xcube: {xcube.__file__}\nxcube_clms: {xcube_clms.__file__}')"
 
       - name: Run unit tests
         shell: bash -l {0}
