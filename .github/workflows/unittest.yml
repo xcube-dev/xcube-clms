@@ -12,10 +12,17 @@ jobs:
       - name: checkout xcube-clms
         uses: actions/checkout@v4
 
+      - name: Create modified environment file
+        shell: bash -l {0}
+        run: |
+          grep -v "^  - xcube" environment.yml > env_no_xcube.yml
+          echo "Generated env file without xcube:"
+          cat env_no_xcube.yml
+
       - name: Set up MicroMamba
         uses: mamba-org/setup-micromamba@v1
         with:
-          environment-file: environment.yml
+          environment-file: env_no_xcube.yml
 
       - name: Checkout xcube
         uses: actions/checkout@v4
@@ -31,6 +38,11 @@ jobs:
       - name: Run unit tests
         shell: bash -l {0}
         run: |
+          pwd
+          ls
+          cd /home/runner/work/xcube-clms/xcube-clms
+          pwd
+          ls
           pytest --cov=xcube_clms --cov-report=xml
 
       - name: Upload coverage reports to Codecov
