@@ -30,35 +30,17 @@ jobs:
           repository: xcube-dev/xcube
           path: xcube
 
-      - name: Install xcube from repo
+      - name: Install and Test
         shell: bash -l {0}
         run: |
+          pwd
           cd xcube
-          pip install -e . --no-deps
-          echo "All installed packages:"
-          pip list
-          echo "Checking xcube installation:"
-          python -c "import xcube; print(f'xcube version: {xcube.__version__}')"
-          python -c "import xcube; print(f'xcube location: {xcube.__file__}')"
-
-      - name: Debug imports
-        shell: bash -l {0}
-        run: |
-          echo "Current directory:"
           pwd
-          echo "Python path:"
-          python -c "import sys; print('\n'.join(sys.path))"
-          echo "Try importing both packages:"
-          python -c "import xcube; import xcube_clms; print(f'xcube: {xcube.__file__}\nxcube_clms: {xcube_clms.__file__}')"
-
-      - name: Run unit tests
-        shell: bash -l {0}
-        run: |
+          python -m pip install -e .
+          cd ..
+          echo "Outside xcube"
           pwd
-          ls
-          cd /home/runner/work/xcube-clms/xcube-clms
-          pwd
-          ls
+          python -c "import xcube; print(f'xcube installed at: {xcube.__file__}')"
           pytest test/ --cov=xcube_clms --cov-report=xml
 
       - name: Upload coverage reports to Codecov
