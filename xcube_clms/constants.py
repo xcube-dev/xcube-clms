@@ -48,6 +48,9 @@ PENDING = "PENDING"
 COMPLETE = "COMPLETE"
 CANCELLED = "CANCELLED"
 
+ITEM_KEY = "item"
+PRODUCT_KEY = "product"
+
 # Logging
 LOG = logging.getLogger("xcube.clms")
 LEVEL = logging.INFO

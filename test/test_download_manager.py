@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, patch, Mock
 
 import fsspec
 import requests
-from xcube.core.store import new_fs_data_store
+from xcube.core.store import new_data_store
 
 from xcube_clms.constants import TIME_TO_EXPIRE
 from xcube_clms.download_manager import (
@@ -41,7 +41,7 @@ class TestDownloadTaskManager(unittest.TestCase):
         self.mock_token_handler = MagicMock()
         self.mock_token_handler.api_token = "mock_token"
         self.test_path = "/mock/path"
-        self.file_store = new_fs_data_store("file", root=self.test_path)
+        self.file_store = new_data_store("file", root=self.test_path)
         self.download_manager = DownloadTaskManager(
             token_handler=self.mock_token_handler,
             url="http://mock-api-url",
@@ -334,9 +334,6 @@ class TestDownloadTaskManager(unittest.TestCase):
         self.mock_make_api_request.return_value = mock
 
         mock_file_fs = Mock(spec=fsspec.AbstractFileSystem)
-        mock_file_fs.dirname = Mock(
-            return_value=f"{self.download_manager.cache_store.root}"
-        )
 
         mock_outer_zip_fs = Mock()
         mock_outer_zip_fs.ls.return_value = [
@@ -368,13 +365,20 @@ class TestDownloadTaskManager(unittest.TestCase):
         inner_context.__exit__ = Mock()
         mock_inner_zip_fs.open.return_value = inner_context
 
-        self.download_manager.download_data("http://test.com", "test_id")
+        mock_cache_store = MagicMock()
+
+        download_manager = DownloadTaskManager(
+            token_handler=self.mock_token_handler,
+            url="http://mock-api-url",
+            cache_store=mock_cache_store,
+        )
+
+        download_manager.download_data("http://test.com", "test_id")
 
         self.mock_make_api_request.assert_called_once_with(
             "http://test.com", timeout=600, stream=True
         )
-        self.assertTrue(mock_file_fs.makedirs.called)
-        self.assertTrue(mock_file_fs.dirname.called)
+        self.assertTrue(mock_cache_store.fs.makedirs.called)
         self.assertTrue(mock_outer_zip_fs.ls.called)
         self.assertTrue(mock_outer_zip_fs.open.called)
         self.assertTrue(mock_inner_zip_fs.ls.called)

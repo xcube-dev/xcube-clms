@@ -48,8 +48,8 @@ class FileProcessor:
         self.cleanup = cleanup
         self.disable_tqdm_progress = disable_tqdm_progress
 
-    def postprocess(self, data_id: str) -> None:
-        """Performs postprocessing on the files for a given data ID.
+    def preprocess(self, data_id: str) -> None:
+        """Performs preprocessing on the files for a given data ID.
 
         This includes preparing files for merging, merging them based on their
         Easting and Northing coordinates computed from their file names,
@@ -61,14 +61,14 @@ class FileProcessor:
         file_names. This can be further improved once we find cases otherwise.
 
         Args:
-            data_id: The identifier for the dataset being post-processed.
+            data_id: The identifier for the dataset being pre-processed.
         """
         target_folder = self.fs.sep.join([self.cache_store.root, data_id])
         files = [entry.split("/")[-1] for entry in self.fs.ls(target_folder)]
         if len(files) == 1:
-            LOG.debug("No postprocessing required.")
+            LOG.debug("No preprocessing required.")
         elif len(files) == 0:
-            LOG.warn("No files to postprocess!")
+            LOG.warn("No files to preprocess!")
         else:
             en_map = self._prepare_merge(files, data_id)
             if not en_map:
@@ -134,7 +134,7 @@ class FileProcessor:
         # Step 3: Merge files along the Y-axis (Northings) for each Easting
         # group. xarray takes care of the missing tiles and fills it with NaN
         # values
-        chunk_size = {"x": 10000, "y": 10000}
+        chunk_size = {"x": 1000, "y": 1000}
         merged_eastings = {}
         for easting, file_list in tqdm(
             sorted_east_groups.items(),

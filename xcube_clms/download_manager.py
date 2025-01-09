@@ -25,7 +25,7 @@ from typing import Any
 
 import fsspec
 from tqdm.notebook import tqdm
-from xcube.core.store.fs.store import FsDataStore
+from xcube.core.store import MutableDataStore
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
@@ -80,7 +80,7 @@ class DownloadTaskManager:
         self,
         token_handler: ClmsApiTokenHandler,
         url: str,
-        cache_store: FsDataStore,
+        cache_store: MutableDataStore,
         disable_tqdm_progress: bool | None = None,
     ) -> None:
         self._token_handler = token_handler
@@ -384,7 +384,7 @@ class DownloadTaskManager:
                         )
                         for geo_file in tqdm(
                             geo_files,
-                            desc="Extracting geo files for task_id {task_id}",
+                            desc=f"Extracting geo files for data_id {data_id}",
                             disable=self.disable_tqdm_progress,
                         ):
                             try:
@@ -397,13 +397,9 @@ class DownloadTaskManager:
                                         geo_file_path,
                                         "wb",
                                     ) as dest_file:
-                                        for chunk in tqdm(
-                                            iter(
-                                                lambda: source_file.read(chunk_size),
-                                                b"",
-                                            ),
-                                            desc=f"Extracting geo file {geo_file_name}",
-                                            disable=self.disable_tqdm_progress,
+                                        for chunk in iter(
+                                            lambda: source_file.read(chunk_size),
+                                            b"",
                                         ):
                                             dest_file.write(chunk)
                                 LOG.debug(

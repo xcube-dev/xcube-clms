@@ -34,6 +34,8 @@ from .constants import (
     DATA_ID_SEPARATOR,
     CLMS_API_URL,
     DEFAULT_PRELOAD_CACHE_FOLDER,
+    ITEM_KEY,
+    PRODUCT_KEY,
 )
 from .preload import ClmsPreloadHandle
 from .utils import (
@@ -49,8 +51,6 @@ _FILE_KEY = "file"
 _CRS_KEY = "coordinateReferenceSystemList"
 _START_TIME_KEY = "temporalExtentStart"
 _END_TIME_KEY = "temporalExtentEnd"
-_ITEM_KEY = "item"
-_PRODUCT_KEY = "product"
 _BATCH = "batching"
 _NEXT = "next"
 _ITEMS_KEY = "items"
@@ -70,10 +70,8 @@ class Clms:
         credentials: dict,
         cache_store_id: str = "file",
         cache_store_params: dict | None = None,
-        cleanup: bool | None = None,
-        disable_tqdm_progress: bool | None = None,
     ) -> None:
-        if cache_store_params.get("root") is None:
+        if cache_store_params is None or cache_store_params.get("root") is None:
             cache_store_params = dict(root=DEFAULT_PRELOAD_CACHE_FOLDER)
         cache_store_params["max_depth"] = cache_store_params.pop("max_depth", 2)
         self.cache_store: MutableDataStore = new_data_store(
@@ -82,10 +80,7 @@ class Clms:
         self.fs = self.cache_store.fs
         self._cache_root = self.cache_store.root
         self.credentials = credentials
-        self.cleanup = cleanup
-        self.disable_tqdm_progress = disable_tqdm_progress
         self._datasets_info: list[dict[str, Any]] = Clms._fetch_all_datasets()
-        self.preload_handle: ClmsPreloadHandle | None = None
 
     def open_data(
         self,
@@ -182,19 +177,16 @@ class Clms:
         """
         data_id_maps = {
             data_id: {
-                _ITEM_KEY: self._access_item(data_id),
-                _PRODUCT_KEY: self._access_item(data_id.split(DATA_ID_SEPARATOR)[0]),
+                ITEM_KEY: self._access_item(data_id),
+                PRODUCT_KEY: self._access_item(data_id.split(DATA_ID_SEPARATOR)[0]),
             }
             for data_id in data_ids
         }
-
         return ClmsPreloadHandle(
             data_id_maps=data_id_maps,
             url=CLMS_API_URL,
             credentials=self.credentials,
             cache_store=self.cache_store,
-            cleanup=self.cleanup,
-            disable_tqdm_progress=self.disable_tqdm_progress,
             **preload_params,
         )
 
@@ -254,6 +246,7 @@ class Clms:
             if not next_page:
                 break
             response_data = make_api_request(next_page)
+        LOG.info("Fetching complete.")
         return datasets_info
 
     def _access_item(self, data_id) -> dict[str, Any]:

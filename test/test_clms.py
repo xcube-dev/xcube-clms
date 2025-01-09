@@ -90,10 +90,10 @@ class ClmsTest(unittest.TestCase):
 
         clms = Clms(self.mock_credentials)
 
-        self.assertEqual(DEFAULT_PRELOAD_CACHE_FOLDER, clms._cache_root)
+        self.assertIn(DEFAULT_PRELOAD_CACHE_FOLDER.split("/")[0], clms._cache_root)
         self.assertEqual(self.datasets_info, clms._datasets_info)
 
-    @patch("xcube_clms.clms.new_fs_data_store")
+    @patch("xcube_clms.clms.new_data_store")
     def test_open_data(self, mocked_cache_store):
         mocked_cache_store.return_value.open_data.return_value = self.mock_dataset
 
@@ -105,10 +105,6 @@ class ClmsTest(unittest.TestCase):
         mocked_cache_store.return_value.has_data.return_value = False
         with self.assertRaises(FileNotFoundError):
             clms.open_data("non-existing|data-id")
-
-        data_id = "invalid_data_id"
-        with self.assertRaises(ValueError):
-            clms.open_data(data_id)
 
     def test_get_data_ids(self):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)

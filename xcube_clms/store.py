@@ -47,6 +47,7 @@ class ClmsDataStore(DataStore, ABC):
 
     def __init__(self, **clms_kwargs):
         self._clms = Clms(**clms_kwargs)
+        self.cache_store = self._clms.cache_store
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -77,15 +78,6 @@ class ClmsDataStore(DataStore, ABC):
             ),
             cache_store_params=JsonObjectSchema(
                 title="Parameters for creating new cache data store"
-            ),
-            cleanup=JsonBooleanSchema(
-                title="Option to cleanup the directory in case there were "
-                "multiple files downloaded for the same data_id. "
-                "Defaults to True.",
-            ),
-            disable_tqdm_progress=JsonBooleanSchema(
-                title="Option to show/hide the tqdm progress bars for various "
-                "download/extraction operations. Defaults to False."
             ),
         )
         return JsonObjectSchema(
@@ -161,8 +153,6 @@ class ClmsDataStore(DataStore, ABC):
     def preload_data(
         self,
         *data_ids: str,
-        blocking: bool | None = None,
-        silent: bool | None = None,
         **preload_params,
     ) -> PreloadHandle:
         schema = self.get_preload_data_params_schema()
@@ -185,6 +175,15 @@ class ClmsDataStore(DataStore, ABC):
                 description="If True, you don't want any preload state output."
                 "               Defaults to `False`",
                 default=False,
+            ),
+            cleanup=JsonBooleanSchema(
+                title="Option to cleanup the directory in case there were "
+                "multiple files downloaded for the same data_id. "
+                "Defaults to True.",
+            ),
+            disable_tqdm_progress=JsonBooleanSchema(
+                title="Option to show/hide the tqdm progress bars for various "
+                "download/extraction operations. Defaults to False."
             ),
         )
         return JsonObjectSchema(

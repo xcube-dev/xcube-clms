@@ -26,11 +26,10 @@ from unittest.mock import patch, MagicMock
 
 import numpy as np
 import xarray as xr
-from xcube.core.store import new_fs_data_store
+from xcube.core.store import new_data_store
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
-from xcube_clms.processor import FileProcessor, cleanup_dir, \
-    find_easting_northing
+from xcube_clms.processor import FileProcessor, cleanup_dir, find_easting_northing
 
 
 class ProcessorTest(unittest.TestCase):
@@ -38,7 +37,7 @@ class ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.mock_data_id = "product_id|dataset_id"
         self.test_path = "/test/path"
-        self.file_store = new_fs_data_store("file", root=self.test_path)
+        self.file_store = new_data_store("file", root=self.test_path)
         self.mock_file_store = MagicMock()
 
     @patch("xcube_clms.processor.LOG")
@@ -49,14 +48,14 @@ class ProcessorTest(unittest.TestCase):
             "/mock/path/product_id|dataset_id/file_1.tif"
         ]
         processor = FileProcessor(self.file_store, cleanup=True)
-        processor.postprocess(self.mock_data_id)
+        processor.preprocess(self.mock_data_id)
 
         mock_cleanup_dir.assert_not_called()
         mock_log.debug.assert_called()
 
         mock_log.reset_mock()
         processor = FileProcessor(self.file_store, cleanup=False)
-        processor.postprocess(self.mock_data_id)
+        processor.preprocess(self.mock_data_id)
 
         mock_log.debug.assert_called()
         mock_cleanup_dir.assert_not_called()
@@ -67,7 +66,7 @@ class ProcessorTest(unittest.TestCase):
     def test_postprocess_no_files(self, mock_cleanup_dir, mock_fsspec, mock_log):
         mock_fsspec.return_value.ls.return_value = []
         processor = FileProcessor(self.mock_file_store, cleanup=True)
-        processor.postprocess(self.mock_data_id)
+        processor.preprocess(self.mock_data_id)
 
         mock_log.warn.assert_called()
         mock_cleanup_dir.assert_not_called()
@@ -91,7 +90,7 @@ class ProcessorTest(unittest.TestCase):
         ]
 
         processor = FileProcessor(self.mock_file_store, cleanup=True)
-        processor.postprocess("invalid_data_id")
+        processor.preprocess("invalid_data_id")
 
         mock_log.error.assert_called()
         mock_cleanup_dir.assert_not_called()
@@ -115,7 +114,7 @@ class ProcessorTest(unittest.TestCase):
             "/mock/path/product_id|dataset_id2/file_2.tif",
         ]
         processor = FileProcessor(self.file_store, cleanup=True)
-        processor.postprocess(self.mock_data_id)
+        processor.preprocess(self.mock_data_id)
 
         mock_log.debug.assert_not_called()
         mock_merge_and_save.assert_called()

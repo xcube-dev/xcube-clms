@@ -139,7 +139,7 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.assertEqual(final_notification.data_id, "test_data_id")
         self.assertEqual(final_notification.progress, 1.0)
         self.assertEqual(final_notification.message, "Preloading Complete.")
-        self.mock_file_processor_instance.postprocess.assert_called_once()
+        self.mock_file_processor_instance.preprocess.assert_called_once()
 
     def test_preload_data_cancel(self):
         self.mock_notify.reset_mock()

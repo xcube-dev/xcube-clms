@@ -194,18 +194,18 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertIn("silent", schema.properties)
 
     @pytest.mark.vcr()
-    @patch("xcube_clms.clms.new_fs_data_store")
+    @patch("xcube_clms.clms.new_data_store")
     def test_open_data(self, mock_new_data_store):
-        mock_fs_data_store = MagicMock()
-        mock_fs_data_store.has_data.return_value = True
+        mock_data_store = MagicMock()
+        mock_data_store.has_data.return_value = True
         mock_dataset = xr.Dataset(
             {
                 "temperature": (("time", "x", "y"), np.random.rand(5, 5, 5)),
                 "precipitation": (("time", "x", "y"), np.random.rand(5, 5, 5)),
             }
         )
-        mock_fs_data_store.open_data.return_value = mock_dataset
-        mock_new_data_store.return_value = mock_fs_data_store
+        mock_data_store.open_data.return_value = mock_dataset
+        mock_new_data_store.return_value = mock_data_store
         store = new_data_store(
             DATA_STORE_ID,
             credentials=self.mock_credentials,
@@ -217,8 +217,10 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertCountEqual(["temperature", "precipitation"], list(dataset.data_vars))
         self.assertEqual(dataset["temperature"].shape, (5, 5, 5))
         self.assertEqual(dataset["precipitation"].shape, (5, 5, 5))
-        mock_new_data_store.assert_called_once_with("file", root="preload_clms_cache")
-        mock_fs_data_store.open_data.assert_called_once_with(
+        mock_new_data_store.assert_called_once_with(
+            "file", root="preload_clms_cache", max_depth=2
+        )
+        mock_data_store.open_data.assert_called_once_with(
             data_id="forest-type-2018|FTY_2018_010m_al_03035_v010"
         )
 

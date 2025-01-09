@@ -23,8 +23,9 @@ import time
 from typing import Any
 
 import fsspec
-from xcube.core.store.fs.store import FsDataStore
-from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, PreloadStatus
+from xcube.core.store import MutableDataStore
+from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, \
+    PreloadStatus
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
@@ -49,33 +50,31 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         data_id_maps: dict[str, dict[str, dict[str, Any]]],
         url: str,
         credentials: dict,
-        cache_store: FsDataStore,
-        cleanup: bool | None = None,
-        disable_tqdm_progress: bool | None = None,
-        **preload_params: dict[str, Any],
+        cache_store: MutableDataStore,
+        **preload_params,
     ) -> None:
         self.data_id_maps = data_id_maps
         self._url: str = url
-        self._credentials: dict = {}
         self.cache_store = cache_store
         self.cache_root = cache_store.root
         self._cache_fs: fsspec.AbstractFileSystem = cache_store.fs
 
-        self._task_control: dict = {}
-        self.cleanup: bool = cleanup or True
-
         self._token_handler = ClmsApiTokenHandler(credentials)
-        self._api_token: str = self._token_handler.api_token
+        self.cleanup = preload_params.pop("cleanup", True)
+        self.disable_tqdm_progress = preload_params.pop("disable_tqdm_progress", True)
         self._file_processor = FileProcessor(
-            self.cache_store, self.cleanup, disable_tqdm_progress
+            self.cache_store,
+            self.cleanup,
+            self.disable_tqdm_progress,
         )
         self._download_manager = DownloadTaskManager(
-            self._token_handler, self._url, self.cache_store, disable_tqdm_progress
+            self._token_handler, self._url, self.cache_store, self.disable_tqdm_progress
         )
+
         super().__init__(
             data_ids=tuple(self.data_id_maps.keys()),
-            blocking=preload_params.pop("blocking", False),
-            silent=preload_params.pop("silent", True),
+            blocking=preload_params.pop("blocking", True),
+            silent=preload_params.pop("silent", False),
         )
 
     def preload_data(
@@ -135,7 +134,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                         message="Zip file downloaded. Extracting now...",
                     )
                 )
-                self._file_processor.postprocess(data_id)
+                self._file_processor.preprocess(data_id)
                 self.notify(
                     PreloadState(
                         data_id=data_id,
@@ -157,7 +156,8 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             self.notify(
                 PreloadState(data_id=data_id, message="Cleaning up in Progress...")
             )
-        cleanup_dir(self.cache_root)
+        if self.cleanup:
+            cleanup_dir(self.cache_root)
         for data_id in self.data_id_maps.keys():
             self.notify(PreloadState(data_id=data_id, message="Cleaning up Finished."))
 
