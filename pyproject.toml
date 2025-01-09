@@ -24,7 +24,9 @@ dependencies = [
     "tqdm",
     "cryptography",
     "ipywidgets",
-    "requests"
+    "requests",
+    "pyproj",
+    "fsspec"
 ]
 
 [tool.setuptools.dynamic]

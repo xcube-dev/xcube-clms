@@ -10,6 +10,8 @@ dependencies:
   - tqdm
   - ipywidgets
   - requests
+  - pyproj
+  - fsspec
   # for testing
   - numpy
   - black
