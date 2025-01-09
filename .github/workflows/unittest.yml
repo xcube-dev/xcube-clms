@@ -26,7 +26,7 @@ jobs:
       - name: Install xcube from repo
         run: |
           cd xcube
-          pip install -e .
+          pip install -e . --no-deps
 
       - name: Run unit tests
         shell: bash -l {0}
