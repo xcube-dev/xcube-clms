@@ -36,6 +36,9 @@ jobs:
           pip install -e . --no-deps
           echo "All installed packages:"
           pip list
+          echo "Checking xcube installation:"
+          python -c "import xcube; print(f'xcube version: {xcube.__version__}')"
+          python -c "import xcube; print(f'xcube location: {xcube.__file__}')"
 
       - name: Debug imports
         shell: bash -l {0}
