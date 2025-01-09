@@ -43,7 +43,7 @@ jobs:
           cd /home/runner/work/xcube-clms/xcube-clms
           pwd
           ls
-          pytest --cov=xcube_clms --cov-report=xml
+          pytest test/ --cov=xcube_clms --cov-report=xml
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4
