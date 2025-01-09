@@ -26,7 +26,9 @@ dependencies = [
     "ipywidgets",
     "requests",
     "pyproj",
-    "fsspec"
+    "fsspec",
+    "jwt",
+    "rfc3339_validator"
 ]
 
 [tool.setuptools.dynamic]

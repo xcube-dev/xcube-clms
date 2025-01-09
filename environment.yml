@@ -10,8 +10,10 @@ dependencies:
   - tqdm
   - ipywidgets
   - requests
-  - pyproj
   - fsspec
+  - pyproj
+  - jwt
+  - rfc3339_validator
   # for testing
   - numpy
   - black
