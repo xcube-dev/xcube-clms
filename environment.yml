@@ -7,6 +7,7 @@ dependencies:
   - xarray
   - cryptography
   - tqdm
+  - ipywidgets
   - requests
   - fsspec
   #  - xcube
