@@ -10,7 +10,7 @@ dependencies:
   - ipywidgets
   - requests
   - fsspec
-  #  - xcube
+  - xcube
   # Testing
   - numpy
   - black
