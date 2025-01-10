@@ -69,7 +69,7 @@ _STATUS_CANCELLED = ["Cancelled"]
 _UNDEFINED = "UNDEFINED"
 _RESULTS = "Results/"
 _NOT_SUPPORTED_LIST = ["WEKEO", "LEGACY", "LANDCOVER"]
-_GEO_FILE_EXTS = (".tif", ".tiff", ".nc")
+_GEO_FILE_EXTS = (".tif", ".tiff")
 _ITEMS_KEY = "items"
 
 
@@ -438,7 +438,7 @@ class DownloadTaskManager:
 
         Notes:
             - A geo file is identified by its extension, which matches entries
-                in `GEO_FILE_EXTS`.
+                in `_GEO_FILE_EXTS`.
         """
         geo_file: list[str] = []
         contents = zip_fs.ls(path)
