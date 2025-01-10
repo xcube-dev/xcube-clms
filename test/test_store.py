@@ -1,5 +1,5 @@
 # The MIT License (MIT)
-# Copyright (c) 2024 by the xcube development team and contributors
+# Copyright (c) 2025 by the xcube development team and contributors
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -27,8 +27,7 @@ import xarray as xr
 from xcube.core.store import new_data_store, DatasetDescriptor
 from xcube.util.jsonschema import JsonObjectSchema
 
-from xcube_clms.constants import DATA_STORE_ID, DATA_ID_SEPARATOR, \
-    DATA_OPENER_IDS
+from xcube_clms.constants import DATA_STORE_ID, DATA_ID_SEPARATOR, DATA_OPENER_IDS
 from xcube_clms.preload import ClmsPreloadHandle
 
 

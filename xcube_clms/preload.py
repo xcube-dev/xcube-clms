@@ -1,5 +1,5 @@
 # The MIT License (MIT)
-# Copyright (c) 2024 by the xcube development team and contributors
+# Copyright (c) 2025 by the xcube development team and contributors
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -24,8 +24,7 @@ from typing import Any
 
 import fsspec
 from xcube.core.store import MutableDataStore
-from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, \
-    PreloadStatus
+from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, PreloadStatus
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
