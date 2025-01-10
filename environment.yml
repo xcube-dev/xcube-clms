@@ -5,15 +5,11 @@ dependencies:
   # Required
   - python>=3.10
   - xarray
-  - xcube >= 1.7.1
   - cryptography
   - tqdm
-  - ipywidgets
   - requests
   - fsspec
-  - pip
-  - pip:
-      - jwt
+  #  - xcube
   # Testing
   - numpy
   - black

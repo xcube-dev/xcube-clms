@@ -23,12 +23,8 @@ dependencies = [
     "xcube",
     "tqdm",
     "cryptography",
-    "ipywidgets",
     "requests",
-    "pyproj",
     "fsspec",
-    "jwt",
-    "rfc3339_validator"
 ]
 
 [tool.setuptools.dynamic]
