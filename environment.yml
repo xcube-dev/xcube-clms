@@ -11,10 +11,10 @@ dependencies:
   - ipywidgets
   - requests
   - fsspec
-  - pyproj
-  - jwt
-  - rfc3339_validator
-  # for testing
+  - pip
+  - pip:
+      - jwt
+  # Testing
   - numpy
   - black
   - flake8

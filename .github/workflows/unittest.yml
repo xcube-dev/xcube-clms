@@ -18,6 +18,10 @@ jobs:
           grep -v "^  - xcube" environment.yml > env_no_xcube.yml
           echo "Generated env file without xcube:"
           cat env_no_xcube.yml
+          curl https://raw.githubusercontent.com/xcube-dev/xcube/refs/heads/main/environment.yml | awk 's==1 {print $0} /^dependencies:/ {s=1}' >> env_no_xcube.yml
+          echo "Generated env file with xcube dependencies manually installed:"
+          cat env_no_xcube.yml
+
 
       - name: Set up MicroMamba
         uses: mamba-org/setup-micromamba@v1
