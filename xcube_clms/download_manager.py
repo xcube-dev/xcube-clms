@@ -105,6 +105,8 @@ class DownloadTaskManager:
 
         Raises:
             AssertionError: If the dataset is unsupported.
+            AssertionError: If multiple task ids are created for the same
+                request.
         """
         self._token_handler.refresh_token()
 

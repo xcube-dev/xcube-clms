@@ -18,15 +18,12 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-import threading
-import time
-from itertools import cycle
 from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
 import requests
-from requests import HTTPError, Timeout, RequestException, Response, JSONDecodeError
+from requests import HTTPError, Timeout, RequestException, Response, \
+    JSONDecodeError
 from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
 
 from xcube_clms.constants import (
@@ -38,9 +35,10 @@ _PORTAL_TYPE = {"portal_type": "DataSet"}
 _METADATA_FIELDS = "metadata_fields"
 _FULL_SCHEMA = "fullobjects"
 
+ResponseType = Literal["json", "text", "bytes"]
+
+
 # Using the auxiliary functions below from xcube-stac
-
-
 def assert_valid_data_type(data_type: DataTypeLike):
     """Auxiliary function to assert if data type is supported
     by the store.
@@ -71,9 +69,6 @@ def is_valid_data_type(data_type: DataTypeLike) -> bool:
     return data_type is None or DATASET_TYPE.is_super_type_of(data_type)
 
 
-ResponseType = Literal["json", "text", "bytes"]
-
-
 def make_api_request(
     url: str,
     headers: Optional[dict[str, str]] = ACCEPT_HEADER,
@@ -82,7 +77,6 @@ def make_api_request(
     method: str = "GET",
     stream: bool = False,
     timeout: int = 100,
-    show_spinner: bool = True,
 ) -> Response:
     """Makes an API request with custom configurations.
 
@@ -99,8 +93,6 @@ def make_api_request(
         stream: Whether to stream the response content. Defaults to `False`.
         timeout: The maximum time (in seconds) to wait for a response.
         Defaults to `100`.
-        show_spinner: Whether to display a spinner to indicate activity.
-        Defaults to `True`.
 
     Returns:
         Response: The HTTP response object returned by the server.
@@ -115,18 +107,6 @@ def make_api_request(
 
     session = requests.Session()
     LOG.debug(f"Making a request to {url}")
-
-    # status_event = threading.Event()
-    # spinner_thread = threading.Thread(
-    #     target=spinner,
-    #     args=(
-    #         status_event,
-    #         "Waiting for response for server for " f"the request: {url}",
-    #     ),
-    # )
-    # if show_spinner:
-    #     status_event.set()
-    # spinner_thread.start()
     response = None
     try:
         response = session.request(
@@ -166,10 +146,6 @@ def make_api_request(
         LOG.error(f"Unknown error occurred: {e}")
         raise
 
-    # finally:
-    # if show_spinner:
-    #     status_event.clear()
-    #     spinner_thread.join()
     return response
 
 
@@ -259,30 +235,3 @@ def get_response_of_type(api_response: Response, data_type: Union[ResponseType, 
         )
 
     return response
-
-
-def spinner(status_event: threading.Event, message: str):
-    """Displays a spinner with elapsed time for a single task until the event
-    is set.
-
-    This function prints a spinning animation and elapsed time message to the
-    console/jupyter notebook output to indicate progress for a task. It stops
-    when the provided event is cleared.
-
-    Args:
-        status_event: A threading event used to control the spinner's activity.
-        message: A message to display alongside the spinner.
-    """
-    spinner_cycle = cycle(["◐", "◓", "◑", "◒"])
-    start_time = time.time()
-
-    while status_event.is_set():
-        elapsed = int(time.time() - start_time)
-        print(
-            f"\rTask: {message}: {next(spinner_cycle)} Elapsed time:" f" {elapsed}s",
-            end="",
-            flush=True,
-        )
-        time.sleep(0.3)
-
-    print(f"\rTask: {message}: Done!{' ' * 50}")

@@ -59,10 +59,11 @@ _ITEMS_KEY = "items"
 class Clms:
     """Provides an interface to interact with the CLMS API
 
-    It also allows the user to preload the data into a cache location in a
-    non-blocking way which would be time-consuming task otherwise using the
-    `preload_data` method. Currently, this is experimental and will change in
-    the further versions.
+    It also allows the user to preload the data into a cache location using the
+    `preload_data` method  in both blocking/non-blocking ways which would be
+    time-consuming task otherwise.
+    Currently, the Preload API is experimental and will change in the further
+    versions.
     """
 
     def __init__(
@@ -171,9 +172,6 @@ class Clms:
             *data_ids: One or more data IDs to preload.
             **preload_params: Additional parameters for preloading (currently
             not supported).
-
-        Raises:
-            ValueError: If any data ID is invalid.
         """
         data_id_maps = {
             data_id: {
@@ -227,14 +225,6 @@ class Clms:
 
         Returns:
             A list of dictionaries representing all datasets.
-
-        Raises:
-            RequestException: If an error occurs during the API request.
-            Other exceptions such as Timeout, JSONDecodeError could be raised
-            as well from the make_api_request()
-            ValueError: For type mismatches between response object type and
-            the required type in get_response_of_type()
-            TypeError: For invalid input to get_response_of_type()
         """
         LOG.info(f"Fetching datasets metadata from {CLMS_API_URL}")
         datasets_info = []

@@ -18,11 +18,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import threading
-import time
 import unittest
-from contextlib import redirect_stdout
-from io import StringIO
 from unittest.mock import MagicMock, patch
 
 from requests import Response, JSONDecodeError, RequestException, Timeout, \
@@ -32,7 +28,6 @@ from xcube_clms.utils import (
     get_response_of_type,
     make_api_request,
     build_api_url,
-    spinner,
 )
 
 url = "http://example.com/api"
@@ -236,24 +231,3 @@ class UtilsTest(unittest.TestCase):
         expected_url = "http://example.com/api/data"
         result = build_api_url(url, api_endpoint, datasets_request=False)
         self.assertEqual(result, expected_url)
-
-    def test_spinner(self):
-        status_event = threading.Event()
-
-        message = "Test task"
-        output = StringIO()
-
-        status_event.set()
-        with redirect_stdout(output):
-            spinner_thread = threading.Thread(
-                target=spinner, args=(status_event, message)
-            )
-            spinner_thread.start()
-            time.sleep(1.2)
-            status_event.clear()
-            spinner_thread.join()
-
-        spinner_output = output.getvalue()
-        self.assertIn(message, spinner_output)
-        self.assertIn("Elapsed time:", spinner_output)
-        self.assertIn("Done!", spinner_output)
