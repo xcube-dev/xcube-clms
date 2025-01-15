@@ -24,7 +24,8 @@ from typing import Any
 
 import fsspec
 from xcube.core.store import MutableDataStore
-from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, PreloadStatus
+from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, \
+    PreloadStatus
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
@@ -125,7 +126,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                     )
                 )
                 download_url, _ = self._download_manager.get_download_url(task_id)
-                self.download_data(download_url, data_id)
+                self._download_manager.download_data(download_url, data_id)
                 self.notify(
                     PreloadState(
                         data_id=data_id,
@@ -159,13 +160,3 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             cleanup_dir(self.cache_root)
         for data_id in self.data_id_maps.keys():
             self.notify(PreloadState(data_id=data_id, message="Cleaning up Finished."))
-
-    def download_data(self, download_url: str, data_id: str) -> None:
-        """Initiates the download process for a given data item.
-
-        Args:
-            download_url: URL of the data to download. This is obtained from
-                the completed request of a dataset.
-            data_id: Identifier of the data being downloaded.
-        """
-        self._download_manager.download_data(download_url, data_id)

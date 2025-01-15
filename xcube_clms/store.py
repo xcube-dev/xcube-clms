@@ -28,6 +28,7 @@ from xcube.core.store import (
     DataTypeLike,
     DATASET_TYPE,
     DatasetDescriptor,
+    MutableDataStore,
     PreloadHandle,
 )
 from xcube.util.jsonschema import (
@@ -47,7 +48,7 @@ class ClmsDataStore(DataStore, ABC):
 
     def __init__(self, **clms_kwargs):
         self._clms = Clms(**clms_kwargs)
-        self.cache_store = self._clms.cache_store
+        self.cache_store: MutableDataStore = self._clms.cache_store
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -68,16 +69,18 @@ class ClmsDataStore(DataStore, ABC):
                 "the steps outlined here. https://eea.github.io/clms-api-docs/authentication.html",
                 required=("client_id", "user_id", "token_uri", "private_key"),
             ),
-            cache_id=JsonStringSchema(
-                title="Preload cache folder.",
-                description=(
-                    "Datasets which are preloaded using `preload_data` method "
-                    "will be stored in this folder in a prepared way."
-                ),
-                default=DEFAULT_PRELOAD_CACHE_FOLDER,
+            cache_store_id=JsonStringSchema(
+                title="Store ID of cache data store.",
+                description=("Store ID of a data store implemented in xcube."),
+                default="file",
             ),
             cache_store_params=JsonObjectSchema(
-                title="Parameters for creating new cache data store"
+                title="Store parameters of cache data store.",
+                description=(
+                    "Parameters of a data store implemented in xcube. "
+                    "Provide parameters for a file data store if `cache_store_id` is not provided."
+                ),
+                default=dict(root=DEFAULT_PRELOAD_CACHE_FOLDER),
             ),
         )
         return JsonObjectSchema(
@@ -115,7 +118,7 @@ class ClmsDataStore(DataStore, ABC):
         self, data_id: str, data_type: DataTypeLike = None
     ) -> DataDescriptor:
         assert_valid_data_type(data_type)
-        metadata = self._clms.get_extent(data_id)
+        metadata = self._clms.describe_data(data_id)
         return DatasetDescriptor(data_id, **metadata)
 
     def get_data_opener_ids(
@@ -126,6 +129,7 @@ class ClmsDataStore(DataStore, ABC):
     def get_open_data_params_schema(
         self, data_id: str = None, opener_id: str = None
     ) -> JsonObjectSchema:
+        # TODO: Update this
         # We do not support any open_data_params yet
         return JsonObjectSchema()
 

@@ -23,8 +23,8 @@ import time
 import jwt
 from requests import RequestException
 
-from xcube_clms.constants import ACCEPT_HEADER, LOG
-from xcube_clms.utils import make_api_request, get_response_of_type
+from .constants import ACCEPT_HEADER, LOG
+from .utils import make_api_request, get_response_of_type
 
 _CLMS_API_AUTH = "https://land.copernicus.eu/@@oauth2-token"
 

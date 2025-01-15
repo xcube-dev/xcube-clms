@@ -57,14 +57,7 @@ _ITEMS_KEY = "items"
 
 
 class Clms:
-    """Provides an interface to interact with the CLMS API
-
-    It also allows the user to preload the data into a cache location using the
-    `preload_data` method  in both blocking/non-blocking ways which would be
-    time-consuming task otherwise.
-    Currently, the Preload API is experimental and will change in the further
-    versions.
-    """
+    """Provides an interface to interact with the CLMS API"""
 
     def __init__(
         self,
@@ -105,7 +98,7 @@ class Clms:
             raise FileNotFoundError(
                 f"No cached data found for data_id: "
                 f"{data_id}. Please preload the data "
-                f"first using the `preload_data()` method"
+                f"first using the `preload_data()` method."
             )
 
         return self.cache_store.open_data(data_id=data_id, **open_params)
@@ -143,8 +136,8 @@ class Clms:
             return bool(dataset)
         return False
 
-    def get_extent(self, data_id: str) -> dict[str, Any]:
-        """Retrieves the spatial and temporal extent of a dataset.
+    def describe_data(self, data_id: str) -> dict[str, Any]:
+        """Get the time range and CRS of the dataset.
 
         Args:
             data_id: Identifier for the dataset.
@@ -170,8 +163,9 @@ class Clms:
 
         Args:
             *data_ids: One or more data IDs to preload.
-            **preload_params: Additional parameters for preloading (currently
-            not supported).
+            **preload_params: Parameters for preloading data into a cache
+                data store. Use `get_preload_data_params_schema()` to get all
+                the parameters that can be passed in.
         """
         data_id_maps = {
             data_id: {

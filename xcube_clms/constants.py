@@ -53,16 +53,6 @@ PRODUCT_KEY = "product"
 
 # Logging
 LOG = logging.getLogger("xcube.clms")
-LEVEL = logging.INFO
-LOG.setLevel(LEVEL)
-if not LOG.hasHandlers():
-    handler = logging.StreamHandler()
-    handler.setLevel(LEVEL)
-    formatter = logging.Formatter(
-        "%(name)s - %(asctime)s -  %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    LOG.addHandler(handler)
 
 # DataOpener IDs
 DATA_OPENER_IDS = (

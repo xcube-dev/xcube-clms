@@ -89,10 +89,10 @@ def make_api_request(
         json: A dictionary representing a JSON payload to send in the request.
             Defaults to `None`.
         method: The HTTP method to use (e.g., "GET", "POST", "PUT", "DELETE").
-        Defaults to "GET".
+            Defaults to "GET".
         stream: Whether to stream the response content. Defaults to `False`.
         timeout: The maximum time (in seconds) to wait for a response.
-        Defaults to `100`.
+            Defaults to `100`.
 
     Returns:
         Response: The HTTP response object returned by the server.
@@ -165,9 +165,9 @@ def build_api_url(
         url: The base URL of the API.
         api_endpoint: The specific endpoint to be appended to the base URL.
         metadata_fields: Optional list of metadata fields to include as query
-        parameters.
+            parameters.
         datasets_request: Indicates whether the request targets datasets.
-        Defaults to True.
+            Defaults to True.
 
     Returns:
         A complete API URL string.

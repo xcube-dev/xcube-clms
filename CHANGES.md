@@ -1,13 +1,15 @@
-## Changes in 0.2.0 (in development)
+## Changes in 0.2.0
 
-### Preload Enhancements
+### Enhancements
 
 * Implemented the new experimental Preload API in xcube for improved
   performance.
 * Preload progress is now displayed in a user-friendly table format. This
   display can be disabled.
 
-### Remove Redundant class
+### Fixes
+
+### Other changes
 
 * Eliminated the redundant `CacheManager` class. Cache data store creation now
   provides more flexibility and control for users.

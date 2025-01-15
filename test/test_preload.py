@@ -185,17 +185,3 @@ class TestClmsPreloadHandle(unittest.TestCase):
         notifications = [call[0][0] for call in self.mock_notify.call_args_list]
         self.assertIn("Cleaning up in Progress", notifications[0].message)
         self.assertIn("Cleaning up Finished", notifications[1].message)
-
-    def test_download_data(self):
-        handle = ClmsPreloadHandle(
-            data_id_maps=self.data_id_maps,
-            url=self.url,
-            credentials={},
-            cache_store=self.mock_fs_data_store,
-        )
-
-        handle.download_data("download_url", "test_data_id")
-
-        self.mock_download_manager.download_data.assert_called_with(
-            "download_url", "test_data_id"
-        )

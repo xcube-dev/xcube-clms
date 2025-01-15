@@ -154,7 +154,7 @@ class ClmsTest(unittest.TestCase):
         self.assertEqual(False, clms.has_data("valid_id", "invalid_type"))
 
     @patch("xcube_clms.clms.Clms._access_item")
-    def test_get_extent(self, mock_access_item):
+    def test_describe_data(self, mock_access_item):
         mock_access_item.return_value = {
             "file": "file1",
             "area": "area1",
@@ -168,7 +168,7 @@ class ClmsTest(unittest.TestCase):
                 "time_range": (None, None),
                 "crs": None,
             },
-            clms.get_extent("dataset1|file1"),
+            clms.describe_data("dataset1|file1"),
         )
 
         mock_access_item.return_value = {
@@ -184,7 +184,7 @@ class ClmsTest(unittest.TestCase):
                 "time_range": ("01-12-2022", "01-12-2024"),
                 "crs": "WGS84",
             },
-            clms.get_extent("dataset1|file1"),
+            clms.describe_data("dataset1|file1"),
         )
 
         mock_access_item.return_value = {
@@ -200,7 +200,7 @@ class ClmsTest(unittest.TestCase):
                 "time_range": ("01-12-2022", "01-12-2024"),
                 "crs": "WGS84",
             },
-            clms.get_extent("dataset1|file1"),
+            clms.describe_data("dataset1|file1"),
         )
 
     def test_create_data_ids(self):
