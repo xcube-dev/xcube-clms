@@ -107,7 +107,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             PreloadState(
                 data_id=data_id,
                 progress=0.1,
-                message="Download request in queue.",
+                message=f"Task ID {task_id}: Download request in queue.",
             )
         )
         status_event.set()
@@ -122,7 +122,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                     PreloadState(
                         data_id=data_id,
                         progress=0.4,
-                        message="Download link created. Downloading now...",
+                        message=f"Task ID {task_id}: Download link created. Downloading now...",
                     )
                 )
                 download_url, _ = self._download_manager.get_download_url(task_id)
@@ -131,7 +131,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                     PreloadState(
                         data_id=data_id,
                         progress=0.8,
-                        message="Zip file downloaded. Extracting now...",
+                        message=f"Task ID {task_id}: Zip file downloaded. Extracting now...",
                     )
                 )
                 self._file_processor.preprocess(data_id)
@@ -139,14 +139,20 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                     PreloadState(
                         data_id=data_id,
                         progress=1.0,
-                        message="Preloading Complete.",
+                        message=f"Task ID {task_id}: Preloading Complete.",
                     )
                 )
                 return
             if status in CANCELLED:
                 status_event.clear()
+                self.notify(
+                    PreloadState(
+                        data_id=data_id,
+                        message=f"Task ID {task_id}: Download request was cancelled by the user from "
+                        "the Land Copernicus UI.",
+                    )
+                )
                 self.cancel()
-                self.close()
                 return
 
             time.sleep(RETRY_TIMEOUT)
@@ -157,6 +163,6 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                 PreloadState(data_id=data_id, message="Cleaning up in Progress...")
             )
         if self.cleanup:
-            cleanup_dir(self.cache_root)
+            cleanup_dir(self.cache_root, disable_progress=self.disable_tqdm_progress)
         for data_id in self.data_id_maps.keys():
             self.notify(PreloadState(data_id=data_id, message="Cleaning up Finished."))

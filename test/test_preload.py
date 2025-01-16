@@ -140,7 +140,9 @@ class TestClmsPreloadHandle(unittest.TestCase):
         final_notification = notification_calls[-1][0][0]
         self.assertEqual(final_notification.data_id, "test_data_id")
         self.assertEqual(final_notification.progress, 1.0)
-        self.assertEqual(final_notification.message, "Preloading Complete.")
+        self.assertEqual(
+            final_notification.message, "Task ID task_123: Preloading Complete."
+        )
         self.mock_file_processor_instance.preprocess.assert_called_once()
 
     def test_preload_data_cancel(self):
@@ -167,9 +169,9 @@ class TestClmsPreloadHandle(unittest.TestCase):
         notification_calls = self.mock_notify.call_args_list
         self.assertEqual(notification_calls[-1][0][0].data_id, "test_data_id")
         self.assertEqual(notification_calls[-1][0][0].status, PreloadStatus.stopped)
-        self.assertEqual(notification_calls[-2][0][0].message, "Cleaning up Finished.")
-        self.assertEqual(
-            notification_calls[-3][0][0].message, "Cleaning up in Progress..."
+        self.assertIn(
+            "Task ID task_123: Download request was cancelled",
+            notification_calls[-2][0][0].message,
         )
 
     def test_close(self):
@@ -182,7 +184,9 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.mock_notify.reset_mock()
         handle.close()
 
-        self.mock_cleanup_dir.assert_called_once_with(self.mock_fs_data_store.root)
+        self.mock_cleanup_dir.assert_called_once_with(
+            self.mock_fs_data_store.root, disable_progress=True
+        )
 
         self.assertEqual(self.mock_notify.call_count, 2)
         notifications = [call[0][0] for call in self.mock_notify.call_args_list]

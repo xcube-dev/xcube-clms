@@ -179,7 +179,7 @@ def find_easting_northing(name: str) -> Optional[str]:
 
 
 def cleanup_dir(
-    folder_path: Path | str, fs=None, keep_extension=None, disable_progress=False
+    folder_path: Path | str, fs=None, keep_extension=None, disable_progress=True
 ):
     """Removes all files from a directory, retaining only those with the
     specified extension in the root directory.
@@ -189,7 +189,8 @@ def cleanup_dir(
         fs: A fsspec filesystem object. If None, the local filesystem is used.
             Optional.
         keep_extension: The file extension to retain. Optional
-        disable_progress: Option to either show or hide the tqdm progress bar
+        disable_progress: Option to either show or hide the tqdm progress
+            bar. Defaults to True
     """
     folder_path = str(folder_path)
     fs = fs or fsspec.filesystem("file")
