@@ -25,9 +25,11 @@ import numpy as np
 import pytest
 import xarray as xr
 from xcube.core.store import new_data_store, DatasetDescriptor
-from xcube.util.jsonschema import JsonObjectSchema
+from xcube.util.jsonschema import (
+    JsonObjectSchema,
+)
 
-from xcube_clms.constants import DATA_STORE_ID, DATA_ID_SEPARATOR, DATA_OPENER_IDS
+from xcube_clms.constants import DATA_STORE_ID, DATA_ID_SEPARATOR
 from xcube_clms.preload import ClmsPreloadHandle
 
 
@@ -153,12 +155,16 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_data_opener_ids(self):
+        data_opener_ids = (
+            f"dataset:geotiff:file",
+            f"dataset:zarr:file",
+        )
         opener_ids = self.store.get_data_opener_ids()
-        expected_opener_ids = DATA_OPENER_IDS
+        expected_opener_ids = data_opener_ids
         self.assertEqual(expected_opener_ids, opener_ids)
 
         opener_ids = self.store.get_data_opener_ids(self.data_id)
-        expected_opener_ids = DATA_OPENER_IDS
+        expected_opener_ids = data_opener_ids
         self.assertEqual(expected_opener_ids, opener_ids)
 
     @pytest.mark.vcr()
@@ -171,9 +177,12 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_open_data_params_schema(self):
-        schema = self.store.get_open_data_params_schema(self.data_id)
+        schema = self.store.get_open_data_params_schema(self.data_id + ".tif")
         self.assertIsInstance(schema, JsonObjectSchema)
-        self.assertEqual({}, schema.properties)
+        self.assertEqual(
+            ["tile_size", "overview_level", "data_type"],
+            list(schema.properties.keys()),
+        )
 
     @pytest.mark.vcr()
     def test_search_data(self):
@@ -220,7 +229,7 @@ class ClmsDataStoreTest(unittest.TestCase):
             "file", root="preload_clms_cache", max_depth=2
         )
         mock_data_store.open_data.assert_called_once_with(
-            data_id="forest-type-2018|FTY_2018_010m_al_03035_v010"
+            data_id="forest-type-2018|FTY_2018_010m_al_03035_v010", opener_id=None
         )
 
     @pytest.mark.vcr()

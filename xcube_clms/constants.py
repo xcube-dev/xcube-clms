@@ -53,9 +53,3 @@ PRODUCT_KEY = "product"
 
 # Logging
 LOG = logging.getLogger("xcube.clms")
-
-# DataOpener IDs
-DATA_OPENER_IDS = (
-    f"dataset:geotiff:{DATA_STORE_ID}",
-    f"dataset:zarr:{DATA_STORE_ID}",
-)

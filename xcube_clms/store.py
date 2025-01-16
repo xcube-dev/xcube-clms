@@ -38,7 +38,7 @@ from xcube.util.jsonschema import (
 )
 
 from .clms import Clms
-from .constants import DATA_OPENER_IDS, DEFAULT_PRELOAD_CACHE_FOLDER
+from .constants import DEFAULT_PRELOAD_CACHE_FOLDER
 from .utils import assert_valid_data_type
 
 
@@ -49,6 +49,11 @@ class ClmsDataStore(DataStore, ABC):
     def __init__(self, **clms_kwargs):
         self._clms = Clms(**clms_kwargs)
         self.cache_store: MutableDataStore = self._clms.cache_store
+        cache_store_id = self._clms.cache_store_id
+        self.data_opener_ids = (
+            f"dataset:geotiff:{cache_store_id}",
+            f"dataset:zarr:{cache_store_id}",
+        )
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -71,13 +76,15 @@ class ClmsDataStore(DataStore, ABC):
             ),
             cache_store_id=JsonStringSchema(
                 title="Store ID of cache data store.",
-                description=("Store ID of a data store implemented in xcube."),
+                description=(
+                    "Store ID of a filesystem-based data store " "implemented in xcube."
+                ),
                 default="file",
             ),
             cache_store_params=JsonObjectSchema(
                 title="Store parameters of cache data store.",
                 description=(
-                    "Parameters of a data store implemented in xcube. "
+                    "Parameters of a filesystem-based data store implemented in xcube. "
                     "Provide parameters for a file data store if `cache_store_id` is not provided."
                 ),
                 default=dict(root=DEFAULT_PRELOAD_CACHE_FOLDER),
@@ -124,24 +131,20 @@ class ClmsDataStore(DataStore, ABC):
     def get_data_opener_ids(
         self, data_id: str = None, data_type: DataTypeLike = None
     ) -> Tuple[str, ...]:
-        return DATA_OPENER_IDS
+        return self.data_opener_ids
 
     def get_open_data_params_schema(
         self, data_id: str = None, opener_id: str = None
     ) -> JsonObjectSchema:
-        # TODO: Update this
-        # We do not support any open_data_params yet
-        return JsonObjectSchema()
+        return self.cache_store.get_open_data_params_schema(data_id, opener_id)
 
     def open_data(
         self,
         data_id: str,
         opener_id: str = None,
-        spatial_coverage: str = "",
-        resolution: str = "",
         **open_params,
     ) -> xr.Dataset:
-        return self._clms.open_data(data_id)
+        return self._clms.open_data(data_id, opener_id, **open_params)
 
     def search_data(
         self, data_type: DataTypeLike = None, **search_params

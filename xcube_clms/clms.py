@@ -71,6 +71,7 @@ class Clms:
         self.cache_store: MutableDataStore = new_data_store(
             cache_store_id, **cache_store_params
         )
+        self.cache_store_id = cache_store_id
         self.fs = self.cache_store.fs
         self._cache_root = self.cache_store.root
         self.credentials = credentials
@@ -79,6 +80,7 @@ class Clms:
     def open_data(
         self,
         data_id: str,
+        opener_id: str = None,
         **open_params,
     ) -> xr.Dataset:
         """Opens the data associated with a specific data ID from the cache
@@ -86,6 +88,7 @@ class Clms:
 
         Args:
             data_id: Identifier for the data to open.
+            opener_id: Identifier for the data opener.
             **open_params: Additional parameters for opening the data.
 
         Returns:
@@ -101,7 +104,9 @@ class Clms:
                 f"first using the `preload_data()` method."
             )
 
-        return self.cache_store.open_data(data_id=data_id, **open_params)
+        return self.cache_store.open_data(
+            data_id=data_id, opener_id=opener_id, **open_params
+        )
 
     def get_data_ids(
         self,
