@@ -49,10 +49,9 @@ class ClmsDataStore(DataStore, ABC):
     def __init__(self, **clms_kwargs):
         self._clms = Clms(**clms_kwargs)
         self.cache_store: MutableDataStore = self._clms.cache_store
-        cache_store_id = self._clms.cache_store_id
         self.data_opener_ids = (
-            f"dataset:geotiff:{cache_store_id}",
-            f"dataset:zarr:{cache_store_id}",
+            f"dataset:geotiff:{self.cache_store.protocol}",
+            f"dataset:zarr:{self.cache_store.protocol}",
         )
 
     @classmethod
