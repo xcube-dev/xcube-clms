@@ -182,10 +182,6 @@ class ClmsDataStore(DataStore, ABC):
                 "multiple files downloaded for the same data_id. "
                 "Defaults to True.",
             ),
-            disable_tqdm_progress=JsonBooleanSchema(
-                title="Option to show/hide the tqdm progress bars for various "
-                "download/extraction operations. Defaults to False."
-            ),
         )
         return JsonObjectSchema(
             properties=dict(**params),

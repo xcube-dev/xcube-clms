@@ -26,7 +26,6 @@ from typing import Optional
 import fsspec
 import rioxarray
 import xarray as xr
-from tqdm.notebook import tqdm
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
 from xcube_clms.constants import LOG
@@ -41,12 +40,10 @@ class FileProcessor:
         self,
         cache_store,
         cleanup: bool = True,
-        disable_tqdm_progress: bool = False,
     ) -> None:
         self.cache_store = cache_store
         self.fs = cache_store.fs
         self.cleanup = cleanup
-        self.disable_tqdm_progress = disable_tqdm_progress
 
     def preprocess(self, data_id: str) -> None:
         """Performs preprocessing on the files for a given data ID.
@@ -87,7 +84,6 @@ class FileProcessor:
             cleanup_dir(
                 folder_path=target_folder,
                 keep_extension=".zarr",
-                disable_progress=self.disable_tqdm_progress,
             )
 
     def _prepare_merge(
@@ -140,11 +136,7 @@ class FileProcessor:
         # values
         chunk_size = {"x": 1000, "y": 1000}
         merged_eastings = {}
-        for easting, file_list in tqdm(
-            sorted_east_groups.items(),
-            desc=f"Concatenating along the Y-axis (Northings)",
-            disable=self.disable_tqdm_progress,
-        ):
+        for easting, file_list in sorted_east_groups.items():
             datasets = []
             for file in file_list:
                 da = rioxarray.open_rasterio(file, masked=True, chunks=chunk_size)
@@ -183,9 +175,7 @@ def find_easting_northing(name: str) -> Optional[str]:
     return None
 
 
-def cleanup_dir(
-    folder_path: Path | str, fs=None, keep_extension=None, disable_progress=True
-):
+def cleanup_dir(folder_path: Path | str, fs=None, keep_extension=None):
     """Removes all files from a directory, retaining only those with the
     specified extension in the root directory.
 
@@ -194,8 +184,6 @@ def cleanup_dir(
         fs: A fsspec filesystem object. If None, the local filesystem is used.
             Optional.
         keep_extension: The file extension to retain. Optional
-        disable_progress: Option to either show or hide the tqdm progress
-            bar. Defaults to True
     """
     folder_path = str(folder_path)
     fs = fs or fsspec.filesystem("file")
@@ -203,11 +191,7 @@ def cleanup_dir(
     if not fs.isdir(folder_path):
         raise ValueError(f"The specified path {folder_path} is not a directory.")
 
-    for item in tqdm(
-        fs.listdir(folder_path),
-        desc=f"Cleaning up directory {folder_path}",
-        disable=disable_progress,
-    ):
+    for item in fs.listdir(folder_path):
         item_path = item["name"]
         try:
             # Adding the `not item_path.endswith(keep_extension)` condition

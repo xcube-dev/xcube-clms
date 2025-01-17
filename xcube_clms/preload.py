@@ -61,14 +61,12 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
 
         self._token_handler = ClmsApiTokenHandler(credentials)
         self.cleanup = preload_params.pop("cleanup", True)
-        self.disable_tqdm_progress = preload_params.pop("disable_tqdm_progress", True)
         self._file_processor = FileProcessor(
             self.cache_store,
             self.cleanup,
-            self.disable_tqdm_progress,
         )
         self._download_manager = DownloadTaskManager(
-            self._token_handler, self._url, self.cache_store, self.disable_tqdm_progress
+            self._token_handler, self._url, self.cache_store
         )
 
         super().__init__(
@@ -163,6 +161,6 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                 PreloadState(data_id=data_id, message="Cleaning up in Progress...")
             )
         if self.cleanup:
-            cleanup_dir(self.cache_root, disable_progress=self.disable_tqdm_progress)
+            cleanup_dir(self.cache_root)
         for data_id in self.data_id_maps.keys():
             self.notify(PreloadState(data_id=data_id, message="Cleaning up Finished."))

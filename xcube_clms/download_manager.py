@@ -24,7 +24,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import fsspec
-from tqdm.notebook import tqdm
 from xcube.core.store import MutableDataStore
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
@@ -77,13 +76,11 @@ class DownloadTaskManager:
         token_handler: ClmsApiTokenHandler,
         url: str,
         cache_store: MutableDataStore,
-        disable_tqdm_progress: bool | None = None,
     ) -> None:
         self._token_handler = token_handler
         self._api_token = self._token_handler.api_token
         self._url = url
         self.cache_store = cache_store
-        self.disable_tqdm_progress = disable_tqdm_progress
 
     def request_download(self, data_id: str, item: dict, product: dict) -> str:
         """Submits a download request for a specific dataset.
@@ -380,11 +377,7 @@ class DownloadTaskManager:
                             target_folder,
                             exist_ok=True,
                         )
-                        for geo_file in tqdm(
-                            geo_files,
-                            desc=f"Extracting geo files for data_id {data_id}",
-                            disable=self.disable_tqdm_progress,
-                        ):
+                        for geo_file in geo_files:
                             try:
                                 with inner_zip_fs.open(geo_file, "rb") as source_file:
                                     geo_file_name = geo_file.split("/")[-1]

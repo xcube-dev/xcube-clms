@@ -86,7 +86,6 @@ class TestClmsPreloadHandle(unittest.TestCase):
             credentials={"client_id": "test"},
             cache_store=self.mock_fs_data_store,
             cleanup=True,
-            disable_tqdm_progress=True,
         )
 
         self.assertEqual(handle.data_id_maps, self.data_id_maps)
@@ -184,9 +183,7 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.mock_notify.reset_mock()
         handle.close()
 
-        self.mock_cleanup_dir.assert_called_once_with(
-            self.mock_fs_data_store.root, disable_progress=True
-        )
+        self.mock_cleanup_dir.assert_called_once_with(self.mock_fs_data_store.root)
 
         self.assertEqual(self.mock_notify.call_count, 2)
         notifications = [call[0][0] for call in self.mock_notify.call_args_list]
