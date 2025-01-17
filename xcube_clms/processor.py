@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 import fsspec
+import rasterio
 import rioxarray
 import xarray as xr
 
@@ -134,11 +135,14 @@ class FileProcessor:
         # Step 3: Merge files along the Y-axis (Northings) for each Easting
         # group. xarray takes care of the missing tiles and fills it with NaN
         # values
-        chunk_size = {"x": 1000, "y": 1000}
         merged_eastings = {}
         for easting, file_list in sorted_east_groups.items():
             datasets = []
             for file in file_list:
+                with rasterio.open(file) as src:
+                    block_sizes = src.block_shapes
+                    assert len(block_sizes) == 1
+                    chunk_size = {"x": block_sizes[0][0], "y": block_sizes[0][1]}
                 da = rioxarray.open_rasterio(file, masked=True, chunks=chunk_size)
                 datasets.append(da)
             merged_eastings[easting] = xr.concat(datasets, dim="y")
