@@ -28,7 +28,8 @@ import rioxarray
 import xarray as xr
 from tqdm.notebook import tqdm
 
-from xcube_clms.constants import LOG, DATA_ID_SEPARATOR
+from xcube_clms.constants import DATA_ID_SEPARATOR
+from xcube_clms.constants import LOG
 
 _ZARR_FORMAT = ".zarr"
 

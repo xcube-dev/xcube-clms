@@ -24,17 +24,17 @@ from typing import Any
 
 import fsspec
 from xcube.core.store import MutableDataStore
-from xcube.core.store.preload import ExecutorPreloadHandle, PreloadState, \
-    PreloadStatus
+from xcube.core.store.preload import ExecutorPreloadHandle
+from xcube.core.store.preload import PreloadState
+from xcube.core.store.preload import PreloadStatus
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import (
-    COMPLETE,
-    RETRY_TIMEOUT,
-    CANCELLED,
-)
+from xcube_clms.constants import CANCELLED
+from xcube_clms.constants import COMPLETE
+from xcube_clms.constants import RETRY_TIMEOUT
 from xcube_clms.download_manager import DownloadTaskManager
-from xcube_clms.processor import FileProcessor, cleanup_dir
+from xcube_clms.processor import FileProcessor
+from xcube_clms.processor import cleanup_dir
 
 
 class ClmsPreloadHandle(ExecutorPreloadHandle):

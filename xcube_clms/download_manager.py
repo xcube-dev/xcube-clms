@@ -28,22 +28,18 @@ from tqdm.notebook import tqdm
 from xcube.core.store import MutableDataStore
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import (
-    LOG,
-    CANCELLED,
-    PENDING,
-    COMPLETE,
-    TASK_STATUS_ENDPOINT,
-    ACCEPT_HEADER,
-    CONTENT_TYPE_HEADER,
-    DOWNLOAD_ENDPOINT,
-    TIME_TO_EXPIRE,
-)
-from xcube_clms.utils import (
-    make_api_request,
-    get_response_of_type,
-    build_api_url,
-)
+from xcube_clms.constants import ACCEPT_HEADER
+from xcube_clms.constants import CANCELLED
+from xcube_clms.constants import COMPLETE
+from xcube_clms.constants import CONTENT_TYPE_HEADER
+from xcube_clms.constants import DOWNLOAD_ENDPOINT
+from xcube_clms.constants import LOG
+from xcube_clms.constants import PENDING
+from xcube_clms.constants import TASK_STATUS_ENDPOINT
+from xcube_clms.constants import TIME_TO_EXPIRE
+from xcube_clms.utils import build_api_url
+from xcube_clms.utils import get_response_of_type
+from xcube_clms.utils import make_api_request
 
 _UID_KEY = "UID"
 _DATASET_DOWNLOAD_INFORMATION_KEY = "dataset_download_information"

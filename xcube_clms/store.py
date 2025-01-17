@@ -22,20 +22,16 @@ from abc import ABC
 from typing import Tuple, Iterator, Container, Any, Union
 
 import xarray as xr
-from xcube.core.store import (
-    DataDescriptor,
-    DataStore,
-    DataTypeLike,
-    DATASET_TYPE,
-    DatasetDescriptor,
-    MutableDataStore,
-    PreloadHandle,
-)
-from xcube.util.jsonschema import (
-    JsonObjectSchema,
-    JsonStringSchema,
-    JsonBooleanSchema,
-)
+from xcube.core.store import DATASET_TYPE
+from xcube.core.store import DataDescriptor
+from xcube.core.store import DataStore
+from xcube.core.store import DataTypeLike
+from xcube.core.store import DatasetDescriptor
+from xcube.core.store import MutableDataStore
+from xcube.core.store import PreloadHandle
+from xcube.util.jsonschema import JsonBooleanSchema
+from xcube.util.jsonschema import JsonObjectSchema
+from xcube.util.jsonschema import JsonStringSchema
 
 from .clms import Clms
 from .constants import DEFAULT_PRELOAD_CACHE_FOLDER

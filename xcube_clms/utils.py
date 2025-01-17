@@ -22,14 +22,17 @@ from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
 import requests
-from requests import HTTPError, Timeout, RequestException, Response, \
-    JSONDecodeError
-from xcube.core.store import DataTypeLike, DataStoreError, DATASET_TYPE
+from requests import HTTPError
+from requests import JSONDecodeError
+from requests import RequestException
+from requests import Response
+from requests import Timeout
+from xcube.core.store import DATASET_TYPE
+from xcube.core.store import DataStoreError
+from xcube.core.store import DataTypeLike
 
-from xcube_clms.constants import (
-    ACCEPT_HEADER,
-    LOG,
-)
+from xcube_clms.constants import ACCEPT_HEADER
+from xcube_clms.constants import LOG
 
 _PORTAL_TYPE = {"portal_type": "DataSet"}
 _METADATA_FIELDS = "metadata_fields"

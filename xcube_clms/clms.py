@@ -21,29 +21,23 @@
 from typing import Any, Container, Union, Iterator
 
 import xarray as xr
-from xcube.core.store import (
-    DataTypeLike,
-    new_data_store,
-    MutableDataStore,
-)
+from xcube.core.store import DataTypeLike
+from xcube.core.store import MutableDataStore
+from xcube.core.store import new_data_store
 from xcube.core.store.preload import PreloadHandle
 
-from .constants import (
-    SEARCH_ENDPOINT,
-    LOG,
-    DATA_ID_SEPARATOR,
-    CLMS_API_URL,
-    DEFAULT_PRELOAD_CACHE_FOLDER,
-    ITEM_KEY,
-    PRODUCT_KEY,
-)
+from .constants import CLMS_API_URL
+from .constants import DATA_ID_SEPARATOR
+from .constants import DEFAULT_PRELOAD_CACHE_FOLDER
+from .constants import ITEM_KEY
+from .constants import LOG
+from .constants import PRODUCT_KEY
+from .constants import SEARCH_ENDPOINT
 from .preload import ClmsPreloadHandle
-from .utils import (
-    is_valid_data_type,
-    make_api_request,
-    get_response_of_type,
-    build_api_url,
-)
+from .utils import build_api_url
+from .utils import get_response_of_type
+from .utils import is_valid_data_type
+from .utils import make_api_request
 
 _CLMS_DATA_ID_KEY = "id"
 _DOWNLOADABLE_FILES_KEY = "downloadable_files"
