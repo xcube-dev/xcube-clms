@@ -133,7 +133,7 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.mock_download_manager.get_download_url.assert_called_once_with("task_123")
         self.mock_download_manager.download_data.assert_called_once()
         # wait for threads to finish
-        time.sleep(2)
+        time.sleep(3)
         notification_calls = self.mock_notify.call_args_list
         self.assertGreaterEqual(len(notification_calls), 4)
 

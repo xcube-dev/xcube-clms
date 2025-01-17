@@ -29,10 +29,12 @@ import xarray as xr
 from xcube.core.store import new_data_store
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
-from xcube_clms.processor import FileProcessor, cleanup_dir, find_easting_northing
+from xcube_clms.processor import FileProcessor
+from xcube_clms.processor import cleanup_dir
+from xcube_clms.processor import find_easting_northing
 
 
-class ProcessorTest(unittest.TestCase):
+class FileProcessorTest(unittest.TestCase):
 
     def setUp(self):
         self.mock_data_id = "product_id|dataset_id"
@@ -48,13 +50,29 @@ class ProcessorTest(unittest.TestCase):
             "/mock/path/product_id|dataset_id/file_1.tif"
         ]
         processor = FileProcessor(self.file_store, cleanup=True)
+        processor.cache_store = MagicMock()
+        processor.cache_store.open_data.return_value = MagicMock()
+        processor.cache_store.write_data.return_value = MagicMock()
+        processor.cache_store.root.return_value = self.test_path
         processor.preprocess(self.mock_data_id)
 
-        mock_cleanup_dir.assert_not_called()
+        mock_cleanup_dir.assert_called_once()
         mock_log.debug.assert_called()
 
-        mock_log.reset_mock()
+    @patch("xcube_clms.processor.LOG")
+    @patch("xcube_clms.processor.fsspec.filesystem")
+    @patch("xcube_clms.processor.cleanup_dir")
+    def test_postprocess_single_file_no_cleanup(
+        self, mock_cleanup_dir, mock_fsspec, mock_log
+    ):
+        mock_fsspec.return_value.ls.return_value = [
+            "/mock/path/product_id|dataset_id/file_1.tif"
+        ]
         processor = FileProcessor(self.file_store, cleanup=False)
+        processor.cache_store = MagicMock()
+        processor.cache_store.open_data.return_value = MagicMock()
+        processor.cache_store.write_data.return_value = MagicMock()
+        processor.cache_store.root.return_value = self.test_path
         processor.preprocess(self.mock_data_id)
 
         mock_log.debug.assert_called()
@@ -69,7 +87,7 @@ class ProcessorTest(unittest.TestCase):
         processor.preprocess(self.mock_data_id)
 
         mock_log.warn.assert_called()
-        mock_cleanup_dir.assert_not_called()
+        mock_cleanup_dir.assert_called_once()
 
     @patch("xcube_clms.processor.LOG")
     @patch("xcube_clms.processor.fsspec.filesystem")

@@ -24,12 +24,12 @@ from unittest.mock import patch, MagicMock
 import numpy as np
 import pytest
 import xarray as xr
-from xcube.core.store import new_data_store, DatasetDescriptor
-from xcube.util.jsonschema import (
-    JsonObjectSchema,
-)
+from xcube.core.store import DatasetDescriptor
+from xcube.core.store import new_data_store
+from xcube.util.jsonschema import JsonObjectSchema
 
-from xcube_clms.constants import DATA_STORE_ID, DATA_ID_SEPARATOR
+from xcube_clms.constants import DATA_ID_SEPARATOR
+from xcube_clms.constants import DATA_STORE_ID
 from xcube_clms.preload import ClmsPreloadHandle
 
 
@@ -155,10 +155,7 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_data_opener_ids(self):
-        data_opener_ids = (
-            f"dataset:geotiff:file",
-            f"dataset:zarr:file",
-        )
+        data_opener_ids = ("dataset:zarr:file",)
         opener_ids = self.store.get_data_opener_ids()
         expected_opener_ids = data_opener_ids
         self.assertEqual(expected_opener_ids, opener_ids)
@@ -177,10 +174,21 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_open_data_params_schema(self):
-        schema = self.store.get_open_data_params_schema(self.data_id + ".tif")
+        schema = self.store.get_open_data_params_schema(self.data_id)
         self.assertIsInstance(schema, JsonObjectSchema)
         self.assertEqual(
-            ["tile_size", "overview_level", "data_type"],
+            [
+                "log_access",
+                "cache_size",
+                "group",
+                "chunks",
+                "decode_cf",
+                "mask_and_scale",
+                "decode_times",
+                "decode_coords",
+                "drop_variables",
+                "consolidated",
+            ],
             list(schema.properties.keys()),
         )
 

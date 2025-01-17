@@ -27,12 +27,10 @@ import requests
 from xcube.core.store import new_data_store
 
 from xcube_clms.constants import TIME_TO_EXPIRE
-from xcube_clms.download_manager import (
-    get_dataset_download_info,
-    get_authorization_header,
-    has_expired,
-    DownloadTaskManager,
-)
+from xcube_clms.download_manager import DownloadTaskManager
+from xcube_clms.download_manager import get_authorization_header
+from xcube_clms.download_manager import get_dataset_download_info
+from xcube_clms.download_manager import has_expired
 
 
 class TestDownloadTaskManager(unittest.TestCase):

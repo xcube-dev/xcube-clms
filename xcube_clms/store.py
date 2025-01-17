@@ -45,10 +45,7 @@ class ClmsDataStore(DataStore, ABC):
     def __init__(self, **clms_kwargs):
         self._clms = Clms(**clms_kwargs)
         self.cache_store: MutableDataStore = self._clms.cache_store
-        self.data_opener_ids = (
-            f"dataset:geotiff:{self.cache_store.protocol}",
-            f"dataset:zarr:{self.cache_store.protocol}",
-        )
+        self.data_opener_id = f"dataset:zarr:{self.cache_store.protocol}"
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -72,7 +69,7 @@ class ClmsDataStore(DataStore, ABC):
             cache_store_id=JsonStringSchema(
                 title="Store ID of cache data store.",
                 description=(
-                    "Store ID of a filesystem-based data store " "implemented in xcube."
+                    "Store ID of a filesystem-based data store implemented in xcube."
                 ),
                 default="file",
             ),
@@ -126,11 +123,13 @@ class ClmsDataStore(DataStore, ABC):
     def get_data_opener_ids(
         self, data_id: str = None, data_type: DataTypeLike = None
     ) -> Tuple[str, ...]:
-        return self.data_opener_ids
+        return (self.data_opener_id,)
 
     def get_open_data_params_schema(
         self, data_id: str = None, opener_id: str = None
     ) -> JsonObjectSchema:
+        if opener_id is None:
+            opener_id = self.data_opener_id
         return self.cache_store.get_open_data_params_schema(data_id, opener_id)
 
     def open_data(
