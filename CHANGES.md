@@ -2,17 +2,15 @@
 
 ### Enhancements
 
-* Implemented the new experimental Preload API in xcube for improved
+* Implemented the new experimental `Preload` API in xcube for improved
   performance.
 * Preload progress is now displayed in a user-friendly table format. This
   display can be disabled.
+* All preloaded data is now stored in the `.zarr` format.
 
 ### Fixes
 
 ### Other changes
-
-* Eliminated the redundant `CacheManager` class. Cache data store creation now
-  provides more flexibility and control for users.
 
 ## Changes in 0.1.0
 
