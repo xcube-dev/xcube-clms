@@ -18,7 +18,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from abc import ABC
+
 from typing import Tuple, Iterator, Container, Any, Union
 
 import xarray as xr
@@ -38,7 +38,7 @@ from .constants import DEFAULT_PRELOAD_CACHE_FOLDER
 from .utils import assert_valid_data_type
 
 
-class ClmsDataStore(DataStore, ABC):
+class ClmsDataStore(DataStore):
     """CLMS implementation of the data store defined in the ``xcube_clms``
     plugin."""
 
