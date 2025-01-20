@@ -138,12 +138,11 @@ class FileProcessorTest(unittest.TestCase):
         mock_merge_and_save.assert_called()
         mock_cleanup_dir.assert_called()
 
+    @patch("xcube_clms.processor.rasterio.open")
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     @patch("xcube_clms.processor.xr.concat")
     def test_postprocess_merge_and_save(
-        self,
-        mock_xr_concat,
-        mock_rioxarray_open_rasterio,
+        self, mock_xr_concat, mock_rioxarray_open_rasterio, mock_rasterio_open
     ):
         a = xr.DataArray(
             [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
@@ -168,6 +167,8 @@ class FileProcessorTest(unittest.TestCase):
 
         mock_rioxarray_open_rasterio.side_effect = [a, b, c]
 
+        mock_rasterio_open.return_value.__enter__.return_value.block_shapes = [(64, 64)]
+
         data_id = "product_1|file_id_1"
         en_map = defaultdict(list)
         en_map["E34N78"].append(f"{data_id}/file_1_E34N78.tif")
@@ -188,7 +189,10 @@ class FileProcessorTest(unittest.TestCase):
         self.assertEqual(x_concat.to_dataset(), final_dataset)
 
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
-    def test_merge_and_save_no_files(self, mock_rioxarray_open_rasterio):
+    def test_merge_and_save_no_files(
+        self,
+        mock_rioxarray_open_rasterio,
+    ):
         self.data_id = "product_empty"
         en_map = defaultdict(list)
 
@@ -203,8 +207,11 @@ class FileProcessorTest(unittest.TestCase):
         mock_rioxarray_open_rasterio.assert_not_called()
         self.mock_file_store.write_data.assert_not_called()
 
+    @patch("xcube_clms.processor.rasterio.open")
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
-    def test_merge_and_save_single_file(self, mock_rioxarray_open_rasterio):
+    def test_merge_and_save_single_file(
+        self, mock_rioxarray_open_rasterio, mock_rasterio_open
+    ):
         single_array = xr.DataArray(
             [[1, 2, 3], [4, 5, 6]],
             dims=["y", "x"],
@@ -215,6 +222,8 @@ class FileProcessorTest(unittest.TestCase):
         data_id = "product|dataset"
         en_map = defaultdict(list)
         en_map["E34N78"].append(f"{data_id}/file_1_E34N78.tif")
+
+        mock_rasterio_open.return_value.__enter__.return_value.block_shapes = [(64, 64)]
 
         processor = FileProcessor(self.mock_file_store, cleanup=True)
         processor._merge_and_save(en_map, data_id)
