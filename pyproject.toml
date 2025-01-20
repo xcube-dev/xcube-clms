@@ -21,7 +21,6 @@ dependencies = [
     "requests",
     "xarray",
     "xcube",
-    "tqdm",
     "ipywidgets",
     "cryptography",
     "requests",
