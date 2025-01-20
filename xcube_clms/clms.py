@@ -104,15 +104,16 @@ class Clms:
 
     def get_data_ids(
         self,
-        include_attrs: Container[str] | bool | None = None,
+        include_attrs: Container[str] | bool = False,
     ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
         """Retrieves all data IDs, optionally including additional attributes.
 
         Args:
-            include_attrs: Specifies whether to include attributes.
+            include_attrs: Specifies whether to include attributes for each
+               `data_id`.
                 - If True, includes all attributes.
                 - If a list, includes specified attributes.
-                - If False or None, includes no attributes.
+                - If False (default), includes no attributes.
 
         Returns:
             An iterator of data IDs, or tuples of data IDs and attributes.

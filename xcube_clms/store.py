@@ -98,7 +98,7 @@ class ClmsDataStore(DataStore, ABC):
     def get_data_ids(
         self,
         data_type: DataTypeLike = None,
-        include_attrs: Container[str] | bool | None = None,
+        include_attrs: Container[str] | bool = False,
     ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
         assert_valid_data_type(data_type)
         data_ids = self._clms.get_data_ids(include_attrs)
