@@ -118,8 +118,21 @@ class Clms:
         Returns:
             An iterator of data IDs, or tuples of data IDs and attributes.
         """
-        for data_id in self._create_data_ids(include_attrs):
-            yield data_id
+        for item in self._datasets_info:
+            for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
+                if _FILE_KEY in i and i[_FILE_KEY] != "":
+                    data_id = (
+                        f"{item[_CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
+                    )
+                    if not include_attrs:
+                        yield data_id
+                    elif isinstance(include_attrs, bool) and include_attrs:
+                        yield data_id, i
+                    elif isinstance(include_attrs, list):
+                        filtered_attrs = {
+                            attr: i[attr] for attr in include_attrs if attr in i
+                        }
+                        yield data_id, filtered_attrs
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
         """Checks if data exists for the given data ID and optional type.
@@ -181,37 +194,6 @@ class Clms:
             cache_store=self.cache_store,
             **preload_params,
         )
-
-    def _create_data_ids(
-        self,
-        include_attrs: Container[str] | bool | None = None,
-    ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
-        """Generates a list of data IDs, optionally including attributes.
-
-        Args:
-            include_attrs: Specifies whether to include attributes.
-                - If True, includes all attributes.
-                - If a list, includes specified attributes.
-                - If False or None, includes no attributes.
-
-        Returns:
-            An iterator of data IDs or tuples of data IDs and attributes.
-        """
-        for item in self._datasets_info:
-            for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
-                if _FILE_KEY in i and i[_FILE_KEY] != "":
-                    data_id = (
-                        f"{item[_CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
-                    )
-                    if not include_attrs:
-                        yield data_id
-                    elif isinstance(include_attrs, bool) and include_attrs:
-                        yield data_id, i
-                    elif isinstance(include_attrs, list):
-                        filtered_attrs = {
-                            attr: i[attr] for attr in include_attrs if attr in i
-                        }
-                        yield data_id, filtered_attrs
 
     @staticmethod
     def _fetch_all_datasets() -> list[dict[str, Any]]:

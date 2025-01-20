@@ -135,6 +135,18 @@ class ClmsTest(unittest.TestCase):
             result,
         )
 
+        mock_datasets_info = []
+        clms._datasets_info = mock_datasets_info
+
+        result = list(clms.get_data_ids(include_attrs=None))
+        self.assertEqual([], result)
+
+        result = list(clms.get_data_ids(include_attrs=True))
+        self.assertEqual([], result)
+
+        result = list(clms.get_data_ids(include_attrs=["size"]))
+        self.assertEqual([], result)
+
     @patch("xcube_clms.clms.Clms._get_item")
     def test_has_data(self, mock_get_item):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
@@ -202,53 +214,6 @@ class ClmsTest(unittest.TestCase):
             },
             clms.describe_data("dataset1|file1"),
         )
-
-    def test_create_data_ids(self):
-        clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
-        clms._datasets_info = self.datasets_info
-
-        result = list(clms._create_data_ids(include_attrs=None))
-        expected = [
-            "dataset1|file1",
-            "dataset2|file2",
-        ]
-        self.assertEqual(expected, result)
-
-        result = list(clms._create_data_ids(include_attrs=True))
-        self.assertEqual(
-            [
-                (
-                    "dataset1|file1",
-                    {"area": "area1", "file": "file1", "format": "geotiff"},
-                ),
-                (
-                    "dataset2|file2",
-                    {"area": "area2", "file": "file2", "format": "geotiff"},
-                ),
-            ],
-            result,
-        )
-
-        result = list(clms._create_data_ids(include_attrs=["area"]))
-        self.assertEqual(
-            [
-                ("dataset1|file1", {"area": "area1"}),
-                ("dataset2|file2", {"area": "area2"}),
-            ],
-            result,
-        )
-
-        mock_datasets_info = []
-        clms._datasets_info = mock_datasets_info
-
-        result = list(clms._create_data_ids(include_attrs=None))
-        self.assertEqual([], result)
-
-        result = list(clms._create_data_ids(include_attrs=True))
-        self.assertEqual([], result)
-
-        result = list(clms._create_data_ids(include_attrs=["size"]))
-        self.assertEqual([], result)
 
     def test_fetch_all_datasets(self):
         first_page_response = {
