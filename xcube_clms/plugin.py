@@ -1,5 +1,5 @@
 # The MIT License (MIT)
-# Copyright (c) 2024 by the xcube development team and contributors
+# Copyright (c) 2025 by the xcube development team and contributors
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,7 @@ from xcube_clms.constants import DATA_STORE_ID
 
 def init_plugin(ext_registry: extension.ExtensionRegistry):
     ext_registry.add_extension(
-        loader=extension.import_component("xcube_clms.store:CLMSDataStore"),
+        loader=extension.import_component("xcube_clms.store:ClmsDataStore"),
         point=EXTENSION_POINT_DATA_STORES,
         name=DATA_STORE_ID,
         description="CLMS DataStore",

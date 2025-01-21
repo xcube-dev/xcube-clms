@@ -1,5 +1,5 @@
 # The MIT License (MIT)
-# Copyright (c) 2024 by the xcube development team and contributors
+# Copyright (c) 2025 by the xcube development team and contributors
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -19,4 +19,38 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import logging
+
 DATA_STORE_ID = "clms"
+
+CLMS_API_URL = "https://land.copernicus.eu/api"
+
+# Configuration constants
+TIME_TO_EXPIRE = 24  # (in hours)
+RETRY_TIMEOUT = 15  # (in seconds)
+
+DEFAULT_PRELOAD_CACHE_FOLDER = "clms_cache/"
+
+# CLMS API Constants
+SEARCH_ENDPOINT = "@search"
+DOWNLOAD_ENDPOINT = "@datarequest_post"
+TASK_STATUS_ENDPOINT = "@datarequest_search"
+CANCEL_ENDPOINT = "@datarequest_delete"
+
+# Headers
+ACCEPT_HEADER = {"Accept": "application/json"}
+CONTENT_TYPE_HEADER = {"Content-Type": "application/json"}
+
+# Separator for creating data id
+DATA_ID_SEPARATOR = "|"
+
+# Request status
+PENDING = "PENDING"
+COMPLETE = "COMPLETE"
+CANCELLED = "CANCELLED"
+
+ITEM_KEY = "item"
+PRODUCT_KEY = "product"
+
+# Logging
+LOG = logging.getLogger("xcube.clms")
