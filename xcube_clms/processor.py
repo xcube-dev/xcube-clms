@@ -72,10 +72,9 @@ class FileProcessor:
             cache_data_id = self.fs.sep.join([data_id, files[0]])
             data = self.cache_store.open_data(cache_data_id)
             new_cache_data_id = cache_data_id.split(".")[0] + _ZARR_FORMAT
-            if self.tile_size:
-                data = chunk_dataset(
-                    data, chunk_sizes=self.tile_size, format_name=_ZARR_FORMAT
-                )
+            data = chunk_dataset(
+                data, chunk_sizes=self.tile_size, format_name=_ZARR_FORMAT
+            )
             self.cache_store.write_data(data, new_cache_data_id)
         elif len(files) == 0:
             LOG.warn("No files to preprocess!")
