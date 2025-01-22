@@ -60,14 +60,17 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         self.cache_root = cache_store.root
         self._cache_fs: fsspec.AbstractFileSystem = cache_store.fs
 
-        self._token_handler = ClmsApiTokenHandler(credentials)
+        self._token_handler = ClmsApiTokenHandler(credentials=credentials)
         self.cleanup = preload_params.pop("cleanup", True)
         self._file_processor = FileProcessor(
-            self.cache_store,
-            self.cleanup,
+            cache_store=self.cache_store,
+            cleanup=self.cleanup,
+            tile_size=preload_params.pop("tile_size", None),
         )
         self._download_manager = DownloadTaskManager(
-            self._token_handler, self._url, self.cache_store
+            token_handler=self._token_handler,
+            url=self._url,
+            cache_store=self.cache_store,
         )
 
         super().__init__(

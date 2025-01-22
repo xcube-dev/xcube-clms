@@ -209,6 +209,7 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertIsInstance(schema, JsonObjectSchema)
         self.assertIn("blocking", schema.properties)
         self.assertIn("silent", schema.properties)
+        self.assertIn("tile_size", schema.properties)
 
     @pytest.mark.vcr()
     @patch("xcube_clms.clms.new_data_store")
