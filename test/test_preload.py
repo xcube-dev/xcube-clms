@@ -94,7 +94,9 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.assertEqual(handle.cache_store, self.mock_fs_data_store)
         self.assertTrue(handle.cleanup)
 
-        self.mock_api_token_handler.assert_called_once_with({"client_id": "test"})
+        self.mock_api_token_handler.assert_called_once_with(
+            credentials={"client_id": "test"}
+        )
         self.mock_download_task_manager.assert_called_once()
         self.mock_file_processor.assert_called_once()
 

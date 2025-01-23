@@ -143,7 +143,10 @@ class FileProcessorTest(unittest.TestCase):
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     @patch("xcube_clms.processor.xr.concat")
     def test_postprocess_merge_and_save(
-        self, mock_xr_concat, mock_rioxarray_open_rasterio, mock_rasterio_open
+        self,
+        mock_xr_concat,
+        mock_rioxarray_open_rasterio,
+        mock_rasterio_open,
     ):
         a = xr.DataArray(
             [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
@@ -187,7 +190,7 @@ class FileProcessorTest(unittest.TestCase):
 
         args, _ = self.mock_file_store.write_data.call_args
         final_dataset, output_path = args
-        self.assertEqual(x_concat.to_dataset(), final_dataset)
+        self.assertEqual(x_concat.to_dataset().chunk(), final_dataset)
 
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     def test_merge_and_save_no_files(

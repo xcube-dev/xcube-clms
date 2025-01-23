@@ -182,6 +182,10 @@ class ClmsDataStore(DataStore):
                 "multiple files downloaded for the same data_id. "
                 "Defaults to True.",
             ),
+            tile_size=JsonObjectSchema(
+                title="Tile size of the final data cube to be saved.",
+                default={"x": 1024, "y": 1024},
+            ),
         )
         return JsonObjectSchema(
             properties=dict(**params),

@@ -28,6 +28,7 @@ import fsspec
 import rasterio
 import rioxarray
 import xarray as xr
+from xcube.core.chunk import chunk_dataset
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
 from xcube_clms.constants import LOG
@@ -42,10 +43,12 @@ class FileProcessor:
         self,
         cache_store,
         cleanup: bool = True,
+        tile_size: dict[str, int] = None,
     ) -> None:
         self.cache_store = cache_store
         self.fs = cache_store.fs
         self.cleanup = cleanup
+        self.tile_size = tile_size or {"x": 1024, "y": 1024}
 
     def preprocess(self, data_id: str) -> None:
         """Performs preprocessing on the files for a given data ID.
@@ -69,6 +72,9 @@ class FileProcessor:
             cache_data_id = self.fs.sep.join([data_id, files[0]])
             data = self.cache_store.open_data(cache_data_id)
             new_cache_data_id = cache_data_id.split(".")[0] + _ZARR_FORMAT
+            data = chunk_dataset(
+                data, chunk_sizes=self.tile_size, format_name=_ZARR_FORMAT
+            )
             self.cache_store.write_data(data, new_cache_data_id)
         elif len(files) == 0:
             LOG.warn("No files to preprocess!")
@@ -159,7 +165,11 @@ class FileProcessor:
         )
         new_filename = self.fs.sep.join([data_id, data_id + _ZARR_FORMAT])
 
-        self.cache_store.write_data(final_cube, new_filename)
+        # re-chunking the final dataset
+        final_chunked_cube = chunk_dataset(
+            final_cube, chunk_sizes=self.tile_size, format_name=_ZARR_FORMAT
+        )
+        self.cache_store.write_data(final_chunked_cube, new_filename)
 
 
 def find_easting_northing(name: str) -> Optional[str]:
