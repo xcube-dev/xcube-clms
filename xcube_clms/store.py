@@ -184,7 +184,7 @@ class ClmsDataStore(DataStore):
             ),
             tile_size=JsonObjectSchema(
                 title="Tile size of the final data cube to be saved.",
-                default={"x": 1000, "y": 1000},
+                default={"x": 1024, "y": 1024},
             ),
         )
         return JsonObjectSchema(

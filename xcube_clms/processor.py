@@ -48,7 +48,7 @@ class FileProcessor:
         self.cache_store = cache_store
         self.fs = cache_store.fs
         self.cleanup = cleanup
-        self.tile_size = tile_size or {"x": 1000, "y": 1000}
+        self.tile_size = tile_size or {"x": 1024, "y": 1024}
 
     def preprocess(self, data_id: str) -> None:
         """Performs preprocessing on the files for a given data ID.
