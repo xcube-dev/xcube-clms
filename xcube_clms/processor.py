@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Optional
 
 import fsspec
-import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
@@ -142,15 +141,14 @@ class FileProcessor:
         # Step 3: Merge files along the Y-axis (Northings) for each Easting
         # group. xarray takes care of the missing tiles and fills it with NaN
         # values
+        chunk_size = {"x": 2000, "y": 2000}
         merged_eastings = {}
         for easting, file_list in sorted_east_groups.items():
             datasets = []
             for file in file_list:
-                with rasterio.open(file) as src:
-                    block_sizes = src.block_shapes
-                    assert len(block_sizes) == 1
-                    chunk_size = {"x": block_sizes[0][0], "y": block_sizes[0][1]}
-                da = rioxarray.open_rasterio(file, masked=True, chunks=chunk_size)
+                da = rioxarray.open_rasterio(
+                    file, masked=True, chunks=chunk_size, band_as_variable=True
+                )
                 datasets.append(da)
             merged_eastings[easting] = xr.concat(datasets, dim="y")
 
@@ -160,16 +158,11 @@ class FileProcessor:
             return
         concat_cube = xr.concat(final_datasets, dim="x")
 
-        final_cube = concat_cube.to_dataset(
-            name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
+        final_cube = concat_cube.rename(
+            dict(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}")
         )
         new_filename = self.fs.sep.join([data_id, data_id + _ZARR_FORMAT])
-
-        # re-chunking the final dataset
-        final_chunked_cube = chunk_dataset(
-            final_cube, chunk_sizes=self.tile_size, format_name=_ZARR_FORMAT
-        )
-        self.cache_store.write_data(final_chunked_cube, new_filename)
+        self.cache_store.write_data(final_cube, new_filename)
 
 
 def find_easting_northing(name: str) -> Optional[str]:
