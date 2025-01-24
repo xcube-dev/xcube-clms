@@ -139,39 +139,41 @@ class FileProcessorTest(unittest.TestCase):
         mock_merge_and_save.assert_called()
         mock_cleanup_dir.assert_called()
 
-    @patch("xcube_clms.processor.rasterio.open")
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     @patch("xcube_clms.processor.xr.concat")
     def test_postprocess_merge_and_save(
         self,
         mock_xr_concat,
         mock_rioxarray_open_rasterio,
-        mock_rasterio_open,
     ):
+        dsa = xr.Dataset()
         a = xr.DataArray(
             [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
             dims=["y", "x"],
             coords={"y": np.arange(2), "x": np.arange(5)},
         )
+        dsa["band_1"] = a
 
+        dsb = xr.Dataset()
         b = xr.DataArray(
             [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]],
             dims=["y", "x"],
             coords={"y": np.arange(2, 4), "x": np.arange(5)},
         )
+        dsb["band_1"] = a
 
+        dsc = xr.Dataset()
         c = xr.DataArray(
             [[21, 22, 23, 24, 25], [26, 27, 28, 29, 30]],
             dims=["y", "x"],
             coords={"y": np.arange(2), "x": np.arange(5, 10)},
         )
+        dsc["band_1"] = a
 
-        y_concat = xr.concat([a, b], dim="y")
-        x_concat = xr.concat([c, y_concat], dim="x")
+        y_concat = xr.concat([dsa, dsb], dim="y")
+        x_concat = xr.concat([dsc, y_concat], dim="x")
 
-        mock_rioxarray_open_rasterio.side_effect = [a, b, c]
-
-        mock_rasterio_open.return_value.__enter__.return_value.block_shapes = [(64, 64)]
+        mock_rioxarray_open_rasterio.side_effect = [dsa, dsb, dsc]
 
         data_id = "product_1|file_id_1"
         en_map = defaultdict(list)
@@ -190,7 +192,10 @@ class FileProcessorTest(unittest.TestCase):
 
         args, _ = self.mock_file_store.write_data.call_args
         final_dataset, output_path = args
-        self.assertEqual(x_concat.to_dataset().chunk(), final_dataset)
+        self.assertEqual(
+            x_concat.rename(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"),
+            final_dataset,
+        )
 
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     def test_merge_and_save_no_files(
@@ -211,23 +216,20 @@ class FileProcessorTest(unittest.TestCase):
         mock_rioxarray_open_rasterio.assert_not_called()
         self.mock_file_store.write_data.assert_not_called()
 
-    @patch("xcube_clms.processor.rasterio.open")
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
-    def test_merge_and_save_single_file(
-        self, mock_rioxarray_open_rasterio, mock_rasterio_open
-    ):
+    def test_merge_and_save_single_file(self, mock_rioxarray_open_rasterio):
+        ds = xr.Dataset()
         single_array = xr.DataArray(
             [[1, 2, 3], [4, 5, 6]],
             dims=["y", "x"],
             coords={"y": np.arange(2), "x": np.arange(3)},
         )
-        mock_rioxarray_open_rasterio.return_value = single_array
+        ds["band_1"] = single_array
+        mock_rioxarray_open_rasterio.return_value = ds
 
         data_id = "product|dataset"
         en_map = defaultdict(list)
         en_map["E34N78"].append(f"{data_id}/file_1_E34N78.tif")
-
-        mock_rasterio_open.return_value.__enter__.return_value.block_shapes = [(64, 64)]
 
         processor = FileProcessor(self.mock_file_store, cleanup=True)
         processor._merge_and_save(en_map, data_id)
@@ -237,7 +239,7 @@ class FileProcessorTest(unittest.TestCase):
 
         final_dataset, _ = self.mock_file_store.write_data.call_args[0]
         self.assertEqual(
-            single_array.to_dataset(name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"),
+            ds.rename(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"),
             final_dataset,
         )
 
