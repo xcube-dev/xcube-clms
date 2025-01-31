@@ -1,4 +1,4 @@
-## Changes in 0.2.0(in development)
+## Changes in 0.2.0
 
 ### Enhancements
 
@@ -12,7 +12,7 @@
 
 ### Other changes
 
-## Changes in 0.1.0
+## Changes in 0.1.0 (not released)
 
 * Initial version of CLMS Data Store with a new experimental Preload API for
   preloading the datasets.
