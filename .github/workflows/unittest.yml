@@ -2,6 +2,8 @@ name: Unittest xcube-clms
 
 on:
   push:
+  release:
+    types: [ published ]
 
 jobs:
   unittest:
