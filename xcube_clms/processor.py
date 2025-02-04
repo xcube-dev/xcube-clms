@@ -21,8 +21,9 @@
 
 import re
 from collections import defaultdict
+from math import ceil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Final
 
 import fsspec
 import rasterio
@@ -34,6 +35,7 @@ from xcube_clms.constants import DATA_ID_SEPARATOR
 from xcube_clms.constants import LOG
 
 _ZARR_FORMAT = ".zarr"
+_PREFERRED_CHUNK_SIZE: Final = 2000
 
 
 class FileProcessor:
@@ -147,10 +149,10 @@ class FileProcessor:
             datasets = []
             for file in file_list:
                 with rasterio.open(file) as src:
-                    block_sizes = src.block_shapes
-                    assert len(block_sizes) == 1
-                    chunk_size = {"x": block_sizes[0][0], "y": block_sizes[0][1]}
-                da = rioxarray.open_rasterio(file, masked=True, chunks=chunk_size)
+                    chunk_size = get_chunk_size(size_y=src.height, size_x=src.width)
+                da = rioxarray.open_rasterio(
+                    file, masked=True, chunks=chunk_size, band_as_variable=True
+                )
                 datasets.append(da)
             merged_eastings[easting] = xr.concat(datasets, dim="y")
 
@@ -160,16 +162,11 @@ class FileProcessor:
             return
         concat_cube = xr.concat(final_datasets, dim="x")
 
-        final_cube = concat_cube.to_dataset(
-            name=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"
+        final_cube = concat_cube.rename(
+            dict(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}")
         )
         new_filename = self.fs.sep.join([data_id, data_id + _ZARR_FORMAT])
-
-        # re-chunking the final dataset
-        final_chunked_cube = chunk_dataset(
-            final_cube, chunk_sizes=self.tile_size, format_name=_ZARR_FORMAT
-        )
-        self.cache_store.write_data(final_chunked_cube, new_filename)
+        self.cache_store.write_data(final_cube, new_filename)
 
 
 def find_easting_northing(name: str) -> Optional[str]:
@@ -226,3 +223,10 @@ def cleanup_dir(folder_path: Path | str, fs=None, keep_extension=None):
         except Exception as e:
             LOG.error(f"Failed to delete {item_path}: {e}")
     LOG.debug(f"Cleaning up finished")
+
+
+def get_chunk_size(size_x: int, size_y: int) -> dict[str, int]:
+    return {
+        "x": ceil(size_x / ceil(size_x / _PREFERRED_CHUNK_SIZE)),
+        "y": ceil(size_y / ceil(size_y / _PREFERRED_CHUNK_SIZE)),
+    }
