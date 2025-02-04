@@ -2,9 +2,9 @@
 
 ### Enhancements
 
-* Improved performance in the `preprocessing` step of the `Preload` API by
-  deriving the chunk size instead of using the original chunk size of the file,
-  thus reducing processing time.
+* Improved performance in the `preprocessing` step of the `preload` API by
+  adjusting the chunk size to be a divisor of the dataset size, rather than using
+  the original chunk size of the GeoTIFF file.
 
 ## Changes in 0.2.0
 
