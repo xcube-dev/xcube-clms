@@ -1,3 +1,11 @@
+## Changes in 0.2.1
+
+### Enhancements
+
+* Improved performance in the `preprocessing` step of the `preload` API by
+  adjusting the chunk size to be a divisor of the dataset size, rather than using
+  the original chunk size of the GeoTIFF file.
+
 ## Changes in 0.2.0
 
 ### Enhancements
@@ -7,10 +15,6 @@
 * Preload progress is now displayed in a user-friendly table format. This
   display can be disabled.
 * All preloaded data is now stored in the `.zarr` format.
-
-### Fixes
-
-### Other changes
 
 ## Changes in 0.1.0 (not released)
 
