@@ -21,10 +21,12 @@
 
 import re
 from collections import defaultdict
+from math import ceil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Final
 
 import fsspec
+import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
@@ -33,6 +35,7 @@ from xcube_clms.constants import DATA_ID_SEPARATOR
 from xcube_clms.constants import LOG
 
 _ZARR_FORMAT = ".zarr"
+_PREFERRED_CHUNK_SIZE: Final = 2000
 
 
 class FileProcessor:
@@ -141,11 +144,12 @@ class FileProcessor:
         # Step 3: Merge files along the Y-axis (Northings) for each Easting
         # group. xarray takes care of the missing tiles and fills it with NaN
         # values
-        chunk_size = {"x": 2000, "y": 2000}
         merged_eastings = {}
         for easting, file_list in sorted_east_groups.items():
             datasets = []
             for file in file_list:
+                with rasterio.open(file) as src:
+                    chunk_size = get_chunk_size(size_y=src.height, size_x=src.width)
                 da = rioxarray.open_rasterio(
                     file, masked=True, chunks=chunk_size, band_as_variable=True
                 )
@@ -219,3 +223,10 @@ def cleanup_dir(folder_path: Path | str, fs=None, keep_extension=None):
         except Exception as e:
             LOG.error(f"Failed to delete {item_path}: {e}")
     LOG.debug(f"Cleaning up finished")
+
+
+def get_chunk_size(size_x: int, size_y: int) -> dict[str, int]:
+    return {
+        "x": ceil(size_x / ceil(size_x / _PREFERRED_CHUNK_SIZE)),
+        "y": ceil(size_y / ceil(size_y / _PREFERRED_CHUNK_SIZE)),
+    }

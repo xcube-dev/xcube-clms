@@ -30,7 +30,7 @@ import xarray as xr
 from xcube.core.store import new_data_store
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
-from xcube_clms.processor import FileProcessor
+from xcube_clms.processor import FileProcessor, get_chunk_size
 from xcube_clms.processor import cleanup_dir
 from xcube_clms.processor import find_easting_northing
 
@@ -139,12 +139,11 @@ class FileProcessorTest(unittest.TestCase):
         mock_merge_and_save.assert_called()
         mock_cleanup_dir.assert_called()
 
+    @patch("xcube_clms.processor.rasterio.open")
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     @patch("xcube_clms.processor.xr.concat")
     def test_postprocess_merge_and_save(
-        self,
-        mock_xr_concat,
-        mock_rioxarray_open_rasterio,
+        self, mock_xr_concat, mock_rioxarray_open_rasterio, mock_rasterio_open
     ):
         dsa = xr.Dataset()
         a = xr.DataArray(
@@ -174,6 +173,8 @@ class FileProcessorTest(unittest.TestCase):
         x_concat = xr.concat([dsc, y_concat], dim="x")
 
         mock_rioxarray_open_rasterio.side_effect = [dsa, dsb, dsc]
+        mock_rasterio_open.return_value.__enter__.return_value.height = 10000
+        mock_rasterio_open.return_value.__enter__.return_value.width = 10000
 
         data_id = "product_1|file_id_1"
         en_map = defaultdict(list)
@@ -216,8 +217,11 @@ class FileProcessorTest(unittest.TestCase):
         mock_rioxarray_open_rasterio.assert_not_called()
         self.mock_file_store.write_data.assert_not_called()
 
+    @patch("xcube_clms.processor.rasterio.open")
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
-    def test_merge_and_save_single_file(self, mock_rioxarray_open_rasterio):
+    def test_merge_and_save_single_file(
+        self, mock_rioxarray_open_rasterio, mock_rasterio_open
+    ):
         ds = xr.Dataset()
         single_array = xr.DataArray(
             [[1, 2, 3], [4, 5, 6]],
@@ -230,6 +234,9 @@ class FileProcessorTest(unittest.TestCase):
         data_id = "product|dataset"
         en_map = defaultdict(list)
         en_map["E34N78"].append(f"{data_id}/file_1_E34N78.tif")
+
+        mock_rasterio_open.return_value.__enter__.return_value.height = 10000
+        mock_rasterio_open.return_value.__enter__.return_value.width = 10000
 
         processor = FileProcessor(self.mock_file_store, cleanup=True)
         processor._merge_and_save(en_map, data_id)
@@ -348,3 +355,16 @@ class FileProcessorTest(unittest.TestCase):
     def test_find_easting_northing_invalid(self):
         name = "random_text_without_coordinates"
         self.assertEqual(None, find_easting_northing(name))
+
+    def test_get_chunk_size(self):
+        test_cases = [
+            (2000, 2000, {"x": 2000, "y": 2000}),
+            (200, 200, {"x": 200, "y": 200}),
+            (250, 150, {"x": 250, "y": 150}),
+            (99, 99, {"x": 99, "y": 99}),
+            (10000, 10000, {"x": 2000, "y": 2000}),
+            (5000, 5000, {"x": 1667, "y": 1667}),
+        ]
+
+        for size_x, size_y, expected in test_cases:
+            self.assertEqual(expected, get_chunk_size(size_x, size_y))
