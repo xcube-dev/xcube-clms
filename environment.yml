@@ -1,4 +1,4 @@
-name: test-xcube-clms
+name: xcube-clms
 channels:
   - conda-forge
 dependencies:
