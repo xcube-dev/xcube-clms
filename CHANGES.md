@@ -1,3 +1,10 @@
+## Changes in 0.2.2
+
+### Other Changes
+
+* Dependency update: Upgraded `xcube` to version `>=1.8.1` to ensure
+  compatibility
+
 ## Changes in 0.2.1
 
 ### Enhancements
