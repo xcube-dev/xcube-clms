@@ -2,7 +2,7 @@
 
 ### Other Changes
 
-* Dependency update: Upgraded `xcube` to version `>1.8.2` to ensure
+* Dependency update: Upgraded `xcube` to version `>1.8.1` to ensure
   compatibility
 
 ## Changes in 0.2.1
