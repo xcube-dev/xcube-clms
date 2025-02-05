@@ -1,4 +1,4 @@
-name: xcube-clms
+name: test-xcube-clms
 channels:
   - conda-forge
 dependencies:
@@ -9,7 +9,7 @@ dependencies:
   - ipywidgets
   - requests
   - fsspec
-  - xcube
+  - xcube>=1.8.2
   # Testing
   - numpy
   - black
