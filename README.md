@@ -31,6 +31,16 @@ This sets up a new conda environment, installs all the dependencies required
 for `xcube-clms`, and then installs `xcube-clms` directly from the repository
 into the environment.
 
+### Installing the xcube-clms plugin from the conda-forge
+
+This method assumes that you have an existing environment, and you want to install `xcube-clms` into it.
+With the existing environment activated, execute this command:
+```bash
+mamba install --channel conda-forge xcube-clms
+```
+
+If xcube and any other necessary dependencies are not already instelled, they will be installed automatically.
+
 ### Create credentials to access the CLMS API
 
 Create the credentials as a `json` file required for the CLMS API following
