@@ -1,6 +1,7 @@
 # xcube-clms
 
 [![Unittest xcube-clms](https://github.com/xcube-dev/xcube-clms/actions/workflows/unittest.yml/badge.svg)](https://github.com/xcube-dev/xcube-clms/actions/workflows/unittest.yml)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/xcube-clms/badges/version.svg)](https://anaconda.org/conda-forge/xcube-clms)
 [![Codecov xcube-clms](https://codecov.io/gh/xcube-dev/xcube-clms/graph/badge.svg?token=n6X9zQIkXb)](https://codecov.io/gh/xcube-dev/xcube-clms)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![License](https://img.shields.io/github/license/dcs4cop/xcube-smos)](https://github.com/xcube-dev/xcube-clms/blob/main/LICENSE)
