@@ -370,9 +370,7 @@ class DownloadTaskManager:
                         inner_zip_fs,
                     )
                     if geo_files:
-                        target_folder = self.cache_store.fs.sep.join(
-                            [self.cache_store.root, data_id]
-                        )
+                        target_folder = self.cache_store.root
                         self.cache_store.fs.makedirs(
                             target_folder,
                             exist_ok=True,

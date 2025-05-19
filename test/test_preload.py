@@ -91,7 +91,7 @@ class TestClmsPreloadHandle(unittest.TestCase):
 
         self.assertEqual(handle.data_id_maps, self.data_id_maps)
         self.assertEqual(handle._url, self.url)
-        self.assertEqual(handle.cache_store, self.mock_fs_data_store)
+        self.assertEqual(handle._cache_store, self.mock_fs_data_store)
         self.assertTrue(handle.cleanup)
 
         self.mock_api_token_handler.assert_called_once_with(

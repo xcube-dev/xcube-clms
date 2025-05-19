@@ -25,7 +25,7 @@ from unittest.mock import patch, MagicMock
 import numpy as np
 import pytest
 import xarray as xr
-from xcube.core.store import DatasetDescriptor
+from xcube.core.store import DatasetDescriptor, PreloadedDataStore
 from xcube.core.store import new_data_store
 from xcube.util.jsonschema import JsonObjectSchema
 
@@ -250,7 +250,6 @@ class ClmsDataStoreTest(unittest.TestCase):
         mock_access_item.side_effect = [{"id": "data_id"}, {"id": "product_id"}]
 
         handle = self.store.preload_data(self.data_id)
-        self.assertIsInstance(handle, ClmsPreloadHandle)
         self.assertEqual(
             {
                 "forest-type-2018|FTY_2018_010m_al_03035_v010": {

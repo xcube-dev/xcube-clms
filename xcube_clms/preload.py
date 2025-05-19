@@ -24,7 +24,7 @@ import time
 from typing import Any
 
 import fsspec
-from xcube.core.store import MutableDataStore
+from xcube.core.store import MutableDataStore, PreloadedDataStore
 from xcube.core.store.preload import ExecutorPreloadHandle
 from xcube.core.store.preload import PreloadState
 from xcube.core.store.preload import PreloadStatus
@@ -51,26 +51,26 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         data_id_maps: dict[str, dict[str, dict[str, Any]]],
         url: str,
         credentials: dict,
-        cache_store: MutableDataStore,
+        cache_store: PreloadedDataStore,
         **preload_params,
     ) -> None:
         self.data_id_maps = data_id_maps
         self._url: str = url
-        self.cache_store = cache_store
-        self.cache_root = cache_store.root
+        self._cache_store = cache_store
+        self._cache_root = cache_store.root
         self._cache_fs: fsspec.AbstractFileSystem = cache_store.fs
 
         self._token_handler = ClmsApiTokenHandler(credentials=credentials)
         self.cleanup = preload_params.pop("cleanup", True)
         self._file_processor = FileProcessor(
-            cache_store=self.cache_store,
+            cache_store=self._cache_store,
             cleanup=self.cleanup,
             tile_size=preload_params.pop("tile_size", None),
         )
         self._download_manager = DownloadTaskManager(
             token_handler=self._token_handler,
             url=self._url,
-            cache_store=self.cache_store,
+            cache_store=self._cache_store,
         )
 
         super().__init__(
@@ -87,14 +87,14 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         status_event = threading.Event()
         data_id_info = self.data_id_maps.get(data_id)
         if data_id in (
-            element.split("/")[0] for element in self.cache_store.list_data_ids()
+            element.split("/")[0] for element in self._cache_store.list_data_ids()
         ):
             self.notify(
                 PreloadState(
                     data_id,
                     status=PreloadStatus.stopped,
                     progress=1.0,
-                    message=f"The data for {data_id} is already cached at {self.cache_root}",
+                    message=f"The data for {data_id} is already cached at {self._cache_root}",
                 )
             )
             return
@@ -165,6 +165,6 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                 PreloadState(data_id=data_id, message="Cleaning up in Progress...")
             )
         if self.cleanup:
-            cleanup_dir(self.cache_root)
+            cleanup_dir(self._cache_root)
         for data_id in self.data_id_maps.keys():
             self.notify(PreloadState(data_id=data_id, message="Cleaning up Finished."))

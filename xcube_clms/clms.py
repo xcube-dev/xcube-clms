@@ -22,7 +22,7 @@
 from typing import Any, Container, Union, Iterator
 
 import xarray as xr
-from xcube.core.store import DataTypeLike
+from xcube.core.store import DataTypeLike, PreloadedDataStore
 from xcube.core.store import MutableDataStore
 from xcube.core.store import new_data_store
 from xcube.core.store.preload import PreloadHandle
@@ -65,7 +65,7 @@ class Clms:
         if cache_store_params is None or cache_store_params.get("root") is None:
             cache_store_params = dict(root=DEFAULT_PRELOAD_CACHE_FOLDER)
         cache_store_params["max_depth"] = cache_store_params.pop("max_depth", 2)
-        self.cache_store: MutableDataStore = new_data_store(
+        self.cache_store: PreloadedDataStore = new_data_store(
             cache_store_id, **cache_store_params
         )
         self.cache_store_id = cache_store_id
@@ -173,7 +173,7 @@ class Clms:
 
         return dict(time_range=time_range, crs=crs[0] if crs else None)
 
-    def preload_data(self, *data_ids: str, **preload_params) -> PreloadHandle:
+    def preload_data(self, *data_ids: str, **preload_params) -> PreloadedDataStore:
         """Preloads the data into a cache for specified data IDs with optional
         parameters for faster access when using the `open_data` method.
 
@@ -190,13 +190,14 @@ class Clms:
             }
             for data_id in data_ids
         }
-        return ClmsPreloadHandle(
+        self.cache_store.preload_handle = ClmsPreloadHandle(
             data_id_maps=data_id_maps,
             url=CLMS_API_URL,
             credentials=self.credentials,
             cache_store=self.cache_store,
             **preload_params,
         )
+        return self.cache_store
 
     @staticmethod
     def _fetch_all_datasets() -> list[dict[str, Any]]:
