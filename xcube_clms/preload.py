@@ -72,6 +72,11 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             url=self._url,
             cache_store=self._cache_store,
         )
+        # TODO: Make downloads a constant
+        if self._cache_fs.isdir(
+            self._cache_fs.sep.join([self._cache_root, "downloads"])
+        ):
+            cleanup_dir(self._cache_fs.sep.join([self._cache_root, "downloads"]))
 
         super().__init__(
             data_ids=tuple(self.data_id_maps.keys()),
@@ -87,14 +92,20 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         status_event = threading.Event()
         data_id_info = self.data_id_maps.get(data_id)
         if data_id in (
-            element.split("/")[0] for element in self._cache_store.list_data_ids()
+            element.split(".")[0] for element in self._cache_store.list_data_ids()
         ):
             self.notify(
                 PreloadState(
                     data_id,
                     status=PreloadStatus.stopped,
                     progress=1.0,
-                    message=f"The data for {data_id} is already cached at {self._cache_root}",
+                    message=f"The data for {data_id} is already cached at "
+                    f"{self._cache_fs.sep.join(
+                                [   
+                                    self._cache_root.split("/")[-1], 
+                                    "downloads",
+                                    data_id+".zarr"
+                                ])}",
                 )
             )
             return

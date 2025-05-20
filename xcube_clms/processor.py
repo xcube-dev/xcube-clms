@@ -35,7 +35,7 @@ from xcube_clms.constants import DATA_ID_SEPARATOR
 from xcube_clms.constants import LOG
 
 _ZARR_FORMAT = ".zarr"
-_PREFERRED_CHUNK_SIZE: Final = 2000
+_PREFERRED_CHUNK_SIZE: Final = 1000
 
 
 class FileProcessor:
@@ -45,13 +45,21 @@ class FileProcessor:
         self,
         cache_store,
         cleanup: bool = True,
-        tile_size: dict[str, int] = None,
+        tile_size: int | tuple[int, int] = None,
     ) -> None:
         self.cache_store = cache_store
         self.fs = cache_store.fs
         self.cleanup = cleanup
-        self.tile_size = tile_size or {"x": 1024, "y": 1024}
+
+        if tile_size is None:
+            self.tile_size = (_PREFERRED_CHUNK_SIZE, _PREFERRED_CHUNK_SIZE)
+        elif isinstance(tile_size, int):
+            self.tile_size = (tile_size, tile_size)
+        else:
+            self.tile_size = tile_size
+
         self.download_folder = self.fs.sep.join([self.cache_store.root, "downloads"])
+        self.target_folder = None
 
     def preprocess(self, data_id: str) -> None:
         """Performs preprocessing on the files for a given data ID.
@@ -73,11 +81,20 @@ class FileProcessor:
         files = [entry.split("/")[-1] for entry in self.fs.ls(self.target_folder)]
         if len(files) == 1:
             LOG.debug("Converting the file to zarr format.")
-            cache_data_id = self.fs.sep.join([data_id, files[0]])
+            cache_data_id = self.fs.sep.join(["downloads", data_id, files[0]])
+            print("Converting the file to zarr format.", cache_data_id)
+            print("Files.", files)
             data = self.cache_store.open_data(cache_data_id)
-            new_cache_data_id = cache_data_id.split(".")[0] + _ZARR_FORMAT
+            new_cache_data_id = data_id + _ZARR_FORMAT
+
+            print("new_cache_data_id", new_cache_data_id)
             data = chunk_dataset(
-                data, chunk_sizes=self.tile_size, format_name=_ZARR_FORMAT
+                data,
+                chunk_sizes={"x": self.tile_size[0], "y": self.tile_size[1]},
+                format_name=_ZARR_FORMAT,
+            )
+            final_cube = data.rename(
+                dict(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}")
             )
             self.cache_store.write_data(data, new_cache_data_id)
         elif len(files) == 0:
@@ -147,7 +164,9 @@ class FileProcessor:
             datasets = []
             for file in file_list:
                 with rasterio.open(file) as src:
-                    chunk_size = get_chunk_size(size_y=src.height, size_x=src.width)
+                    chunk_size = self._get_chunk_size(
+                        size_y=src.height, size_x=src.width
+                    )
                 da = rioxarray.open_rasterio(
                     file, masked=True, chunks=chunk_size, band_as_variable=True
                 )
@@ -165,9 +184,17 @@ class FileProcessor:
         )
         new_filename = self.fs.sep.join([data_id + _ZARR_FORMAT])
         final_chunked_cube = chunk_dataset(
-            final_cube, chunk_sizes=self.tile_size, format_name=_ZARR_FORMAT
+            final_cube,
+            chunk_sizes={"x": self.tile_size[0], "y": self.tile_size[1]},
+            format_name=_ZARR_FORMAT,
         )
         self.cache_store.write_data(final_chunked_cube, new_filename)
+
+    def _get_chunk_size(self, size_x: int, size_y: int) -> dict[str, int]:
+        return {
+            "x": ceil(size_x / ceil(size_x / self.tile_size[0])),
+            "y": ceil(size_y / ceil(size_y / self.tile_size[1])),
+        }
 
 
 def find_easting_northing(name: str) -> Optional[str]:
@@ -224,10 +251,3 @@ def cleanup_dir(folder_path: Path | str, fs=None, keep_extension=None):
         except Exception as e:
             LOG.error(f"Failed to delete {item_path}: {e}")
     LOG.debug(f"Cleaning up finished")
-
-
-def get_chunk_size(size_x: int, size_y: int) -> dict[str, int]:
-    return {
-        "x": ceil(size_x / ceil(size_x / _PREFERRED_CHUNK_SIZE)),
-        "y": ceil(size_y / ceil(size_y / _PREFERRED_CHUNK_SIZE)),
-    }
