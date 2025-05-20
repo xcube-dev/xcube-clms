@@ -51,6 +51,7 @@ class FileProcessor:
         self.fs = cache_store.fs
         self.cleanup = cleanup
         self.tile_size = tile_size or {"x": 1024, "y": 1024}
+        self.download_folder = self.fs.sep.join([self.cache_store.root, "downloads"])
 
     def preprocess(self, data_id: str) -> None:
         """Performs preprocessing on the files for a given data ID.
@@ -67,8 +68,9 @@ class FileProcessor:
         Args:
             data_id: The identifier for the dataset being pre-processed.
         """
-        target_folder = self.fs.sep.join([self.cache_store.root, data_id])
-        files = [entry.split("/")[-1] for entry in self.fs.ls(target_folder)]
+
+        self.target_folder = self.fs.sep.join([self.download_folder, data_id])
+        files = [entry.split("/")[-1] for entry in self.fs.ls(self.target_folder)]
         if len(files) == 1:
             LOG.debug("Converting the file to zarr format.")
             cache_data_id = self.fs.sep.join([data_id, files[0]])
@@ -81,7 +83,7 @@ class FileProcessor:
         elif len(files) == 0:
             LOG.warn("No files to preprocess!")
         else:
-            en_map = self._prepare_merge(files, data_id)
+            en_map = self._prepare_merge(files)
             if not en_map:
                 LOG.error(
                     "This naming format is not supported. Currently "
@@ -92,29 +94,25 @@ class FileProcessor:
             self._merge_and_save(en_map, data_id)
         if self.cleanup:
             cleanup_dir(
-                folder_path=target_folder,
+                folder_path=self.download_folder,
                 keep_extension=".zarr",
             )
 
-    def _prepare_merge(
-        self, files: list[str], data_id: str
-    ) -> defaultdict[str, list[str]]:
+    def _prepare_merge(self, files: list[str]) -> defaultdict[str, list[str]]:
         """Prepares files for merging by grouping them based on their Easting
         and Northing coordinates.
 
         Args:
             files: The list of files to be processed.
-            data_id: The identifier for the dataset being processed.
 
         Returns:
             A dictionary mapping coordinates to lists of file paths.
         """
         en_map = defaultdict(list)
-        data_id_folder = self.fs.sep.join([self.cache_store.root, data_id])
         for file in files:
             en = find_easting_northing(file)
             if en:
-                en_map[en].append(self.fs.sep.join([data_id_folder, file]))
+                en_map[en].append(self.fs.sep.join([self.target_folder, file]))
         return en_map
 
     def _merge_and_save(
@@ -165,8 +163,11 @@ class FileProcessor:
         final_cube = concat_cube.rename(
             dict(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}")
         )
-        new_filename = self.fs.sep.join([data_id, data_id + _ZARR_FORMAT])
-        self.cache_store.write_data(final_cube, new_filename)
+        new_filename = self.fs.sep.join([data_id + _ZARR_FORMAT])
+        final_chunked_cube = chunk_dataset(
+            final_cube, chunk_sizes=self.tile_size, format_name=_ZARR_FORMAT
+        )
+        self.cache_store.write_data(final_chunked_cube, new_filename)
 
 
 def find_easting_northing(name: str) -> Optional[str]:

@@ -65,9 +65,7 @@ class Clms:
         if cache_store_params is None or cache_store_params.get("root") is None:
             cache_store_params = dict(root=DEFAULT_PRELOAD_CACHE_FOLDER)
         cache_store_params["max_depth"] = cache_store_params.pop("max_depth", 2)
-        self.cache_store: PreloadedDataStore = new_data_store(
-            cache_store_id, **cache_store_params
-        )
+        self.cache_store = new_data_store(cache_store_id, **cache_store_params)
         self.cache_store_id = cache_store_id
         self.fs = self.cache_store.fs
         self._cache_root = self.cache_store.root

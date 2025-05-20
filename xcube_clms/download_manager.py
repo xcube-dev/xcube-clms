@@ -81,6 +81,7 @@ class DownloadTaskManager:
         self._api_token = self._token_handler.api_token
         self._url = url
         self.cache_store = cache_store
+        self.download_folder = "downloads"
 
     def request_download(self, data_id: str, item: dict, product: dict) -> str:
         """Submits a download request for a specific dataset.
@@ -370,7 +371,9 @@ class DownloadTaskManager:
                         inner_zip_fs,
                     )
                     if geo_files:
-                        target_folder = self.cache_store.root
+                        target_folder = self.cache_store.fs.sep.join(
+                            [self.cache_store.root, self.download_folder, data_id]
+                        )
                         self.cache_store.fs.makedirs(
                             target_folder,
                             exist_ok=True,
