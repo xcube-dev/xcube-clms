@@ -24,10 +24,10 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import fsspec
-from xcube.core.store import MutableDataStore
+from xcube.core.store import PreloadedDataStore
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import ACCEPT_HEADER
+from xcube_clms.constants import ACCEPT_HEADER, DOWNLOAD_FOLDER
 from xcube_clms.constants import CANCELLED
 from xcube_clms.constants import COMPLETE
 from xcube_clms.constants import CONTENT_TYPE_HEADER
@@ -75,13 +75,12 @@ class DownloadTaskManager:
         self,
         token_handler: ClmsApiTokenHandler,
         url: str,
-        cache_store: MutableDataStore,
+        cache_store: PreloadedDataStore,
     ) -> None:
         self._token_handler = token_handler
         self._api_token = self._token_handler.api_token
         self._url = url
         self.cache_store = cache_store
-        self.download_folder = "downloads"
 
     def request_download(self, data_id: str, item: dict, product: dict) -> str:
         """Submits a download request for a specific dataset.
@@ -208,6 +207,11 @@ class DownloadTaskManager:
                         f"Task ID {task_id} has not yet finished. "
                         "No download url available yet."
                     )
+        # The following returns should never be reached as the current
+        # flow only calls this method with a completed request,
+        # so a match will always exist. They are added here to make
+        # PyCharm happy.
+        return "", -1
 
     def _prepare_download_request(
         self, data_id: str, item: dict, product: dict
@@ -264,6 +268,16 @@ class DownloadTaskManager:
 
         Notes:
         """
+        if dataset_id:
+            assert (
+                file_id is not None
+            ), "File ID is missing when dataset_id is provided."
+            if task_id:
+                LOG.warning(
+                    "task_id provided will be ignored as dataset_id "
+                    "and file_id are provided"
+                )
+
         self._token_handler.refresh_token()
         headers = ACCEPT_HEADER.copy()
         headers.update(get_authorization_header(self._api_token))
@@ -372,7 +386,7 @@ class DownloadTaskManager:
                     )
                     if geo_files:
                         target_folder = self.cache_store.fs.sep.join(
-                            [self.cache_store.root, self.download_folder, data_id]
+                            [self.cache_store.root, DOWNLOAD_FOLDER, data_id]
                         )
                         self.cache_store.fs.makedirs(
                             target_folder,

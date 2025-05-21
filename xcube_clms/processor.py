@@ -31,11 +31,11 @@ import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
 
-from xcube_clms.constants import DATA_ID_SEPARATOR
+from xcube_clms.constants import DATA_ID_SEPARATOR, DOWNLOAD_FOLDER
 from xcube_clms.constants import LOG
 
 _ZARR_FORMAT = ".zarr"
-_PREFERRED_CHUNK_SIZE: Final = 1000
+_PREFERRED_CHUNK_SIZE: Final = 2000
 
 
 class FileProcessor:
@@ -58,7 +58,9 @@ class FileProcessor:
         else:
             self.tile_size = tile_size
 
-        self.download_folder = self.fs.sep.join([self.cache_store.root, "downloads"])
+        self.download_folder = self.fs.sep.join(
+            [self.cache_store.root, DOWNLOAD_FOLDER]
+        )
         self.target_folder = None
 
     def preprocess(self, data_id: str) -> None:
@@ -81,13 +83,9 @@ class FileProcessor:
         files = [entry.split("/")[-1] for entry in self.fs.ls(self.target_folder)]
         if len(files) == 1:
             LOG.debug("Converting the file to zarr format.")
-            cache_data_id = self.fs.sep.join(["downloads", data_id, files[0]])
-            print("Converting the file to zarr format.", cache_data_id)
-            print("Files.", files)
+            cache_data_id = self.fs.sep.join([DOWNLOAD_FOLDER, data_id, files[0]])
             data = self.cache_store.open_data(cache_data_id)
             new_cache_data_id = data_id + _ZARR_FORMAT
-
-            print("new_cache_data_id", new_cache_data_id)
             data = chunk_dataset(
                 data,
                 chunk_sizes={"x": self.tile_size[0], "y": self.tile_size[1]},
@@ -96,7 +94,12 @@ class FileProcessor:
             final_cube = data.rename(
                 dict(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}")
             )
-            self.cache_store.write_data(data, new_cache_data_id)
+            final_cube_path = self.fs.sep.join(
+                [self.cache_store.root, new_cache_data_id]
+            )
+            if self.fs.isdir(final_cube_path):
+                self.fs.rm(final_cube_path, recursive=True)
+            self.cache_store.write_data(final_cube, new_cache_data_id)
         elif len(files) == 0:
             LOG.warn("No files to preprocess!")
         else:
@@ -188,6 +191,9 @@ class FileProcessor:
             chunk_sizes={"x": self.tile_size[0], "y": self.tile_size[1]},
             format_name=_ZARR_FORMAT,
         )
+        final_cube_path = self.fs.sep.join([self.cache_store.root, new_filename])
+        if self.fs.isdir(final_cube_path):
+            self.fs.rm(final_cube_path, recursive=True)
         self.cache_store.write_data(final_chunked_cube, new_filename)
 
     def _get_chunk_size(self, size_x: int, size_y: int) -> dict[str, int]:

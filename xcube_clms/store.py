@@ -178,13 +178,15 @@ class ClmsDataStore(DataStore):
                 default=False,
             ),
             cleanup=JsonBooleanSchema(
-                title="Option to cleanup the directory in case there were "
-                "multiple files downloaded for the same data_id. "
+                title="Option to cleanup the download directory before and "
+                "after the preload job and to cleanup the cache "
+                "directory when preload_handle.close() is called. "
                 "Defaults to True.",
+                default=True,
             ),
             tile_size=JsonObjectSchema(
                 title="Tile size of the final data cube to be saved.",
-                default={"x": 1024, "y": 1024},
+                default=2000,
             ),
         )
         return JsonObjectSchema(

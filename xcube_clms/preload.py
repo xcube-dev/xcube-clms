@@ -24,13 +24,13 @@ import time
 from typing import Any
 
 import fsspec
-from xcube.core.store import MutableDataStore, PreloadedDataStore
+from xcube.core.store import PreloadedDataStore
 from xcube.core.store.preload import ExecutorPreloadHandle
 from xcube.core.store.preload import PreloadState
 from xcube.core.store.preload import PreloadStatus
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import CANCELLED
+from xcube_clms.constants import CANCELLED, DOWNLOAD_FOLDER
 from xcube_clms.constants import COMPLETE
 from xcube_clms.constants import RETRY_TIMEOUT
 from xcube_clms.download_manager import DownloadTaskManager
@@ -72,11 +72,13 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             url=self._url,
             cache_store=self._cache_store,
         )
-        # TODO: Make downloads a constant
-        if self._cache_fs.isdir(
-            self._cache_fs.sep.join([self._cache_root, "downloads"])
-        ):
-            cleanup_dir(self._cache_fs.sep.join([self._cache_root, "downloads"]))
+
+        self._download_folder = self._cache_fs.sep.join(
+            [self._cache_root, DOWNLOAD_FOLDER]
+        )
+
+        if self._cache_fs.isdir(self._download_folder) and self.cleanup:
+            cleanup_dir(self._download_folder)
 
         super().__init__(
             data_ids=tuple(self.data_id_maps.keys()),
@@ -91,24 +93,6 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         """Processes a single preload task on a separate thread."""
         status_event = threading.Event()
         data_id_info = self.data_id_maps.get(data_id)
-        if data_id in (
-            element.split(".")[0] for element in self._cache_store.list_data_ids()
-        ):
-            self.notify(
-                PreloadState(
-                    data_id,
-                    status=PreloadStatus.stopped,
-                    progress=1.0,
-                    message=f"The data for {data_id} is already cached at "
-                    f"{self._cache_fs.sep.join(
-                                [   
-                                    self._cache_root.split("/")[-1], 
-                                    "downloads",
-                                    data_id+".zarr"
-                                ])}",
-                )
-            )
-            return
 
         task_id = self._download_manager.request_download(
             data_id=data_id,
@@ -135,7 +119,8 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                     PreloadState(
                         data_id=data_id,
                         progress=0.4,
-                        message=f"Task ID {task_id}: Download link created. Downloading now...",
+                        message=f"Task ID {task_id}: Download link created. "
+                        f"Downloading and extracting now...",
                     )
                 )
                 download_url, _ = self._download_manager.get_download_url(task_id)
@@ -144,7 +129,8 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                     PreloadState(
                         data_id=data_id,
                         progress=0.8,
-                        message=f"Task ID {task_id}: Zip file downloaded. Extracting now...",
+                        message=f"Task ID {task_id}: Extraction complete. "
+                        f"Processing now...",
                     )
                 )
                 self._file_processor.preprocess(data_id)
@@ -171,11 +157,23 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             time.sleep(RETRY_TIMEOUT)
 
     def close(self) -> None:
-        for data_id in self.data_id_maps.keys():
-            self.notify(
-                PreloadState(data_id=data_id, message="Cleaning up in Progress...")
-            )
         if self.cleanup:
-            cleanup_dir(self._cache_root)
-        for data_id in self.data_id_maps.keys():
-            self.notify(PreloadState(data_id=data_id, message="Cleaning up Finished."))
+            for data_id in self.data_id_maps.keys():
+                self.notify(
+                    PreloadState(data_id=data_id, message="Cleaning up in Progress...")
+                )
+            cleanup_dir(self._download_folder)
+            for data_id in self.data_id_maps.keys():
+                self.notify(
+                    PreloadState(data_id=data_id, message="Cleaning up Finished.")
+                )
+        else:
+            for data_id in self.data_id_maps.keys():
+                self.notify(
+                    PreloadState(
+                        data_id=data_id,
+                        message="Cleanup was not performed as cleanup was set "
+                        "to False when preload_data() was called. "
+                        "Please delete the files manually if required.",
+                    )
+                )
