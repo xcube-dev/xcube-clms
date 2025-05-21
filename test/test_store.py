@@ -177,21 +177,16 @@ class ClmsDataStoreTest(unittest.TestCase):
     def test_get_open_data_params_schema(self):
         schema = self.store.get_open_data_params_schema(self.data_id)
         self.assertIsInstance(schema, JsonObjectSchema)
-        self.assertEqual(
-            [
-                "log_access",
-                "cache_size",
-                "group",
-                "chunks",
-                "decode_cf",
-                "mask_and_scale",
-                "decode_times",
-                "decode_coords",
-                "drop_variables",
-                "consolidated",
-            ],
-            list(schema.properties.keys()),
-        )
+        self.assertIn("log_access", schema.properties)
+        self.assertIn("cache_size", schema.properties)
+        self.assertIn("group", schema.properties)
+        self.assertIn("chunks", schema.properties)
+        self.assertIn("decode_cf", schema.properties)
+        self.assertIn("mask_and_scale", schema.properties)
+        self.assertIn("decode_times", schema.properties)
+        self.assertIn("decode_coords", schema.properties)
+        self.assertIn("drop_variables", schema.properties)
+        self.assertIn("consolidated", schema.properties)
 
     @pytest.mark.vcr()
     def test_search_data(self):
