@@ -108,7 +108,7 @@ class FileProcessorTest(unittest.TestCase):
             f"{self.test_path}/" + file for file in mock_files
         ]
 
-        processor = FileProcessor(self.mock_file_store, cleanup=True)
+        processor = FileProcessor(self.mock_file_store, cleanup=True, tile_size=2000)
         processor.preprocess("invalid_data_id")
 
         mock_log.error.assert_called()
@@ -209,7 +209,9 @@ class FileProcessorTest(unittest.TestCase):
         self.data_id = "product_empty"
         en_map = defaultdict(list)
 
-        processor = FileProcessor(self.mock_file_store, cleanup=True)
+        processor = FileProcessor(
+            self.mock_file_store, cleanup=True, tile_size=(2000, 2000)
+        )
         processor._merge_and_save(en_map, self.data_id)
 
         mock_rioxarray_open_rasterio.assert_not_called()
