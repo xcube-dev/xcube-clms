@@ -121,6 +121,7 @@ class Clms:
             An iterator of data IDs, or tuples of data IDs and attributes.
         """
         for item in self._datasets_info:
+            print("item", item)
             if item[_DATASET_DOWNLOADABLE]:
                 for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
                     if _FILE_KEY in i and i[_FILE_KEY] != "":

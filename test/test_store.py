@@ -249,7 +249,7 @@ class ClmsDataStoreTest(unittest.TestCase):
         mock_token_handler.api_token = "mock_token"
         mock_access_item.side_effect = [{"id": "data_id"}, {"id": "product_id"}]
 
-        handle = self.store.preload_data(self.data_id)
+        cache_data_store = self.store.preload_data(self.data_id)
         self.assertEqual(
             {
                 "forest-type-2018|FTY_2018_010m_al_03035_v010": {
@@ -257,5 +257,5 @@ class ClmsDataStoreTest(unittest.TestCase):
                     "product": {"id": "product_id"},
                 }
             },
-            handle.data_id_maps,
+            cache_data_store.preload_handle.data_id_maps,
         )

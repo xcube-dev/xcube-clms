@@ -61,7 +61,6 @@ class FileProcessor:
         self.download_folder = self.fs.sep.join(
             [self.cache_store.root, DOWNLOAD_FOLDER]
         )
-        self.target_folder = None
 
     def preprocess(self, data_id: str) -> None:
         """Performs preprocessing on the files for a given data ID.
@@ -79,8 +78,8 @@ class FileProcessor:
             data_id: The identifier for the dataset being pre-processed.
         """
 
-        self.target_folder = self.fs.sep.join([self.download_folder, data_id])
-        files = [entry.split("/")[-1] for entry in self.fs.ls(self.target_folder)]
+        target_folder = self.fs.sep.join([self.download_folder, data_id])
+        files = [entry.split("/")[-1] for entry in self.fs.ls(target_folder)]
         if len(files) == 1:
             LOG.debug("Converting the file to zarr format.")
             cache_data_id = self.fs.sep.join([DOWNLOAD_FOLDER, data_id, files[0]])
@@ -103,7 +102,7 @@ class FileProcessor:
         elif len(files) == 0:
             LOG.warn("No files to preprocess!")
         else:
-            en_map = self._prepare_merge(files)
+            en_map = self._prepare_merge(files, data_id)
             if not en_map:
                 LOG.error(
                     "This naming format is not supported. Currently "
@@ -118,21 +117,26 @@ class FileProcessor:
                 keep_extension=".zarr",
             )
 
-    def _prepare_merge(self, files: list[str]) -> defaultdict[str, list[str]]:
+    def _prepare_merge(
+        self, files: list[str], data_id: str
+    ) -> defaultdict[str, list[str]]:
         """Prepares files for merging by grouping them based on their Easting
         and Northing coordinates.
 
         Args:
             files: The list of files to be processed.
+            data_id: The identifier for the dataset being processed.
 
         Returns:
             A dictionary mapping coordinates to lists of file paths.
         """
         en_map = defaultdict(list)
+        data_id_folder = self.fs.sep.join([self.cache_store.root, data_id])
         for file in files:
             en = find_easting_northing(file)
             if en:
-                en_map[en].append(self.fs.sep.join([self.target_folder, file]))
+                print("en", en, data_id_folder)
+                en_map[en].append(self.fs.sep.join([data_id_folder, file]))
         return en_map
 
     def _merge_and_save(

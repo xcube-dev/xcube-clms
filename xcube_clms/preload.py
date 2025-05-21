@@ -27,7 +27,6 @@ import fsspec
 from xcube.core.store import PreloadedDataStore
 from xcube.core.store.preload import ExecutorPreloadHandle
 from xcube.core.store.preload import PreloadState
-from xcube.core.store.preload import PreloadStatus
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import CANCELLED, DOWNLOAD_FOLDER
@@ -157,23 +156,10 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             time.sleep(RETRY_TIMEOUT)
 
     def close(self) -> None:
-        if self.cleanup:
-            for data_id in self.data_id_maps.keys():
-                self.notify(
-                    PreloadState(data_id=data_id, message="Cleaning up in Progress...")
-                )
-            cleanup_dir(self._download_folder)
-            for data_id in self.data_id_maps.keys():
-                self.notify(
-                    PreloadState(data_id=data_id, message="Cleaning up Finished.")
-                )
-        else:
-            for data_id in self.data_id_maps.keys():
-                self.notify(
-                    PreloadState(
-                        data_id=data_id,
-                        message="Cleanup was not performed as cleanup was set "
-                        "to False when preload_data() was called. "
-                        "Please delete the files manually if required.",
-                    )
-                )
+        for data_id in self.data_id_maps.keys():
+            self.notify(
+                PreloadState(data_id=data_id, message="Cleaning up in Progress...")
+            )
+        cleanup_dir(self._download_folder)
+        for data_id in self.data_id_maps.keys():
+            self.notify(PreloadState(data_id=data_id, message="Cleaning up Finished."))

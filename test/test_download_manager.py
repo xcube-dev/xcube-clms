@@ -159,8 +159,8 @@ class TestDownloadTaskManager(unittest.TestCase):
     def test_get_download_url_invalid_response(self):
         response_data = {"invalid_key": "invalid_value"}
         self.mock_get_response_of_type.return_value = response_data
-        url = self.download_manager.get_download_url("task_id1")
-        self.assertEqual(None, url)
+        url, _ = self.download_manager.get_download_url("task_id1")
+        self.assertEqual("", url)
 
     def test_get_current_requests_status_by_task_id(self):
         self.mock_has_expired.return_value = False
