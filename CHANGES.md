@@ -3,14 +3,14 @@
 ### Major Changes
 
 * The `preload_data` method now returns a store containing the preloaded data.
-  After preloading, the returned store may be used to access the data.
+  After preloading, the returned store may be used to access the data. (#21)
 
 ### Other Changes
 
 * `clms_store.list_data_ids()` now only returns data ids that have downloadable
-  assets.
+  assets. (#21)
 * Ensured consistency of data_ids between the CLMS data store and the preloaded
-  data store returned from it.
+  data store returned from it. (#21)
 * Preload jobs now always restart from the beginning to prevent treating
   incomplete or corrupted files as successfully preloaded.
 
