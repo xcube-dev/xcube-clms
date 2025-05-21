@@ -47,7 +47,7 @@ class ClmsDataStoreTest(unittest.TestCase):
             "token_uri": "",
             "user_id": "",
         }
-        self.data_id = "forest-type-2018|FTY_2018_010m_al_03035_v010"
+        self.data_id = "clc-backbone-2021|CLMS_CLCplus_RASTER_2021"
         self.store = new_data_store(
             DATA_STORE_ID,
             credentials=self.mock_credentials,
@@ -132,7 +132,7 @@ class ClmsDataStoreTest(unittest.TestCase):
             "data_id": self.data_id,
             "data_type": "dataset",
             "crs": "EPSG:3035",
-            "time_range": ("2018-03-01", "2018-10-31"),
+            "time_range": ("2020-10-01", "2022-03-31"),
         }
         self.assertIsInstance(descriptor, DatasetDescriptor)
         self.assertDictEqual(descriptor.to_dict(), expected_descriptor)
@@ -229,7 +229,9 @@ class ClmsDataStoreTest(unittest.TestCase):
             credentials=self.mock_credentials,
             cache_store_params={"root": "preload_clms_cache"},
         )
-        dataset = store.open_data(self.data_id)
+        dataset = store.open_data(
+            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010"
+        )
 
         self.assertIsInstance(dataset, xr.Dataset)
         self.assertCountEqual(["temperature", "precipitation"], list(dataset.data_vars))
@@ -239,7 +241,8 @@ class ClmsDataStoreTest(unittest.TestCase):
             "file", root="preload_clms_cache", max_depth=2
         )
         mock_data_store.open_data.assert_called_once_with(
-            data_id="forest-type-2018|FTY_2018_010m_al_03035_v010", opener_id=None
+            data_id="imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010",
+            opener_id=None,
         )
 
     @pytest.mark.vcr()
@@ -249,10 +252,12 @@ class ClmsDataStoreTest(unittest.TestCase):
         mock_token_handler.api_token = "mock_token"
         mock_access_item.side_effect = [{"id": "data_id"}, {"id": "product_id"}]
 
-        cache_data_store = self.store.preload_data(self.data_id)
+        cache_data_store = self.store.preload_data(
+            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010"
+        )
         self.assertEqual(
             {
-                "forest-type-2018|FTY_2018_010m_al_03035_v010": {
+                "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010": {
                     "item": {"id": "data_id"},
                     "product": {"id": "product_id"},
                 }
