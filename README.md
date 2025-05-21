@@ -23,6 +23,8 @@ To install xcube-clms directly from the git repository, clone the repository,
 `cd` into `xcube-clms`, and follow the steps below:
 
 ```bash
+git clone https://github.com/xcube-dev/xcube-clms.git
+cd xcube-clms
 conda env create -f environment.yml
 conda activate xcube-clms
 pip install .
@@ -34,13 +36,18 @@ into the environment.
 
 ### Installing the xcube-clms plugin from the conda-forge
 
-This method assumes that you have an existing environment, and you want to install `xcube-clms` into it.
+This method assumes that you have an existing environment, and you want to
+install `xcube-clms` into it.
 With the existing environment activated, execute this command:
+
 ```bash
+conda env create -f environment.yml
+conda activate xcube-clms
 mamba install --channel conda-forge xcube-clms
 ```
 
-If xcube and any other necessary dependencies are not already instelled, they will be installed automatically.
+If xcube and any other necessary dependencies are not already instelled, they
+will be installed automatically.
 
 ### Create credentials to access the CLMS API
 
@@ -134,7 +141,12 @@ This API has some problems as listed below
   works. So, we have to create a workaround to manage our own expiry times. This
   issue has been raised with the CLMS service desk. Quoting their reply For the
   first issue mentioned by you:
-  `The status is completed and there is indicated that there are 2 days for expiring, but the download link is already expired, we are going to investigate this bug.`
+
+  ```
+  The status is completed and there is indicated that there are 2 days for
+  expiring, but the download link is already expired, we are going to
+  investigate this bug.
+  ```
 - We use the API to figure out if a certain data_id has already been requested
   to the CLMS server and its status so that we can get the download link
   directly or if it has not been requested yet or expired, we request it. But
@@ -142,9 +154,57 @@ This API has some problems as listed below
   old downloads that have expired, the API does return the expired requests
   which were completed and do not contain any information that they are expired
   or when they will expire. Quoting the CLMS helpdesk replies
-  `For the second issue mentioned by you: the @datarequest_search endpoint does not seem to be working as expected, we are going to consult the API experts so to check its functioning and in case an improvement is feasible in our side, we´ll let you know.`
+
+  ```
+  For the second issue mentioned by you: the @datarequest_search endpoint does
+  not seem to be working as expected, we are going to consult the API experts so
+  to check its functioning and in case an improvement is feasible in our side,
+  we´ll let you know.
+  ```
+
   and its follow up after a week
-  `After having analysed the possibility to improve the status of the downloads, our team answers the following: Currently, our download system is not able to extract information on whether the link has expired or not, therefore our API does not provide this information.. Due to this, we had to create workarounds to figure out if a certain dataset's link was expired or not.`
+
+  ```
+  After having analysed the possibility to improve the status of the
+  downloads, our team answers the following: Currently, our download system is
+  not able to extract information on whether the link has expired or not,
+  therefore our API does not provide this information.. Due to this, we had to
+  create workarounds to figure out if a certain dataset's link was expired or
+  not.
+  ```
 - The cancel endpoint for the API does not work and the issue was raised with
   the helpdesk team as well. Quoting their reply
-  `Recently a new firewall of the CLMS Portal machine has been setup. This new firewall is blocking some of the process cancelation request. We've detected the issue and working with the IT team to solve it`.
+
+  ```
+  Recently a new firewall of the CLMS Portal machine has been setup. This new
+  firewall is blocking some of the process cancelation request. We've detected
+  the issue and working with the IT team to solve it
+  ```
+
+- CLMS API will has now started moving datasets to CDSE and WEkEO infrastructure
+  which leads to the previously working datasets via CLMS to give an error. Upon
+  requesting them with more information, this is what they replied:
+
+  ```
+  The future of the CLMS website is to have the Global datasets and the Pan
+  European datasets centralised in as few repositories as possible (which is not
+  the current situation). For this, some of the datasets (and new recently
+  produced datasets) have been moved from EEA´s infrastructure to WEKEO´s
+  infrastructure.
+  
+  Other datasets (Global datasets for the moment) are being moved to CDSE and the
+  CLMS website is being adapted to this new situation.
+  Regarding the datasets for which in the dataset page the explanation is that the
+  dataset is only accessible through the WEKEO external site, the CLMS API can´t
+  be used right now.
+  
+  WEKEO has increased the download limits imposed to the CLMS website to retrieve
+  data from there, so maybe in a near future we´ll be able to offer the datasets
+  from there in a seamless manner, and the direct download of these datasets will
+  be enabled from the CLMS website (but it is not the case right now).
+  
+  For the datasets that are being migrated to CDSE, we are currently analysing the
+  required adaptations on the CLMS website for users to keep downloading the data
+  in a seamless manner. For the moment we don’t directly offer any dataset through
+  CDSE.
+  ```
