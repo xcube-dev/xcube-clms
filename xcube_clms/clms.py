@@ -66,7 +66,9 @@ class Clms:
         if cache_store_params is None or cache_store_params.get("root") is None:
             cache_store_params = dict(root=DEFAULT_PRELOAD_CACHE_FOLDER)
         cache_store_params["max_depth"] = cache_store_params.pop("max_depth", 2)
-        self.cache_store = new_data_store(cache_store_id, **cache_store_params)
+        self.cache_store: PreloadedDataStore = new_data_store(
+            cache_store_id, **cache_store_params
+        )
         self.cache_store_id = cache_store_id
         self.fs = self.cache_store.fs
         self._cache_root = self.cache_store.root
@@ -189,7 +191,10 @@ class Clms:
             }
             for data_id in data_ids
         }
-        self.cache_store.preload_handle = ClmsPreloadHandle(
+        # Suppressing the warning here as there is no setter method provided
+        # for preload_handle as we do not want the users to set this
+        # preload_handle themselves.
+        self.cache_store.preload_handle = ClmsPreloadHandle(  # noqa
             data_id_maps=data_id_maps,
             url=CLMS_API_URL,
             credentials=self.credentials,
