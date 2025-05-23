@@ -11,8 +11,7 @@
   assets. (#21)
 * Ensures consistency of data_ids between the CLMS data store and the preloaded
   data store. (#21)
-* Preload jobs now always restart from the beginning to prevent treating
-  incomplete or corrupted files as successfully preloaded.
+* Preload jobs now always restart from scratch, regardless of whether a dataset was previously preloaded. Any existing preloaded data will be overwritten.
 
 ## Changes in 0.2.2
 
