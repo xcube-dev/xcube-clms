@@ -93,9 +93,6 @@ class FileProcessor:
             final_cube = data.rename(
                 dict(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}")
             )
-            final_cube_path = self.fs.sep.join(
-                [self.cache_store.root, new_cache_data_id]
-            )
             self.cache_store.write_data(final_cube, new_cache_data_id, replace=True)
         elif len(files) == 0:
             LOG.warn("No files to preprocess!")
@@ -192,10 +189,7 @@ class FileProcessor:
             chunk_sizes={"x": self.tile_size[0], "y": self.tile_size[1]},
             format_name=_ZARR_FORMAT,
         )
-        final_cube_path = self.fs.sep.join([self.cache_store.root, new_filename])
-        if self.fs.isdir(final_cube_path):
-            self.fs.rm(final_cube_path, recursive=True)
-        self.cache_store.write_data(final_chunked_cube, new_filename)
+        self.cache_store.write_data(final_chunked_cube, new_filename, replace=True)
 
     def _get_chunk_size(self, size_x: int, size_y: int) -> dict[str, int]:
         return {
