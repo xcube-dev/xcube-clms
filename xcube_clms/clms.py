@@ -190,10 +190,8 @@ class Clms:
             }
             for data_id in data_ids
         }
-        # Suppressing the warning here as there is no setter method provided
-        # for preload_handle as we do not want the users to set this
-        # preload_handle themselves.
-        self.cache_store.preload_handle = ClmsPreloadHandle(  # noqa
+        # noinspection PyPropertyAccess
+        self.cache_store.preload_handle = ClmsPreloadHandle(
             data_id_maps=data_id_maps,
             url=CLMS_API_URL,
             credentials=self.credentials,
