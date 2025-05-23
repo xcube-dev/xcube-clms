@@ -135,7 +135,6 @@ class FileProcessor:
         for file in files:
             en = find_easting_northing(file)
             if en:
-                print("en", en, data_id_folder)
                 en_map[en].append(self.fs.sep.join([data_id_folder, file]))
         return en_map
 

@@ -244,7 +244,6 @@ class TestDownloadTaskManager(unittest.TestCase):
         url, headers, json_payload = self.download_manager._prepare_download_request(
             "data_id", self.item, self.product
         )
-        print(url, headers)
         self.assertEqual("http://mock-api-url/@datarequest_post", url)
         self.assertEqual(
             {

@@ -113,7 +113,6 @@ class TestClmsPreloadHandle(unittest.TestCase):
         time.sleep(2)
         self.mock_notify.assert_called()
         notification = self.mock_notify.call_args[0][0]
-        print("noteificaiton", notification)
         self.assertEqual(notification.data_id, "test_data_id")
         self.assertEqual(notification.progress, 1.0)
         self.assertIn("Preloading Complete.", notification.message)

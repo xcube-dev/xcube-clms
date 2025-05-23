@@ -193,7 +193,6 @@ class FileProcessorTest(unittest.TestCase):
 
         args, _ = self.mock_file_store.write_data.call_args
         final_dataset, output_path = args
-        print("otuput_path", output_path)
         self.assertEqual(
             x_concat.rename(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}").chunk(
                 2000
