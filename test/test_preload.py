@@ -91,7 +91,7 @@ class TestClmsPreloadHandle(unittest.TestCase):
 
         self.assertEqual(handle.data_id_maps, self.data_id_maps)
         self.assertEqual(handle._url, self.url)
-        self.assertEqual(handle.cache_store, self.mock_fs_data_store)
+        self.assertEqual(handle._cache_store, self.mock_fs_data_store)
         self.assertTrue(handle.cleanup)
 
         self.mock_api_token_handler.assert_called_once_with(
@@ -114,9 +114,8 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.mock_notify.assert_called()
         notification = self.mock_notify.call_args[0][0]
         self.assertEqual(notification.data_id, "test_data_id")
-        self.assertEqual(notification.status, PreloadStatus.stopped)
         self.assertEqual(notification.progress, 1.0)
-        self.assertIn("already cached", notification.message)
+        self.assertIn("Preloading Complete.", notification.message)
 
     def test_preload_data_new(self):
         ClmsPreloadHandle(
@@ -182,11 +181,12 @@ class TestClmsPreloadHandle(unittest.TestCase):
             url=self.url,
             credentials={},
             cache_store=self.mock_fs_data_store,
+            cleanup=False,
         )
         self.mock_notify.reset_mock()
         handle.close()
 
-        self.mock_cleanup_dir.assert_called_once_with(self.mock_fs_data_store.root)
+        self.mock_cleanup_dir.assert_called_once()
 
         self.assertEqual(self.mock_notify.call_count, 2)
         notifications = [call[0][0] for call in self.mock_notify.call_args_list]

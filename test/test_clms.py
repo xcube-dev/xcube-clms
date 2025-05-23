@@ -54,12 +54,14 @@ class ClmsTest(unittest.TestCase):
                 "downloadable_files": {
                     "items": [{"file": "file1", "area": "area1", "format": "geotiff"}]
                 },
+                "downloadable_full_dataset": True,
             },
             {
                 "id": "dataset2",
                 "downloadable_files": {
                     "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
                 },
+                "downloadable_full_dataset": True,
             },
         ]
         mock_make_api_request_patcher = patch("xcube_clms.clms.make_api_request")
@@ -285,6 +287,7 @@ class ClmsTest(unittest.TestCase):
                 "downloadable_files": {
                     "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
                 },
+                "downloadable_full_dataset": True,
             }
         ]
         self.assertEqual(expected_item, item)

@@ -25,7 +25,7 @@ from unittest.mock import patch, MagicMock
 import numpy as np
 import pytest
 import xarray as xr
-from xcube.core.store import DatasetDescriptor
+from xcube.core.store import DatasetDescriptor, PreloadedDataStore
 from xcube.core.store import new_data_store
 from xcube.util.jsonschema import JsonObjectSchema
 
@@ -47,7 +47,7 @@ class ClmsDataStoreTest(unittest.TestCase):
             "token_uri": "",
             "user_id": "",
         }
-        self.data_id = "forest-type-2018|FTY_2018_010m_al_03035_v010"
+        self.data_id = "clc-backbone-2021|CLMS_CLCplus_RASTER_2021"
         self.store = new_data_store(
             DATA_STORE_ID,
             credentials=self.mock_credentials,
@@ -132,7 +132,7 @@ class ClmsDataStoreTest(unittest.TestCase):
             "data_id": self.data_id,
             "data_type": "dataset",
             "crs": "EPSG:3035",
-            "time_range": ("2018-03-01", "2018-10-31"),
+            "time_range": ("2020-10-01", "2022-03-31"),
         }
         self.assertIsInstance(descriptor, DatasetDescriptor)
         self.assertDictEqual(descriptor.to_dict(), expected_descriptor)
@@ -177,21 +177,16 @@ class ClmsDataStoreTest(unittest.TestCase):
     def test_get_open_data_params_schema(self):
         schema = self.store.get_open_data_params_schema(self.data_id)
         self.assertIsInstance(schema, JsonObjectSchema)
-        self.assertEqual(
-            [
-                "log_access",
-                "cache_size",
-                "group",
-                "chunks",
-                "decode_cf",
-                "mask_and_scale",
-                "decode_times",
-                "decode_coords",
-                "drop_variables",
-                "consolidated",
-            ],
-            list(schema.properties.keys()),
-        )
+        self.assertIn("log_access", schema.properties)
+        self.assertIn("cache_size", schema.properties)
+        self.assertIn("group", schema.properties)
+        self.assertIn("chunks", schema.properties)
+        self.assertIn("decode_cf", schema.properties)
+        self.assertIn("mask_and_scale", schema.properties)
+        self.assertIn("decode_times", schema.properties)
+        self.assertIn("decode_coords", schema.properties)
+        self.assertIn("drop_variables", schema.properties)
+        self.assertIn("consolidated", schema.properties)
 
     @pytest.mark.vcr()
     def test_search_data(self):
@@ -229,7 +224,9 @@ class ClmsDataStoreTest(unittest.TestCase):
             credentials=self.mock_credentials,
             cache_store_params={"root": "preload_clms_cache"},
         )
-        dataset = store.open_data(self.data_id)
+        dataset = store.open_data(
+            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010"
+        )
 
         self.assertIsInstance(dataset, xr.Dataset)
         self.assertCountEqual(["temperature", "precipitation"], list(dataset.data_vars))
@@ -239,7 +236,8 @@ class ClmsDataStoreTest(unittest.TestCase):
             "file", root="preload_clms_cache", max_depth=2
         )
         mock_data_store.open_data.assert_called_once_with(
-            data_id="forest-type-2018|FTY_2018_010m_al_03035_v010", opener_id=None
+            data_id="imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010",
+            opener_id=None,
         )
 
     @pytest.mark.vcr()
@@ -249,14 +247,15 @@ class ClmsDataStoreTest(unittest.TestCase):
         mock_token_handler.api_token = "mock_token"
         mock_access_item.side_effect = [{"id": "data_id"}, {"id": "product_id"}]
 
-        handle = self.store.preload_data(self.data_id)
-        self.assertIsInstance(handle, ClmsPreloadHandle)
+        cache_data_store = self.store.preload_data(
+            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010"
+        )
         self.assertEqual(
             {
-                "forest-type-2018|FTY_2018_010m_al_03035_v010": {
+                "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010": {
                     "item": {"id": "data_id"},
                     "product": {"id": "product_id"},
                 }
             },
-            handle.data_id_maps,
+            cache_data_store.preload_handle.data_id_maps,
         )

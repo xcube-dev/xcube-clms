@@ -30,6 +30,7 @@ TIME_TO_EXPIRE = 24  # (in hours)
 RETRY_TIMEOUT = 15  # (in seconds)
 
 DEFAULT_PRELOAD_CACHE_FOLDER = "clms_cache/"
+DOWNLOAD_FOLDER = "downloads"
 
 # CLMS API Constants
 SEARCH_ENDPOINT = "@search"

@@ -30,7 +30,7 @@ import xarray as xr
 from xcube.core.store import new_data_store
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
-from xcube_clms.processor import FileProcessor, get_chunk_size
+from xcube_clms.processor import FileProcessor
 from xcube_clms.processor import cleanup_dir
 from xcube_clms.processor import find_easting_northing
 
@@ -108,7 +108,7 @@ class FileProcessorTest(unittest.TestCase):
             f"{self.test_path}/" + file for file in mock_files
         ]
 
-        processor = FileProcessor(self.mock_file_store, cleanup=True)
+        processor = FileProcessor(self.mock_file_store, cleanup=True, tile_size=2000)
         processor.preprocess("invalid_data_id")
 
         mock_log.error.assert_called()
@@ -194,7 +194,9 @@ class FileProcessorTest(unittest.TestCase):
         args, _ = self.mock_file_store.write_data.call_args
         final_dataset, output_path = args
         self.assertEqual(
-            x_concat.rename(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}"),
+            x_concat.rename(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}").chunk(
+                2000
+            ),
             final_dataset,
         )
 
@@ -206,7 +208,9 @@ class FileProcessorTest(unittest.TestCase):
         self.data_id = "product_empty"
         en_map = defaultdict(list)
 
-        processor = FileProcessor(self.mock_file_store, cleanup=True)
+        processor = FileProcessor(
+            self.mock_file_store, cleanup=True, tile_size=(2000, 2000)
+        )
         processor._merge_and_save(en_map, self.data_id)
 
         mock_rioxarray_open_rasterio.assert_not_called()
@@ -258,9 +262,11 @@ class FileProcessorTest(unittest.TestCase):
 
         expected_en_map = defaultdict(list)
         expected_en_map["E12N34"].append(
-            f"{self.test_path}" f"/{data_id}/file_E12N34.tif"
+            f"{self.test_path}/downloads/{data_id}/file_E12N34.tif"
         )
-        expected_en_map["E56N78"].append(f"{self.test_path}/{data_id}/file_E56N78.tif")
+        expected_en_map["E56N78"].append(
+            f"{self.test_path}/downloads/{data_id}/file_E56N78.tif"
+        )
 
         en_map = processor._prepare_merge(files, data_id)
         self.assertEqual(expected_en_map, en_map)
@@ -280,7 +286,9 @@ class FileProcessorTest(unittest.TestCase):
         processor = FileProcessor(self.file_store)
 
         expected_en_map = defaultdict(list)
-        expected_en_map["E12N34"].append(f"{self.test_path}/{data_id}/valid_E12N34.tif")
+        expected_en_map["E12N34"].append(
+            f"{self.test_path}/downloads/{data_id}/valid_E12N34.tif"
+        )
 
         en_map = processor._prepare_merge(files, data_id)
         self.assertEqual(expected_en_map, en_map)
@@ -356,7 +364,8 @@ class FileProcessorTest(unittest.TestCase):
         name = "random_text_without_coordinates"
         self.assertEqual(None, find_easting_northing(name))
 
-    def test_get_chunk_size(self):
+    @patch("xcube_clms.processor.fsspec.filesystem")
+    def test_get_chunk_size(self, mock_fsspec):
         test_cases = [
             (2000, 2000, {"x": 2000, "y": 2000}),
             (200, 200, {"x": 200, "y": 200}),
@@ -366,5 +375,8 @@ class FileProcessorTest(unittest.TestCase):
             (5000, 5000, {"x": 1667, "y": 1667}),
         ]
 
+        mock_fsspec.return_value.ls.return_value = []
+        processor = FileProcessor(self.mock_file_store, cleanup=True)
+
         for size_x, size_y, expected in test_cases:
-            self.assertEqual(expected, get_chunk_size(size_x, size_y))
+            self.assertEqual(expected, processor._get_chunk_size(size_x, size_y))

@@ -29,7 +29,12 @@ from xcube.core.store import DataTypeLike
 from xcube.core.store import DatasetDescriptor
 from xcube.core.store import MutableDataStore
 from xcube.core.store import PreloadHandle
-from xcube.util.jsonschema import JsonBooleanSchema
+from xcube.util.jsonschema import (
+    JsonBooleanSchema,
+    JsonComplexSchema,
+    JsonIntegerSchema,
+    JsonArraySchema,
+)
 from xcube.util.jsonschema import JsonObjectSchema
 from xcube.util.jsonschema import JsonStringSchema
 
@@ -178,13 +183,24 @@ class ClmsDataStore(DataStore):
                 default=False,
             ),
             cleanup=JsonBooleanSchema(
-                title="Option to cleanup the directory in case there were "
-                "multiple files downloaded for the same data_id. "
+                title="Option to cleanup the download directory before and "
+                "after the preload job and to cleanup the cache "
+                "directory when preload_handle.close() is called. "
                 "Defaults to True.",
+                default=True,
             ),
-            tile_size=JsonObjectSchema(
+            tile_size=JsonComplexSchema(
                 title="Tile size of the final data cube to be saved.",
-                default={"x": 1024, "y": 1024},
+                default=2000,
+                one_of=[
+                    JsonIntegerSchema(minimum=1),
+                    JsonArraySchema(
+                        items=[
+                            JsonIntegerSchema(minimum=1),
+                            JsonIntegerSchema(minimum=1),
+                        ]
+                    ),
+                ],
             ),
         )
         return JsonObjectSchema(

@@ -22,7 +22,7 @@
 from typing import Any, Container, Union, Iterator
 
 import xarray as xr
-from xcube.core.store import DataTypeLike
+from xcube.core.store import DataTypeLike, PreloadedDataStore
 from xcube.core.store import MutableDataStore
 from xcube.core.store import new_data_store
 from xcube.core.store.preload import PreloadHandle
@@ -42,6 +42,7 @@ from .utils import make_api_request
 
 _CLMS_DATA_ID_KEY = "id"
 _DOWNLOADABLE_FILES_KEY = "downloadable_files"
+_DATASET_DOWNLOADABLE = "downloadable_full_dataset"
 _FILE_KEY = "file"
 _CRS_KEY = "coordinateReferenceSystemList"
 _START_TIME_KEY = "temporalExtentStart"
@@ -65,7 +66,7 @@ class Clms:
         if cache_store_params is None or cache_store_params.get("root") is None:
             cache_store_params = dict(root=DEFAULT_PRELOAD_CACHE_FOLDER)
         cache_store_params["max_depth"] = cache_store_params.pop("max_depth", 2)
-        self.cache_store: MutableDataStore = new_data_store(
+        self.cache_store: PreloadedDataStore = new_data_store(
             cache_store_id, **cache_store_params
         )
         self.cache_store_id = cache_store_id
@@ -108,7 +109,7 @@ class Clms:
     def get_data_ids(
         self,
         include_attrs: Container[str] | bool = False,
-    ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
+    ) -> Iterator[str | tuple[str, dict[str, Any]]]:
         """Retrieves all data IDs, optionally including additional attributes.
 
         Args:
@@ -122,20 +123,19 @@ class Clms:
             An iterator of data IDs, or tuples of data IDs and attributes.
         """
         for item in self._datasets_info:
-            for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
-                if _FILE_KEY in i and i[_FILE_KEY] != "":
-                    data_id = (
-                        f"{item[_CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
-                    )
-                    if not include_attrs:
-                        yield data_id
-                    elif isinstance(include_attrs, bool) and include_attrs:
-                        yield data_id, i
-                    elif isinstance(include_attrs, list):
-                        filtered_attrs = {
-                            attr: i[attr] for attr in include_attrs if attr in i
-                        }
-                        yield data_id, filtered_attrs
+            if item[_DATASET_DOWNLOADABLE]:
+                for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
+                    if _FILE_KEY in i and i[_FILE_KEY] != "":
+                        data_id = f"{item[_CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
+                        if not include_attrs:
+                            yield data_id
+                        elif isinstance(include_attrs, bool) and include_attrs:
+                            yield data_id, i
+                        elif isinstance(include_attrs, list):
+                            filtered_attrs = {
+                                attr: i[attr] for attr in include_attrs if attr in i
+                            }
+                            yield data_id, filtered_attrs
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
         """Checks if data exists for the given data ID and optional type.
@@ -173,7 +173,7 @@ class Clms:
 
         return dict(time_range=time_range, crs=crs[0] if crs else None)
 
-    def preload_data(self, *data_ids: str, **preload_params) -> PreloadHandle:
+    def preload_data(self, *data_ids: str, **preload_params) -> PreloadedDataStore:
         """Preloads the data into a cache for specified data IDs with optional
         parameters for faster access when using the `open_data` method.
 
@@ -190,13 +190,15 @@ class Clms:
             }
             for data_id in data_ids
         }
-        return ClmsPreloadHandle(
+        # noinspection PyPropertyAccess
+        self.cache_store.preload_handle = ClmsPreloadHandle(
             data_id_maps=data_id_maps,
             url=CLMS_API_URL,
             credentials=self.credentials,
             cache_store=self.cache_store,
             **preload_params,
         )
+        return self.cache_store
 
     @staticmethod
     def _fetch_all_datasets() -> list[dict[str, Any]]:
