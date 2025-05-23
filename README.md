@@ -41,8 +41,6 @@ install `xcube-clms` into it.
 With the existing environment activated, execute this command:
 
 ```bash
-conda env create -f environment.yml
-conda activate xcube-clms
 mamba install --channel conda-forge xcube-clms
 ```
 

@@ -262,9 +262,11 @@ class FileProcessorTest(unittest.TestCase):
 
         expected_en_map = defaultdict(list)
         expected_en_map["E12N34"].append(
-            f"{self.test_path}" f"/{data_id}/file_E12N34.tif"
+            f"{self.test_path}/downloads/{data_id}/file_E12N34.tif"
         )
-        expected_en_map["E56N78"].append(f"{self.test_path}/{data_id}/file_E56N78.tif")
+        expected_en_map["E56N78"].append(
+            f"{self.test_path}/downloads/{data_id}/file_E56N78.tif"
+        )
 
         en_map = processor._prepare_merge(files, data_id)
         self.assertEqual(expected_en_map, en_map)
@@ -284,7 +286,9 @@ class FileProcessorTest(unittest.TestCase):
         processor = FileProcessor(self.file_store)
 
         expected_en_map = defaultdict(list)
-        expected_en_map["E12N34"].append(f"{self.test_path}/{data_id}/valid_E12N34.tif")
+        expected_en_map["E12N34"].append(
+            f"{self.test_path}/downloads/{data_id}/valid_E12N34.tif"
+        )
 
         en_map = processor._prepare_merge(files, data_id)
         self.assertEqual(expected_en_map, en_map)

@@ -193,25 +193,24 @@ class DownloadTaskManager:
         url = build_api_url(self._url, TASK_STATUS_ENDPOINT, datasets_request=False)
         response_data = make_api_request(url=url, headers=headers)
         response = get_response_of_type(response_data, "json")
-
-        for key in response:
-            if key == task_id:
-                status = response[key][_STATUS_KEY]
-                if status in _STATUS_COMPLETE:
-                    return (
-                        response[key][_DOWNLOAD_URL_KEY],
-                        response[key]["FileSize"],
-                    )
-                else:
-                    raise Exception(
-                        f"Task ID {task_id} has not yet finished. "
-                        "No download url available yet."
-                    )
-        # The following returns should never be reached as the current
-        # flow only calls this method with a completed request,
-        # so a match will always exist. They are added here to make
-        # PyCharm happy.
-        return "", -1
+        try:
+            task_info = response.get(task_id)
+            status = task_info.get(_STATUS_KEY)
+        except (AttributeError, ValueError, KeyError):
+            return "", -1
+        if status in _STATUS_COMPLETE:
+            try:
+                return (
+                    task_info[_DOWNLOAD_URL_KEY],
+                    task_info["FileSize"],
+                )
+            except KeyError:
+                return "", -1
+        else:
+            raise Exception(
+                f"Task ID {task_id} has not yet finished. "
+                "No download url available yet."
+            )
 
     def _prepare_download_request(
         self, data_id: str, item: dict, product: dict
@@ -250,7 +249,7 @@ class DownloadTaskManager:
     ) -> tuple[str, str]:
         """Checks the status of existing download request task.
 
-        The user can either provide the dataset_id and file_id or just the
+        You can either provide the dataset_id and file_id or just the
         task_id to enquire the status of the request.
 
         The sorting is performed based on the priority and timestamps so that

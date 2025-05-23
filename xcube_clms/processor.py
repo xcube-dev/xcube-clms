@@ -131,7 +131,7 @@ class FileProcessor:
             A dictionary mapping coordinates to lists of file paths.
         """
         en_map = defaultdict(list)
-        data_id_folder = self.fs.sep.join([self.cache_store.root, data_id])
+        data_id_folder = self.fs.sep.join([self.download_folder, data_id])
         for file in files:
             en = find_easting_northing(file)
             if en:
