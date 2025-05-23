@@ -96,9 +96,7 @@ class FileProcessor:
             final_cube_path = self.fs.sep.join(
                 [self.cache_store.root, new_cache_data_id]
             )
-            if self.fs.isdir(final_cube_path):
-                self.fs.rm(final_cube_path, recursive=True)
-            self.cache_store.write_data(final_cube, new_cache_data_id)
+            self.cache_store.write_data(final_cube, new_cache_data_id, replace=True)
         elif len(files) == 0:
             LOG.warn("No files to preprocess!")
         else:
