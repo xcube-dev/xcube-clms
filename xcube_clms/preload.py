@@ -29,7 +29,7 @@ from xcube.core.store.preload import ExecutorPreloadHandle
 from xcube.core.store.preload import PreloadState
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import CANCELLED, DOWNLOAD_FOLDER
+from xcube_clms.constants import CANCELLED, DOWNLOAD_FOLDER, DATA_ID_SEPARATOR
 from xcube_clms.constants import COMPLETE
 from xcube_clms.constants import RETRY_TIMEOUT
 from xcube_clms.download_manager import DownloadTaskManager
@@ -93,67 +93,91 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         status_event = threading.Event()
         data_id_info = self.data_id_maps.get(data_id)
 
-        task_id = self._download_manager.request_download(
-            data_id=data_id,
-            item=data_id_info.get("item"),
-            product=data_id_info.get("product"),
-        )
-
-        self.notify(
-            PreloadState(
+        # EEA datasets
+        if DATA_ID_SEPARATOR in data_id:
+            task_id = self._download_manager.request_download(
                 data_id=data_id,
-                progress=0.1,
-                message=f"Task ID {task_id}: Download request in queue.",
+                item=data_id_info.get("item"),
+                product=data_id_info.get("product"),
             )
-        )
-        status_event.set()
 
-        while status_event.is_set():
-            status, _ = self._download_manager.get_current_requests_status(
-                task_id=task_id
+            self.notify(
+                PreloadState(
+                    data_id=data_id,
+                    progress=0.1,
+                    message=f"Task ID {task_id}: Download request in queue.",
+                )
             )
-            if status == COMPLETE:
-                status_event.clear()
-                self.notify(
-                    PreloadState(
-                        data_id=data_id,
-                        progress=0.4,
-                        message=f"Task ID {task_id}: Download link created. "
-                        f"Downloading and extracting now...",
-                    )
-                )
-                download_url, _ = self._download_manager.get_download_url(task_id)
-                self._download_manager.download_data(download_url, data_id)
-                self.notify(
-                    PreloadState(
-                        data_id=data_id,
-                        progress=0.8,
-                        message=f"Task ID {task_id}: Extraction complete. "
-                        f"Processing now...",
-                    )
-                )
-                self._file_processor.preprocess(data_id)
-                self.notify(
-                    PreloadState(
-                        data_id=data_id,
-                        progress=1.0,
-                        message=f"Task ID {task_id}: Preloading Complete.",
-                    )
-                )
-                return
-            if status in CANCELLED:
-                status_event.clear()
-                self.notify(
-                    PreloadState(
-                        data_id=data_id,
-                        message=f"Task ID {task_id}: Download request was cancelled by the user from "
-                        "the Land Copernicus UI.",
-                    )
-                )
-                self.cancel()
-                return
+            status_event.set()
 
-            time.sleep(RETRY_TIMEOUT)
+            while status_event.is_set():
+                status, _ = self._download_manager.get_current_requests_status(
+                    task_id=task_id
+                )
+                if status == COMPLETE:
+                    status_event.clear()
+                    self.notify(
+                        PreloadState(
+                            data_id=data_id,
+                            progress=0.4,
+                            message=f"Task ID {task_id}: Download link created. "
+                            f"Downloading and extracting now...",
+                        )
+                    )
+                    download_url, _ = self._download_manager.get_download_url(task_id)
+                    self._download_manager.download_data(download_url, data_id)
+                    self.notify(
+                        PreloadState(
+                            data_id=data_id,
+                            progress=0.8,
+                            message=f"Task ID {task_id}: Extraction complete. "
+                            f"Processing now...",
+                        )
+                    )
+                    self._file_processor.preprocess(data_id)
+                    self.notify(
+                        PreloadState(
+                            data_id=data_id,
+                            progress=1.0,
+                            message=f"Task ID {task_id}: Preloading Complete.",
+                        )
+                    )
+                    return
+                if status in CANCELLED:
+                    status_event.clear()
+                    self.notify(
+                        PreloadState(
+                            data_id=data_id,
+                            message=f"Task ID {task_id}: Download request was cancelled by the user from "
+                            "the Land Copernicus UI.",
+                        )
+                    )
+                    self.cancel()
+                    return
+
+                time.sleep(RETRY_TIMEOUT)
+
+        else:
+            self.notify(
+                PreloadState(
+                    data_id=data_id,
+                    progress=0.05,
+                    message=f"Requesting URLs for download",
+                )
+            )
+            response = self._download_manager.request_download(
+                data_id=data_id,
+                item=data_id_info.get("item"),
+                product=data_id_info.get("product"),
+            )
+            self.notify(
+                PreloadState(
+                    data_id=data_id,
+                    progress=0.15,
+                    message=f"Downloaded URLs",
+                )
+            )
+            print("links::", response)
 
     def close(self) -> None:
         for data_id in self.data_id_maps.keys():

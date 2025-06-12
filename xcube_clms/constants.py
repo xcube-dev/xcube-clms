@@ -37,6 +37,7 @@ SEARCH_ENDPOINT = "@search"
 DOWNLOAD_ENDPOINT = "@datarequest_post"
 TASK_STATUS_ENDPOINT = "@datarequest_search"
 CANCEL_ENDPOINT = "@datarequest_delete"
+GET_DOWNLOAD_FILE_URLS_ENDPOINT = "@get-download-file-urls"
 
 # Headers
 ACCEPT_HEADER = {"Accept": "application/json"}

@@ -19,7 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import Any, Container, Union, Iterator
+from typing import Any, Container, Iterator, Literal
 
 import xarray as xr
 from xcube.core.store import DataTypeLike, PreloadedDataStore
@@ -43,6 +43,8 @@ from .utils import make_api_request
 _CLMS_DATA_ID_KEY = "id"
 _DOWNLOADABLE_FILES_KEY = "downloadable_files"
 _DATASET_DOWNLOADABLE = "downloadable_full_dataset"
+_DATASET_DOWNLOAD_INFORMATION = "dataset_download_information"
+_FULL_SOURCE = "full_source"
 _FILE_KEY = "file"
 _CRS_KEY = "coordinateReferenceSystemList"
 _START_TIME_KEY = "temporalExtentStart"
@@ -124,16 +126,36 @@ class Clms:
         """
         for item in self._datasets_info:
             if item[_DATASET_DOWNLOADABLE]:
-                for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
-                    if _FILE_KEY in i and i[_FILE_KEY] != "":
-                        data_id = f"{item[_CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
+                if len(item[_DATASET_DOWNLOAD_INFORMATION]) > 0:
+                    dataset_download_info = item[_DATASET_DOWNLOAD_INFORMATION][
+                        _ITEMS_KEY
+                    ][0]
+                    if dataset_download_info[_FULL_SOURCE] == "EEA":
+                        for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
+                            if _FILE_KEY in i and i[_FILE_KEY] != "":
+                                data_id = f"{item[_CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
+                                if not include_attrs:
+                                    yield data_id
+                                elif isinstance(include_attrs, bool) and include_attrs:
+                                    yield data_id, i
+                                elif isinstance(include_attrs, list):
+                                    filtered_attrs = {
+                                        attr: i[attr]
+                                        for attr in include_attrs
+                                        if attr in i
+                                    }
+                                    yield data_id, filtered_attrs
+                    elif dataset_download_info[_FULL_SOURCE] == "LEGACY":
+                        data_id = f"{item["id"]}"
                         if not include_attrs:
                             yield data_id
                         elif isinstance(include_attrs, bool) and include_attrs:
-                            yield data_id, i
+                            yield data_id, dataset_download_info
                         elif isinstance(include_attrs, list):
                             filtered_attrs = {
-                                attr: i[attr] for attr in include_attrs if attr in i
+                                attr: dataset_download_info[attr]
+                                for attr in include_attrs
+                                if attr in dataset_download_info
                             }
                             yield data_id, filtered_attrs
 
@@ -148,7 +170,7 @@ class Clms:
             True if data exists, False otherwise.
         """
         if is_valid_data_type(data_type):
-            dataset = self._get_item(data_id)
+            dataset = self._get_extracted_component(data_id, item_type="item")
             return bool(dataset)
         return False
 
@@ -162,7 +184,7 @@ class Clms:
             A dictionary with the dataset's time range and CRS (currently
             supported).
         """
-        item = self._access_item(data_id.split(DATA_ID_SEPARATOR)[0])
+        item = self._get_extracted_component(data_id)
         crs = item.get(_CRS_KEY, [])
         time_range = (item.get(_START_TIME_KEY), item.get(_END_TIME_KEY))
 
@@ -185,8 +207,8 @@ class Clms:
         """
         data_id_maps = {
             data_id: {
-                ITEM_KEY: self._access_item(data_id),
-                PRODUCT_KEY: self._access_item(data_id.split(DATA_ID_SEPARATOR)[0]),
+                ITEM_KEY: self._get_extracted_component(data_id, item_type="item"),
+                PRODUCT_KEY: self._get_extracted_component(data_id),
             }
             for data_id in data_ids
         }
@@ -209,7 +231,9 @@ class Clms:
         """
         LOG.info(f"Fetching datasets metadata from {CLMS_API_URL}")
         datasets_info = []
-        response_data = make_api_request(build_api_url(CLMS_API_URL, SEARCH_ENDPOINT))
+        response_data = make_api_request(
+            build_api_url(CLMS_API_URL, SEARCH_ENDPOINT, datasets_request=True)
+        )
         while True:
             response = get_response_of_type(response_data, "json")
             datasets_info.extend(response.get(_ITEMS_KEY, []))
@@ -220,8 +244,11 @@ class Clms:
         LOG.info("Fetching complete.")
         return datasets_info
 
-    def _access_item(self, data_id) -> dict[str, Any]:
-        """Accesses an item from the dataset for a given data ID.
+    def _get_extracted_component(
+        self, data_id, item_type: Literal["item", "product"] = "product"
+    ) -> dict[str, Any]:
+        """Extracts either an item or product from the list of datasets
+        available
 
         Args:
             data_id: The unique identifier for the dataset.
@@ -232,7 +259,7 @@ class Clms:
         Raises:
             ValueError: If the dataset item is not found or multiple items match.
         """
-        dataset = self._get_item(data_id)
+        dataset = self._extract_dataset_component(data_id, item_type)
         if len(dataset) != 1:
             raise ValueError(
                 f"Expected one dataset for data_id: {data_id}, found"
@@ -240,24 +267,53 @@ class Clms:
             )
         return dataset[0]
 
-    def _get_item(self, data_id: str) -> list[dict[str, Any]] | list[any]:
-        """Retrieves a dataset item or its components for a given data ID.
+    def _extract_dataset_component(
+        self, data_id: str, item_type: Literal["item", "product"]
+    ) -> list[dict[str, Any]] | list[Any]:
+        """Extracts either a dataset product or its downloadable item(s) for a
+        given data ID.
 
         Args:
             data_id: Identifier for the dataset or its components.
+            item_type: 'item' to return downloadable item(s), 'product' to
+                return the dataset entry.
 
         Returns:
-            A list of dictionaries matching the data ID.
+            A list of dictionaries for items or products, depending on item_type.
         """
-        if DATA_ID_SEPARATOR in data_id:
-            clms_data_product_id, dataset_filename = data_id.split(DATA_ID_SEPARATOR)
+        if item_type == "item":
+            if DATA_ID_SEPARATOR in data_id:
+                clms_data_product_id, dataset_filename = data_id.split(
+                    DATA_ID_SEPARATOR
+                )
+                return [
+                    item
+                    for product in self._datasets_info
+                    if product[_CLMS_DATA_ID_KEY] == clms_data_product_id
+                    for item in product.get(_DOWNLOADABLE_FILES_KEY, {}).get(
+                        _ITEMS_KEY, []
+                    )
+                    if item.get("file") == dataset_filename
+                ]
+
+            for product in self._datasets_info:
+                if product[_CLMS_DATA_ID_KEY] == data_id:
+                    dataset_download_info = product[_DATASET_DOWNLOAD_INFORMATION][
+                        _ITEMS_KEY
+                    ][0]
+                    if dataset_download_info.get(_FULL_SOURCE) == "LEGACY":
+                        return [dataset_download_info]
+
+            return []
+
+        elif item_type == "product":
             return [
-                item
+                product
                 for product in self._datasets_info
-                if product[_CLMS_DATA_ID_KEY] == clms_data_product_id
-                for item in product.get(_DOWNLOADABLE_FILES_KEY, {}).get(_ITEMS_KEY, [])
-                if item.get("file") == dataset_filename
+                if data_id.split(DATA_ID_SEPARATOR)[0] == product[_CLMS_DATA_ID_KEY]
             ]
-        return [
-            item for item in self._datasets_info if data_id == item[_CLMS_DATA_ID_KEY]
-        ]
+
+        else:
+            raise ValueError(
+                f"Invalid item_type: {item_type}. Must be 'item' or 'product'."
+            )

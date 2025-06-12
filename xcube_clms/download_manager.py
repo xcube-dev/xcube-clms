@@ -27,7 +27,11 @@ import fsspec
 from xcube.core.store import PreloadedDataStore
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import ACCEPT_HEADER, DOWNLOAD_FOLDER
+from xcube_clms.constants import (
+    ACCEPT_HEADER,
+    DOWNLOAD_FOLDER,
+    GET_DOWNLOAD_FILE_URLS_ENDPOINT,
+)
 from xcube_clms.constants import CANCELLED
 from xcube_clms.constants import COMPLETE
 from xcube_clms.constants import CONTENT_TYPE_HEADER
@@ -42,6 +46,7 @@ from xcube_clms.utils import make_api_request
 
 _UID_KEY = "UID"
 _DATASET_DOWNLOAD_INFORMATION_KEY = "dataset_download_information"
+_CHARACTERISTICS_TEMPORAL_EXTENT = "characteristics_temporal_extent"
 _ID_KEY = "@id"
 _FILE_ID_KEY = "FileID"
 _DOWNLOAD_URL_KEY = "DownloadURL"
@@ -63,7 +68,7 @@ _STATUS_COMPLETE = ["Finished_ok"]
 _STATUS_CANCELLED = ["Cancelled"]
 _UNDEFINED = "UNDEFINED"
 _RESULTS = "Results/"
-_NOT_SUPPORTED_LIST = ["WEKEO", "LEGACY", "LANDCOVER"]
+_NOT_SUPPORTED_LIST = ["HOTSPOTS", "LANDCOVER", "VITO_Geotiff_LSP", "WEKEO"]
 _GEO_FILE_EXTS = (".tif", ".tiff")
 _ITEMS_KEY = "items"
 
@@ -121,54 +126,70 @@ class DownloadTaskManager:
         full_source = (
             product.get(_DATASET_DOWNLOAD_INFORMATION_KEY)
             .get(_ITEMS_KEY)[0]
-            .get(_FULL_SOURCE_KEY, "")
+            .get(_FULL_SOURCE_KEY)
         )
 
-        assert full_source not in _NOT_SUPPORTED_LIST, (
+        assert full_source not in _NOT_SUPPORTED_LIST or full_source is None, (
             f"This data product: {product[_TITLE_KEY]} is not yet supported in "
             f"this plugin yet."
         )
 
-        status, task_id = self.get_current_requests_status(
-            dataset_id=product[_UID_KEY], file_id=item[_ID_KEY]
-        )
+        if full_source == "EEA":
 
-        if status == COMPLETE or status == PENDING:
-            LOG.debug(
-                f"Download request with task id {task_id} "
-                f"{'already completed' if status == 'COMPLETE' 
-                else 'is in queue'} for data id: {data_id}"
+            status, task_id = self.get_current_requests_status(
+                dataset_id=product[_UID_KEY], file_id=item[_ID_KEY]
             )
+
+            if status == COMPLETE or status == PENDING:
+                LOG.debug(
+                    f"Download request with task id {task_id} "
+                    f"{'already completed' if status == 'COMPLETE' 
+                    else 'is in queue'} for data id: {data_id}"
+                )
+                return task_id
+            if status == _UNDEFINED:
+                LOG.debug(
+                    f"Download request does not exists or has expired for "
+                    f"data id:"
+                    f" {data_id}"
+                )
+
+            if status == CANCELLED:
+                LOG.debug(
+                    f"Download request was cancelled for "
+                    f"data id:"
+                    f" {data_id}. Re-requesting now."
+                )
+
+            download_request_url, headers, json = self._prepare_download_request(
+                data_id, item, product, full_source
+            )
+
+            response_data = make_api_request(
+                method="POST", url=download_request_url, headers=headers, json=json
+            )
+            response = get_response_of_type(response_data, "json")
+            task_ids = response.get(_TASK_IDS_KEY)
+            assert (
+                len(task_ids) == 1
+            ), f"Expected API response with 1 task_id, got {len(task_ids)}"
+            task_id = task_ids[0].get(_TASK_ID_KEY)
+            LOG.debug(f"Download Requested with Task ID : {task_id}")
             return task_id
-        if status == _UNDEFINED:
-            LOG.debug(
-                f"Download request does not exists or has expired for "
-                f"data id:"
-                f" {data_id}"
+        elif full_source == "LEGACY":
+            download_request_url, headers = self._prepare_download_request(
+                data_id, item, product, full_source
             )
-
-        if status == CANCELLED:
-            LOG.debug(
-                f"Download request was cancelled for "
-                f"data id:"
-                f" {data_id}. Re-requesting now."
+            response_data = make_api_request(
+                method="GET", url=download_request_url, headers=headers
             )
-
-        download_request_url, headers, json = self._prepare_download_request(
-            data_id, item, product
-        )
-
-        response_data = make_api_request(
-            method="POST", url=download_request_url, headers=headers, json=json
-        )
-        response = get_response_of_type(response_data, "json")
-        task_ids = response.get(_TASK_IDS_KEY)
-        assert (
-            len(task_ids) == 1
-        ), f"Expected API response with 1 task_id, got {len(task_ids)}"
-        task_id = task_ids[0].get(_TASK_ID_KEY)
-        LOG.debug(f"Download Requested with Task ID : {task_id}")
-        return task_id
+            response = get_response_of_type(response_data, "json")
+            return response
+        else:
+            raise ValueError(
+                f"The dataset: {data_id} from source:"
+                f" {full_source} is not supported"
+            )
 
     def get_download_url(self, task_id: str) -> tuple[str, int]:
         """Retrieves the download URL and file size for a completed download
@@ -190,7 +211,7 @@ class DownloadTaskManager:
         headers = ACCEPT_HEADER.copy()
         headers.update(get_authorization_header(self._api_token))
 
-        url = build_api_url(self._url, TASK_STATUS_ENDPOINT, datasets_request=False)
+        url = build_api_url(self._url, TASK_STATUS_ENDPOINT)
         response_data = make_api_request(url=url, headers=headers)
         response = get_response_of_type(response_data, "json")
         try:
@@ -213,33 +234,56 @@ class DownloadTaskManager:
             )
 
     def _prepare_download_request(
-        self, data_id: str, item: dict, product: dict
-    ) -> tuple[str, dict, dict]:
+        self, data_id: str, item: dict, product: dict, source: str
+    ) -> tuple[str, dict, dict] | tuple[str, dict]:
         """Prepares the API request details for downloading a dataset.
 
         Args:
             data_id: Unique identifier of the dataset.
             item: Metadata for the specific file to download.
             product: Metadata for the dataset containing the file.
+            source: Unique identifier that indicates the source of the
+                dataset which determines how the download request is prepared.
 
         Returns:
-            tuple[str, dict, dict]: A tuple containing the request URL,
-                headers, and JSON payload.
+            tuple[str, dict, dict] | tuple[str, dict]: A tuple containing the
+                request URL, headers, and/or JSON payload.
         """
         LOG.debug(f"Preparing download request for {data_id}")
 
-        dataset_id = product[_UID_KEY]
+        dataset_uid = product[_UID_KEY]
         file_id = item[_ID_KEY]
-        json = get_dataset_download_info(
-            dataset_id=dataset_id,
-            file_id=file_id,
-        )
-        url = build_api_url(self._url, DOWNLOAD_ENDPOINT, datasets_request=False)
+
         headers = ACCEPT_HEADER.copy()
         headers.update(CONTENT_TYPE_HEADER)
         headers.update(get_authorization_header(self._api_token))
+        if source == "EEA":
+            url = build_api_url(self._url, DOWNLOAD_ENDPOINT)
+            json = get_dataset_download_info(
+                dataset_id=dataset_uid,
+                file_id=file_id,
+            )
+            return url, headers, json
+        else:
+            date_range = product[_CHARACTERISTICS_TEMPORAL_EXTENT]
+            start_year, end_year = date_range.split("-")
 
-        return url, headers, json
+            date_from = f"{start_year}-01-01"
+            if end_year == "present":
+                date_to = datetime.today().strftime("%Y-%m-%d")
+            else:
+                date_to = f"{end_year}-12-31"
+
+            extra_params = {
+                "dataset_uid": dataset_uid,
+                "download_information_id": file_id,
+                "date_from": date_from,
+                "date_to": date_to,
+            }
+            url = build_api_url(
+                self._url, GET_DOWNLOAD_FILE_URLS_ENDPOINT, extra_params=extra_params
+            )
+            return url, headers
 
     def get_current_requests_status(
         self,
@@ -281,7 +325,7 @@ class DownloadTaskManager:
         headers = ACCEPT_HEADER.copy()
         headers.update(get_authorization_header(self._api_token))
 
-        url = build_api_url(self._url, TASK_STATUS_ENDPOINT, datasets_request=False)
+        url = build_api_url(self._url, TASK_STATUS_ENDPOINT)
         response_data = make_api_request(url=url, headers=headers)
         response = get_response_of_type(response_data, "json")
 

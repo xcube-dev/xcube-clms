@@ -251,7 +251,7 @@ class ClmsTest(unittest.TestCase):
 
     def test_access_item(self):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
-        item = clms._access_item("dataset2|file2")
+        item = clms._get_extracted_component("dataset2|file2")
         expected_item = {"file": "file2", "area": "area2", "format": "geotiff"}
         self.assertEqual(expected_item, item)
 
@@ -272,7 +272,7 @@ class ClmsTest(unittest.TestCase):
         self.mock_fetch_all_datasets.return_value = datasets_info
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
         with self.assertRaises(ValueError):
-            clms._access_item("dataset2|file2")
+            clms._get_extracted_component("dataset2|file2")
 
     def test_get_item(self):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)

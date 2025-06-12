@@ -22,7 +22,7 @@
 from typing import Tuple, Iterator, Container, Any, Union
 
 import xarray as xr
-from xcube.core.store import DATASET_TYPE
+from xcube.core.store import DATASET_TYPE, PreloadedDataStore
 from xcube.core.store import DataDescriptor
 from xcube.core.store import DataStore
 from xcube.core.store import DataTypeLike
@@ -104,7 +104,7 @@ class ClmsDataStore(DataStore):
         self,
         data_type: DataTypeLike = None,
         include_attrs: Container[str] | bool = False,
-    ) -> Union[Iterator[str], Iterator[tuple[str, dict[str, Any]]]]:
+    ) -> Iterator[str | tuple[str, dict[str, Any]]]:
         assert_valid_data_type(data_type)
         data_ids = self._clms.get_data_ids(include_attrs)
         for data_id in data_ids:
@@ -143,6 +143,8 @@ class ClmsDataStore(DataStore):
         opener_id: str = None,
         **open_params,
     ) -> xr.Dataset:
+        schema = self.get_open_data_params_schema()
+        schema.validate_instance(open_params)
         return self._clms.open_data(data_id, opener_id, **open_params)
 
     def search_data(
@@ -160,7 +162,10 @@ class ClmsDataStore(DataStore):
         self,
         *data_ids: str,
         **preload_params,
-    ) -> PreloadHandle:
+    ) -> PreloadedDataStore:
+        for data_id in data_ids:
+            if not self.has_data(data_id):
+                raise ValueError(f"The requested data_id {data_id} is invalid.")
         schema = self.get_preload_data_params_schema()
         schema.validate_instance(preload_params)
         return self._clms.preload_data(*data_ids, **preload_params)

@@ -156,8 +156,8 @@ def make_api_request(
 def build_api_url(
     url: str,
     api_endpoint: str,
-    metadata_fields: Optional[list] = None,
-    datasets_request: bool = True,
+    extra_params: dict[str, str] | None = None,
+    datasets_request: bool = False,
 ) -> str:
     """Builds a complete API URL by appending the endpoint and query parameters.
 
@@ -168,10 +168,10 @@ def build_api_url(
     Args:
         url: The base URL of the API.
         api_endpoint: The specific endpoint to be appended to the base URL.
-        metadata_fields: Optional list of metadata fields to include as query
-            parameters.
+        extra_params: Optional dictionary of additional query parameters to
+            include.
         datasets_request: Indicates whether the request targets datasets.
-            Defaults to True.
+            Defaults to False.
 
     Returns:
         A complete API URL string.
@@ -180,8 +180,8 @@ def build_api_url(
     if datasets_request:
         params = _PORTAL_TYPE
         params[_FULL_SCHEMA] = "1"
-    if metadata_fields:
-        params[_METADATA_FIELDS] = ",".join(metadata_fields)
+    if extra_params:
+        params.update(extra_params)
     if params:
         query_params = urlencode(params)
         return f"{url}/{api_endpoint}/?{query_params}"
