@@ -39,6 +39,16 @@ TASK_STATUS_ENDPOINT = "@datarequest_search"
 CANCEL_ENDPOINT = "@datarequest_delete"
 GET_DOWNLOAD_FILE_URLS_ENDPOINT = "@get-download-file-urls"
 
+ALL_DATASET_SOURCES = [
+    "LEGACY",
+    "LANDCOVER",
+    "HOTSPOTS",
+    "VITO_Geotiff_LSP",
+    "WEKEO",
+    "EEA",
+]
+SUPPORTED_DATASET_SOURCES = ["LEGACY", "EEA"]
+
 # Headers
 ACCEPT_HEADER = {"Accept": "application/json"}
 CONTENT_TYPE_HEADER = {"Content-Type": "application/json"}
