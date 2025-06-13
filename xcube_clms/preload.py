@@ -35,6 +35,7 @@ from xcube_clms.constants import RETRY_TIMEOUT
 from xcube_clms.download_manager import DownloadTaskManager
 from xcube_clms.processor import FileProcessor
 from xcube_clms.processor import cleanup_dir
+from xcube_clms.utils import get_response_of_type
 
 
 class ClmsPreloadHandle(ExecutorPreloadHandle):
@@ -125,7 +126,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                         )
                     )
                     download_url, _ = self._download_manager.get_download_url(task_id)
-                    self._download_manager.download_data(download_url, data_id)
+                    self._download_manager.download_zip_data(download_url, data_id)
                     self.notify(
                         PreloadState(
                             data_id=data_id,
@@ -165,7 +166,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                     message=f"Requesting URLs for download",
                 )
             )
-            response = self._download_manager.request_download(
+            links = self._download_manager.request_download(
                 data_id=data_id,
                 item=data_id_info.get("item"),
                 product=data_id_info.get("product"),
@@ -174,10 +175,45 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                 PreloadState(
                     data_id=data_id,
                     progress=0.15,
-                    message=f"Downloaded URLs",
+                    message=f"Downloaded URLs. Starting download now.",
                 )
             )
-            print("links::", response)
+
+            MAX_CALLS_PER_SECOND = 10
+            delay = 1 / MAX_CALLS_PER_SECOND
+
+            total_files = len(links)
+
+            progress_start = 15
+            progress_end = 50
+            progress_range = progress_end - progress_start
+
+            for i, url in enumerate(links):
+                self._download_manager.download_file(url, data_id)
+                self.notify(
+                    PreloadState(
+                        data_id=data_id,
+                        progress=0.15,
+                        message=f"Downloading files complete.",
+                    )
+                )
+                progress = progress_start + ((i + 1) / total_files) * progress_range
+                self.notify(
+                    PreloadState(
+                        data_id=data_id,
+                        progress=progress / 100,
+                        message=f"Downloading ...",
+                    )
+                )
+                time.sleep(delay)
+
+            self.notify(
+                PreloadState(
+                    data_id=data_id,
+                    progress=0.5,
+                    message=f"Downloading files complete.",
+                )
+            )
 
     def close(self) -> None:
         for data_id in self.data_id_maps.keys():

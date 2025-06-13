@@ -90,8 +90,14 @@ class DownloadTaskManager:
         self._api_token = self._token_handler.api_token
         self._url = url
         self.cache_store = cache_store
+        self.fs = cache_store.fs
+        self.download_folder = self.fs.sep.join(
+            [self.cache_store.root, DOWNLOAD_FOLDER]
+        )
 
-    def request_download(self, data_id: str, item: dict, product: dict) -> str:
+    def request_download(
+        self, data_id: str, item: dict, product: dict
+    ) -> str | list[str]:
         """Submits a download request for a specific dataset.
 
         If a request does not exist, it sends a new one. If it does, it returns
@@ -103,7 +109,8 @@ class DownloadTaskManager:
             product: Metadata for the dataset containing the file.
 
         Returns:
-            str: Task ID of the submitted download request.
+            str: Task ID of the submitted download request. or
+            list[str]: List of download URLs
 
         Raises:
             AssertionError: If the dataset is unsupported.
@@ -396,7 +403,7 @@ class DownloadTaskManager:
 
         return _UNDEFINED, ""
 
-    def download_data(self, download_url: str, data_id: str) -> None:
+    def download_zip_data(self, download_url: str, data_id: str) -> None:
         """Downloads, extracts, and saves the dataset from the provided URL.
 
         Args:
@@ -481,6 +488,21 @@ class DownloadTaskManager:
                         raise FileNotFoundError(
                             "No file found in the downloaded zip file to load"
                         )
+
+    def download_file(self, url: str, data_id: str):
+        _file = url.split("/")[-1]
+        dir_path = self.fs.sep.join([self.download_folder, data_id])
+        filename = self.fs.sep.join([dir_path, _file])
+        if not self.fs.exists(dir_path):
+            self.fs.makedirs(dir_path, exist_ok=True)
+        if not self.fs.isfile(filename):
+            try:
+                response = make_api_request(url, timeout=600, stream=True)
+                with self.fs.open(filename, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        f.write(chunk)
+            except Exception as e:
+                raise f"Error downloading {url}: {e}" from e
 
     @staticmethod
     def _find_geo_in_dir(path: str, zip_fs: Any) -> list[str]:

@@ -371,7 +371,7 @@ class TestDownloadTaskManager(unittest.TestCase):
             cache_store=mock_cache_store,
         )
 
-        download_manager.download_data("http://test.com", "test_id")
+        download_manager.download_zip_data("http://test.com", "test_id")
 
         self.mock_make_api_request.assert_called_once_with(
             "http://test.com", timeout=600, stream=True

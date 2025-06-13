@@ -30,6 +30,7 @@ import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
+from xcube.core.store import PreloadedDataStore
 
 from xcube_clms.constants import DATA_ID_SEPARATOR, DOWNLOAD_FOLDER
 from xcube_clms.constants import LOG
@@ -43,7 +44,7 @@ class FileProcessor:
 
     def __init__(
         self,
-        cache_store,
+        cache_store: PreloadedDataStore,
         cleanup: bool = True,
         tile_size: int | tuple[int, int] = None,
     ) -> None:
