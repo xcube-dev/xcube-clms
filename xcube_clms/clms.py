@@ -27,7 +27,7 @@ from xcube.core.store import MutableDataStore
 from xcube.core.store import new_data_store
 from xcube.core.store.preload import PreloadHandle
 
-from .constants import CLMS_API_URL
+from .constants import CLMS_API_URL, SUPPORTED_DATASET_SOURCES
 from .constants import DATA_ID_SEPARATOR
 from .constants import DEFAULT_PRELOAD_CACHE_FOLDER
 from .constants import ITEM_KEY
@@ -145,7 +145,9 @@ class Clms:
                                         if attr in i
                                     }
                                     yield data_id, filtered_attrs
-                    elif dataset_download_info[_FULL_SOURCE] == "LEGACY":
+                    elif (
+                        dataset_download_info[_FULL_SOURCE] in SUPPORTED_DATASET_SOURCES
+                    ):
                         data_id = f"{item["id"]}"
                         if not include_attrs:
                             yield data_id
@@ -170,7 +172,10 @@ class Clms:
             True if data exists, False otherwise.
         """
         if is_valid_data_type(data_type):
-            dataset = self._get_extracted_component(data_id, item_type="item")
+            if DATA_ID_SEPARATOR in data_id:
+                dataset = self._get_extracted_component(data_id, item_type="item")
+            else:
+                dataset = self._get_extracted_component(data_id)
             return bool(dataset)
         return False
 
@@ -301,7 +306,10 @@ class Clms:
                     dataset_download_info = product[_DATASET_DOWNLOAD_INFORMATION][
                         _ITEMS_KEY
                     ][0]
-                    if dataset_download_info.get(_FULL_SOURCE) == "LEGACY":
+                    if (
+                        dataset_download_info.get(_FULL_SOURCE)
+                        in SUPPORTED_DATASET_SOURCES
+                    ):
                         return [dataset_download_info]
 
             return []

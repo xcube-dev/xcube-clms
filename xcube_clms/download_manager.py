@@ -31,6 +31,8 @@ from xcube_clms.constants import (
     ACCEPT_HEADER,
     DOWNLOAD_FOLDER,
     GET_DOWNLOAD_FILE_URLS_ENDPOINT,
+    SUPPORTED_DATASET_SOURCES,
+    ALL_DATASET_SOURCES,
 )
 from xcube_clms.constants import CANCELLED
 from xcube_clms.constants import COMPLETE
@@ -68,7 +70,9 @@ _STATUS_COMPLETE = ["Finished_ok"]
 _STATUS_CANCELLED = ["Cancelled"]
 _UNDEFINED = "UNDEFINED"
 _RESULTS = "Results/"
-_NOT_SUPPORTED_LIST = ["HOTSPOTS", "LANDCOVER", "VITO_Geotiff_LSP", "WEKEO"]
+_NOT_SUPPORTED_LIST = [
+    x for x in ALL_DATASET_SOURCES if x not in SUPPORTED_DATASET_SOURCES
+]
 _GEO_FILE_EXTS = (".tif", ".tiff")
 _ITEMS_KEY = "items"
 
@@ -123,7 +127,7 @@ class DownloadTaskManager:
         # This is to make sure that we do not send requests for currently for
         # unsupported datasets.
 
-        full_source = (
+        full_source: str = (
             product.get(_DATASET_DOWNLOAD_INFORMATION_KEY)
             .get(_ITEMS_KEY)[0]
             .get(_FULL_SOURCE_KEY)
@@ -176,7 +180,8 @@ class DownloadTaskManager:
             task_id = task_ids[0].get(_TASK_ID_KEY)
             LOG.debug(f"Download Requested with Task ID : {task_id}")
             return task_id
-        elif full_source == "LEGACY":
+
+        elif full_source in SUPPORTED_DATASET_SOURCES:
             download_request_url, headers = self._prepare_download_request(
                 data_id, item, product, full_source
             )
@@ -265,21 +270,27 @@ class DownloadTaskManager:
             )
             return url, headers, json
         else:
-            date_range = product[_CHARACTERISTICS_TEMPORAL_EXTENT]
-            start_year, end_year = date_range.split("-")
-
-            date_from = f"{start_year}-01-01"
-            if end_year == "present":
-                date_to = datetime.today().strftime("%Y-%m-%d")
-            else:
-                date_to = f"{end_year}-12-31"
-
             extra_params = {
                 "dataset_uid": dataset_uid,
                 "download_information_id": file_id,
-                "date_from": date_from,
-                "date_to": date_to,
             }
+            if source == "LEGACY":
+                date_range = product[_CHARACTERISTICS_TEMPORAL_EXTENT]
+                start_year, end_year = date_range.split("-")
+
+                date_from = f"{start_year}-01-01"
+                if end_year == "present":
+                    date_to = datetime.today().strftime("%Y-%m-%d")
+                else:
+                    date_to = f"{end_year}-12-31"
+
+                extra_params.update(
+                    {
+                        "date_from": date_from,
+                        "date_to": date_to,
+                    }
+                )
+
             url = build_api_url(
                 self._url, GET_DOWNLOAD_FILE_URLS_ENDPOINT, extra_params=extra_params
             )
