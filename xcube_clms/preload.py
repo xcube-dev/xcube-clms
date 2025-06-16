@@ -27,6 +27,7 @@ import fsspec
 from xcube.core.store import PreloadedDataStore
 from xcube.core.store.preload import ExecutorPreloadHandle
 from xcube.core.store.preload import PreloadState
+from zappend.api import zappend
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import CANCELLED, DOWNLOAD_FOLDER, DATA_ID_SEPARATOR
@@ -35,7 +36,6 @@ from xcube_clms.constants import RETRY_TIMEOUT
 from xcube_clms.download_manager import DownloadTaskManager
 from xcube_clms.processor import FileProcessor
 from xcube_clms.processor import cleanup_dir
-from xcube_clms.utils import get_response_of_type
 
 
 class ClmsPreloadHandle(ExecutorPreloadHandle):
@@ -62,10 +62,11 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
 
         self._token_handler = ClmsApiTokenHandler(credentials=credentials)
         self.cleanup = preload_params.pop("cleanup", True)
+        self.tile_size = preload_params.pop("tile_size", None)
         self._file_processor = FileProcessor(
             cache_store=self._cache_store,
             cleanup=self.cleanup,
-            tile_size=preload_params.pop("tile_size", None),
+            tile_size=self.tile_size,
         )
         self._download_manager = DownloadTaskManager(
             token_handler=self._token_handler,
@@ -162,7 +163,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             self.notify(
                 PreloadState(
                     data_id=data_id,
-                    progress=0.05,
+                    progress=0.1,
                     message=f"Requesting URLs for download",
                 )
             )
@@ -174,44 +175,65 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             self.notify(
                 PreloadState(
                     data_id=data_id,
-                    progress=0.15,
+                    progress=0.2,
                     message=f"Downloaded URLs. Starting download now.",
                 )
             )
 
-            MAX_CALLS_PER_SECOND = 10
+            # Max calls allowed per second is 10, but based on tests,
+            # that fails sometimes, and we use a conservative value of 8
+            MAX_CALLS_PER_SECOND = 8
             delay = 1 / MAX_CALLS_PER_SECOND
 
             total_files = len(links)
 
-            progress_start = 15
-            progress_end = 50
+            progress_start = 20
+            progress_end = 60
             progress_range = progress_end - progress_start
 
             for i, url in enumerate(links):
                 self._download_manager.download_file(url, data_id)
-                self.notify(
-                    PreloadState(
-                        data_id=data_id,
-                        progress=0.15,
-                        message=f"Downloading files complete.",
-                    )
-                )
                 progress = progress_start + ((i + 1) / total_files) * progress_range
-                self.notify(
-                    PreloadState(
-                        data_id=data_id,
-                        progress=progress / 100,
-                        message=f"Downloading ...",
+                if i % MAX_CALLS_PER_SECOND == 0:
+                    self.notify(
+                        PreloadState(
+                            data_id=data_id,
+                            progress=progress / 100,
+                            message=f"Downloading ...",
+                        )
                     )
-                )
+
+                # To avoid getting too many HTTP requests error from the server
+                if i % 200 == 0:
+                    time.sleep(3)
                 time.sleep(delay)
 
             self.notify(
                 PreloadState(
                     data_id=data_id,
-                    progress=0.5,
-                    message=f"Downloading files complete.",
+                    progress=0.6,
+                    message=f"Downloading files complete. Creating .zarr...",
+                )
+            )
+
+            items = self._cache_fs.listdir(
+                self._cache_fs.sep.join([self._download_folder, data_id])
+            )
+            files = sorted(
+                [item["name"] for item in items if (item.get("type") != "directory")]
+            )
+            target_path = self._cache_fs.sep.join([self._cache_root, data_id + ".zarr"])
+
+            if self._cache_fs.exists(target_path):
+                self._cache_fs.rm(target_path, recursive=True)
+
+            zappend(files, target_dir=target_path, tile_size=self.tile_size)
+
+            self.notify(
+                PreloadState(
+                    data_id=data_id,
+                    progress=1.0,
+                    message=f"Preloading complete",
                 )
             )
 

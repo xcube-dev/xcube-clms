@@ -212,26 +212,27 @@ class UtilsTest(unittest.TestCase):
         ):
             get_response_of_type(mock_response, "bytes")
 
-    def test_build_api_url_no_parameters(self):
+    def test_build_api_url_no_query_parameters(self):
         api_endpoint = "data"
-        expected_url = (
-            "http://example.com/api/data/?portal_type=DataSet" "&fullobjects=1"
-        )
+        expected_url = "http://example.com/api/data/"
         result = build_api_url(url, api_endpoint)
+        self.assertEqual(result, expected_url)
+
+    def test_build_api_url_with_dataset_parameters(self):
+        api_endpoint = "data"
+        expected_url = "http://example.com/api/data/?portal_type=DataSet&fullobjects=1"
+        result = build_api_url(url, api_endpoint, datasets_request=True)
         self.assertEqual(result, expected_url)
 
     def test_build_api_url_with_metadata_fields(self):
         api_endpoint = "data"
-        metadata_fields = ["field1", "field2"]
-        expected_url = (
-            "http://example.com/api/data/?portal_type=DataSet"
-            "&fullobjects=1&metadata_fields=field1%2Cfield2"
-        )
+        metadata_fields = {"metadata_fields": "field1,field2"}
+        expected_url = "http://example.com/api/data/?metadata_fields=field1%2Cfield2"
         result = build_api_url(url, api_endpoint, metadata_fields)
         self.assertEqual(result, expected_url)
 
     def test_build_api_url_with_datasets_request_false(self):
         api_endpoint = "data"
         expected_url = "http://example.com/api/data"
-        result = build_api_url(url, api_endpoint, datasets_request=False)
+        result = build_api_url(url, api_endpoint)
         self.assertEqual(result, expected_url)

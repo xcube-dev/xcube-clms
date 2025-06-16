@@ -31,7 +31,7 @@ from xcube_clms.constants import (
     ACCEPT_HEADER,
     DOWNLOAD_FOLDER,
     GET_DOWNLOAD_FILE_URLS_ENDPOINT,
-    SUPPORTED_DATASET_SOURCES,
+    SUPPORTED_NON_EEA_DATASET_SOURCES,
     ALL_DATASET_SOURCES,
 )
 from xcube_clms.constants import CANCELLED
@@ -71,7 +71,7 @@ _STATUS_CANCELLED = ["Cancelled"]
 _UNDEFINED = "UNDEFINED"
 _RESULTS = "Results/"
 _NOT_SUPPORTED_LIST = [
-    x for x in ALL_DATASET_SOURCES if x not in SUPPORTED_DATASET_SOURCES
+    x for x in ALL_DATASET_SOURCES if x not in SUPPORTED_NON_EEA_DATASET_SOURCES
 ]
 _GEO_FILE_EXTS = (".tif", ".tiff")
 _ITEMS_KEY = "items"
@@ -129,7 +129,7 @@ class DownloadTaskManager:
         source = item.get(_SOURCE_KEY, "")
 
         if (path == "") and (source == ""):
-            LOG.warning(f"No prepackaged downloadable items available for {data_id}")
+            LOG.info(f"No prepackaged downloadable items available for" f" {data_id}")
 
         # This is to make sure that we do not send requests for currently for
         # unsupported datasets.
@@ -145,6 +145,8 @@ class DownloadTaskManager:
             f"this plugin yet."
         )
 
+        # EEA datasets are the prepackaged datasets that are available for
+        # download on request
         if full_source == "EEA":
 
             status, task_id = self.get_current_requests_status(
@@ -188,7 +190,10 @@ class DownloadTaskManager:
             LOG.debug(f"Download Requested with Task ID : {task_id}")
             return task_id
 
-        elif full_source in SUPPORTED_DATASET_SOURCES:
+        # In these other dataset sources (currently LEGACY is supported),
+        # the CLMS API returns a list of links which we need to loop over and
+        # download.
+        elif full_source in SUPPORTED_NON_EEA_DATASET_SOURCES:
             download_request_url, headers = self._prepare_download_request(
                 data_id, item, product, full_source
             )
@@ -501,8 +506,8 @@ class DownloadTaskManager:
                 with self.fs.open(filename, "wb") as f:
                     for chunk in response.iter_content(chunk_size=1024 * 1024):
                         f.write(chunk)
-            except Exception as e:
-                raise f"Error downloading {url}: {e}" from e
+            except IOError as e:
+                raise IOError(f"Error downloading {url}: {e}") from e
 
     @staticmethod
     def _find_geo_in_dir(path: str, zip_fs: Any) -> list[str]:

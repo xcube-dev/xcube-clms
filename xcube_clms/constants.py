@@ -39,15 +39,15 @@ TASK_STATUS_ENDPOINT = "@datarequest_search"
 CANCEL_ENDPOINT = "@datarequest_delete"
 GET_DOWNLOAD_FILE_URLS_ENDPOINT = "@get-download-file-urls"
 
+# List of dataset sources that are available via CLMS.
 ALL_DATASET_SOURCES = [
     "LEGACY",
     "LANDCOVER",
     "HOTSPOTS",
     "VITO_Geotiff_LSP",
     "WEKEO",
-    "EEA",
 ]
-SUPPORTED_DATASET_SOURCES = ["LEGACY", "EEA"]
+SUPPORTED_NON_EEA_DATASET_SOURCES = ["LEGACY"]
 
 # Headers
 ACCEPT_HEADER = {"Accept": "application/json"}

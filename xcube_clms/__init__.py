@@ -19,6 +19,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from .version import version
+from .version import version as __version__
 
-__version__ = version
+__all__ = ["__version__"]

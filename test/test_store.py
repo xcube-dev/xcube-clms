@@ -68,7 +68,7 @@ class ClmsDataStoreTest(unittest.TestCase):
     @pytest.mark.vcr()
     def test_list_data_ids(self):
         data_ids = self.store.list_data_ids()
-
+        print("data_ids", data_ids)
         self.assertIsNot(data_ids, [])
         for data_id in data_ids:
             self.assertEqual(len(data_id.split(DATA_ID_SEPARATOR)), 2)
@@ -241,14 +241,20 @@ class ClmsDataStoreTest(unittest.TestCase):
         )
 
     @pytest.mark.vcr()
-    @patch("xcube_clms.clms.Clms._access_item")
+    @patch("xcube_clms.clms.Clms._get_extracted_component")
     @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    def test_preload_data(self, mock_token_handler, mock_access_item):
+    def test_preload_data(self, mock_token_handler, mock_get_extracted_component):
         mock_token_handler.api_token = "mock_token"
-        mock_access_item.side_effect = [{"id": "data_id"}, {"id": "product_id"}]
+
+        mock_get_extracted_component.side_effect = [
+            {"id": "data_id"},  # has_data call
+            {"id": "data_id"},
+            {"id": "product_id"},
+        ]
 
         cache_data_store = self.store.preload_data(
-            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010"
+            "imperviousness-classified-change-2015-2018"
+            "|IMCC_1518_020m_is_03035_v010",
         )
         self.assertEqual(
             {

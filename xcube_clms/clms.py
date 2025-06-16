@@ -23,11 +23,9 @@ from typing import Any, Container, Iterator, Literal
 
 import xarray as xr
 from xcube.core.store import DataTypeLike, PreloadedDataStore
-from xcube.core.store import MutableDataStore
 from xcube.core.store import new_data_store
-from xcube.core.store.preload import PreloadHandle
 
-from .constants import CLMS_API_URL, SUPPORTED_DATASET_SOURCES
+from .constants import CLMS_API_URL, SUPPORTED_NON_EEA_DATASET_SOURCES
 from .constants import DATA_ID_SEPARATOR
 from .constants import DEFAULT_PRELOAD_CACHE_FOLDER
 from .constants import ITEM_KEY
@@ -146,7 +144,8 @@ class Clms:
                                     }
                                     yield data_id, filtered_attrs
                     elif (
-                        dataset_download_info[_FULL_SOURCE] in SUPPORTED_DATASET_SOURCES
+                        dataset_download_info[_FULL_SOURCE]
+                        in SUPPORTED_NON_EEA_DATASET_SOURCES
                     ):
                         data_id = f"{item["id"]}"
                         if not include_attrs:
@@ -308,7 +307,7 @@ class Clms:
                     ][0]
                     if (
                         dataset_download_info.get(_FULL_SOURCE)
-                        in SUPPORTED_DATASET_SOURCES
+                        in SUPPORTED_NON_EEA_DATASET_SOURCES
                     ):
                         return [dataset_download_info]
 
