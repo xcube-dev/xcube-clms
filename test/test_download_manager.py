@@ -21,7 +21,7 @@
 
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch, Mock
+from unittest.mock import MagicMock, patch, Mock, mock_open
 
 import fsspec
 import requests
@@ -127,6 +127,24 @@ class TestDownloadTaskManager(unittest.TestCase):
             "mock_uid", self.item, self.product
         )
         self.assertEqual(task_id, "mock_task_id")
+
+    def test_new_legacy_request(self):
+        item = {"@id": "mock_id", "path": "mock_path", "source": "LEGACY"}
+        product = {
+            "dataset_download_information": {"items": [{"full_source": "LEGACY"}]},
+            "UID": "mock_uid",
+            "characteristics_temporal_extent": "2024-2024",
+        }
+
+        expected_response = b'[\n "link1", \n "link2"]'
+        expected_links = ["links1", "links2"]
+        response_mock = Mock(spec=requests.Response)
+        response_mock.json.return_value = expected_response
+        self.mock_make_api_request.return_value = response_mock
+        self.mock_get_response_of_type.return_value = expected_links
+
+        links = self.download_manager.request_download("mock_uid", item, product)
+        self.assertEqual(links, expected_links)
 
     def test_get_download_url_success(self):
         response = {
@@ -235,7 +253,7 @@ class TestDownloadTaskManager(unittest.TestCase):
         self.assertEqual("PENDING", status)
         self.assertEqual("task_id2", task_id)
 
-    def test_prepare_download_request(self):
+    def test_prepare_download_request_eea(self):
         expected_json = {"Datasets": [{"DatasetID": "mock_uid", "FileID": "mock_id"}]}
 
         url, headers, json_payload = self.download_manager._prepare_download_request(
@@ -251,6 +269,44 @@ class TestDownloadTaskManager(unittest.TestCase):
             headers,
         )
         self.assertEqual(expected_json, json_payload)
+
+    def test_prepare_download_request_legacy(self):
+        item = {"@id": "mock_id", "path": "mock_path", "source": "LEGACY"}
+        product = {
+            "dataset_download_information": {"items": [{"full_source": "LEGACY"}]},
+            "UID": "mock_uid",
+            "characteristics_temporal_extent": "2024-2024",
+        }
+        url, headers = self.download_manager._prepare_download_request(
+            "data_id", item, product, source="LEGACY"
+        )
+        self.assertEqual(
+            "http://mock-api-url/@get-download-file-urls/?dataset_uid=mock_uid&download_information_id=mock_id&date_from=2024-01-01&date_to=2024-12-31",
+            url,
+        )
+        self.assertEqual(
+            {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": "Bearer mock_token",
+            },
+            headers,
+        )
+
+        product = {
+            "dataset_download_information": {"items": [{"full_source": "LEGACY"}]},
+            "UID": "mock_uid",
+            "characteristics_temporal_extent": "2024-present",
+        }
+        url, headers = self.download_manager._prepare_download_request(
+            "data_id", item, product, source="LEGACY"
+        )
+        self.assertEqual(
+            "http://mock-api-url/@get-download-file-urls/?dataset_uid"
+            "=mock_uid&download_information_id=mock_id&date_from=2024-01-01"
+            f"&date_to={datetime.today().strftime('%Y-%m-%d')}",
+            url,
+        )
 
     def test_find_geo_in_dir(self):
         mock_zip_fs = Mock()
@@ -321,7 +377,7 @@ class TestDownloadTaskManager(unittest.TestCase):
 
     @patch("tempfile.NamedTemporaryFile")
     @patch("builtins.open")
-    def test_download_data(self, mock_dest_open, mock_temp_file):
+    def test_download_zip_data(self, mock_dest_open, mock_temp_file):
         mock_temp_file.return_value.__enter__.return_value.name = "/tmp/test"
 
         mock = Mock()
@@ -379,6 +435,39 @@ class TestDownloadTaskManager(unittest.TestCase):
         self.assertTrue(mock_inner_zip_fs.ls.called)
         self.assertTrue(mock_inner_zip_fs.open.called)
         self.assertTrue(mock_dest_open.called)
+
+    def test_download_file(self):
+        mock_response_429 = MagicMock(status_code=429)
+        mock_response_200 = MagicMock(status_code=200)
+        mock_response_200.iter_content.return_value = [b"chunk1", b"chunk2"]
+
+        self.mock_make_api_request.side_effect = [mock_response_429, mock_response_200]
+
+        mock_fs = MagicMock()
+        mock_fs.exists.return_value = False
+        mock_fs.isfile.return_value = False
+        mock_file_handle = mock_open()
+        mock_fs.open = mock_file_handle
+
+        mock_cache_store = MagicMock()
+
+        download_manager = DownloadTaskManager(
+            token_handler=self.mock_token_handler,
+            url="http://mock-api-url",
+            cache_store=mock_cache_store,
+        )
+
+        download_manager.fs = mock_fs
+
+        download_manager.download_file("http://test.com/file.nc", "test_id")
+
+        dir_path = "/mock/download/test_id"
+        filename = "/mock/download/test_id/file.nc"
+        mock_fs.makedirs.assert_called_once()
+        mock_fs.open.assert_called_once()
+        handle = mock_fs.open.return_value.__enter__.return_value
+        handle.write.assert_any_call(b"chunk1")
+        handle.write.assert_any_call(b"chunk2")
 
 
 def test_get_dataset_download_info():

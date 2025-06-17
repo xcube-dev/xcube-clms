@@ -99,7 +99,7 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.mock_download_task_manager.assert_called_once()
         self.mock_file_processor.assert_called_once()
 
-    def test_preload_data_new(self):
+    def test_preload_data_new_eea(self):
         ClmsPreloadHandle(
             data_id_maps=self.data_id_maps,
             url=self.url,
@@ -127,6 +127,27 @@ class TestClmsPreloadHandle(unittest.TestCase):
             final_notification.message, "Task ID task_123: Preloading Complete."
         )
         self.mock_file_processor_instance.preprocess.assert_called_once()
+
+    def test_preload_data_new_legacy(self):
+        data_id_maps = {
+            "test_data_id": {
+                "item": {"id": "item_123"},
+                "product": {"id": "product_456"},
+            }
+        }
+        ClmsPreloadHandle(
+            data_id_maps=data_id_maps,
+            url=self.url,
+            credentials={},
+            cache_store=self.mock_fs_data_store,
+        )
+
+        self.mock_download_manager.request_download.assert_called_once_with(
+            data_id="test_data_id",
+            item={"id": "item_123"},
+            product={"id": "product_456"},
+        )
+        self.mock_download_manager.download_file.assert_called()
 
     def test_preload_data_cancel(self):
         self.mock_notify.reset_mock()
