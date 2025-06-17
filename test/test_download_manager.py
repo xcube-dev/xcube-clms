@@ -35,7 +35,6 @@ from xcube_clms.download_manager import has_expired
 
 
 class TestDownloadTaskManager(unittest.TestCase):
-
     def setUp(self):
         self.mock_token_handler = MagicMock()
         self.mock_token_handler.api_token = "mock_token"
@@ -151,7 +150,7 @@ class TestDownloadTaskManager(unittest.TestCase):
     def test_get_download_url_pending_task(self):
         response_data = {"task_id1": {"Status": "In_progress"}}
         self.mock_get_response_of_type.return_value = response_data
-        with self.assertRaises(Exception) as cm:
+        with self.assertRaises(Exception):
             self.download_manager.get_download_url("task_id1")
 
     def test_get_download_url_invalid_response(self):

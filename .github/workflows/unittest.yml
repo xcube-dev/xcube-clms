@@ -24,6 +24,10 @@ jobs:
           create-args: >-
             python=${{ matrix.python-version }}
 
+      - name: Linting with ruff
+        run:
+          ruff check xcube_clms test
+
       - name: Install and Test
         shell: bash -l {0}
         run:

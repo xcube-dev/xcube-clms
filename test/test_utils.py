@@ -45,7 +45,6 @@ def setup_requests_mock(
     headers: dict[str, str] | None = None,
     raise_for_status_side_effect: Exception | None = None,
 ):
-
     mock_response = MagicMock()
     mock_response.status_code = status_code
     mock_response.text = text

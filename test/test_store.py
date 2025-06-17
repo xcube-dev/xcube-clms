@@ -25,13 +25,12 @@ from unittest.mock import patch, MagicMock
 import numpy as np
 import pytest
 import xarray as xr
-from xcube.core.store import DatasetDescriptor, PreloadedDataStore
+from xcube.core.store import DatasetDescriptor
 from xcube.core.store import new_data_store
 from xcube.util.jsonschema import JsonObjectSchema
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
 from xcube_clms.constants import DATA_STORE_ID
-from xcube_clms.preload import ClmsPreloadHandle
 
 
 class ClmsDataStoreTest(unittest.TestCase):
@@ -244,8 +243,7 @@ class ClmsDataStoreTest(unittest.TestCase):
         ]
 
         cache_data_store = self.store.preload_data(
-            "imperviousness-classified-change-2015-2018"
-            "|IMCC_1518_020m_is_03035_v010",
+            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010",
         )
         self.assertEqual(
             {

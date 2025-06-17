@@ -129,7 +129,7 @@ class DownloadTaskManager:
         source = item.get(_SOURCE_KEY, "")
 
         if (path == "") and (source == ""):
-            LOG.info(f"No prepackaged downloadable items available for" f" {data_id}")
+            LOG.info(f"No prepackaged downloadable items available for {data_id}")
 
         # This is to make sure that we do not send requests for currently for
         # unsupported datasets.
@@ -148,7 +148,6 @@ class DownloadTaskManager:
         # EEA datasets are the prepackaged datasets that are available for
         # download on request
         if full_source == "EEA":
-
             status, task_id = self.get_current_requests_status(
                 dataset_id=product[_UID_KEY], file_id=item[_ID_KEY]
             )
@@ -156,8 +155,7 @@ class DownloadTaskManager:
             if status == COMPLETE or status == PENDING:
                 LOG.debug(
                     f"Download request with task id {task_id} "
-                    f"{'already completed' if status == 'COMPLETE' 
-                    else 'is in queue'} for data id: {data_id}"
+                    f"{'already completed' if status == 'COMPLETE' else 'is in queue'} for data id: {data_id}"
                 )
                 return task_id
             if status == _UNDEFINED:
@@ -204,8 +202,7 @@ class DownloadTaskManager:
             return response
         else:
             raise ValueError(
-                f"The dataset: {data_id} from source:"
-                f" {full_source} is not supported"
+                f"The dataset: {data_id} from source: {full_source} is not supported"
             )
 
     def get_download_url(self, task_id: str) -> tuple[str, int]:
@@ -440,8 +437,7 @@ class DownloadTaskManager:
                 LOG.warn("No downloadable zip file found inside.")
             if actual_zip_file:
                 LOG.debug(
-                    f"Found one zip file "
-                    f"{actual_zip_file.get(_ORIGINAL_FILENAME_KEY)}."
+                    f"Found one zip file {actual_zip_file.get(_ORIGINAL_FILENAME_KEY)}."
                 )
                 with outer_zip_fs.open(actual_zip_file[_NAME_KEY], "rb") as f:
                     inner_zip_fs = fsspec.filesystem("zip", fo=f)
@@ -481,8 +477,7 @@ class DownloadTaskManager:
 
                             except OSError as e:
                                 LOG.error(
-                                    f"Error occurred while "
-                                    f"reading/writing data. {e}"
+                                    f"Error occurred while reading/writing data. {e}"
                                 )
                                 raise
                             except Exception as e:

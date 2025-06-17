@@ -36,7 +36,6 @@ from xcube_clms.processor import find_easting_northing
 
 
 class FileProcessorTest(unittest.TestCase):
-
     def setUp(self):
         self.mock_data_id = "product_id|dataset_id"
         self.test_path = "/test/path"
@@ -159,7 +158,7 @@ class FileProcessorTest(unittest.TestCase):
             dims=["y", "x"],
             coords={"y": np.arange(2, 4), "x": np.arange(5)},
         )
-        dsb["band_1"] = a
+        dsb["band_1"] = b
 
         dsc = xr.Dataset()
         c = xr.DataArray(
@@ -167,7 +166,7 @@ class FileProcessorTest(unittest.TestCase):
             dims=["y", "x"],
             coords={"y": np.arange(2), "x": np.arange(5, 10)},
         )
-        dsc["band_1"] = a
+        dsc["band_1"] = c
 
         y_concat = xr.concat([dsa, dsb], dim="y")
         x_concat = xr.concat([dsc, y_concat], dim="x")
@@ -272,7 +271,6 @@ class FileProcessorTest(unittest.TestCase):
         self.assertEqual(expected_en_map, en_map)
 
     def test_prepare_merge_invalid_files(self):
-
         files = ["invalid_file_1.tif", "invalid_file_2.tif"]
         data_id = "test_dataset"
         processor = FileProcessor(self.file_store)

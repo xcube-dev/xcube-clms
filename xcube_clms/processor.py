@@ -252,4 +252,4 @@ def cleanup_dir(folder_path: Path | str, fs=None, keep_extension=None):
                     LOG.debug(f"Deleted file: {item_path}")
         except Exception as e:
             LOG.error(f"Failed to delete {item_path}: {e}")
-    LOG.debug(f"Cleaning up finished")
+    LOG.debug("Cleaning up finished")

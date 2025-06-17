@@ -147,7 +147,7 @@ class Clms:
                         dataset_download_info[_FULL_SOURCE]
                         in SUPPORTED_NON_EEA_DATASET_SOURCES
                     ):
-                        data_id = f"{item["id"]}"
+                        data_id = f"{item['id']}"
                         if not include_attrs:
                             yield data_id
                         elif isinstance(include_attrs, bool) and include_attrs:
@@ -266,8 +266,7 @@ class Clms:
         dataset = self._extract_dataset_component(data_id, item_type)
         if len(dataset) != 1:
             raise ValueError(
-                f"Expected one dataset for data_id: {data_id}, found"
-                f" {len(dataset)}."
+                f"Expected one dataset for data_id: {data_id}, found {len(dataset)}."
             )
         return dataset[0]
 

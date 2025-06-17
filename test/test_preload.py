@@ -29,7 +29,6 @@ from xcube_clms.preload import ClmsPreloadHandle
 
 
 class TestClmsPreloadHandle(unittest.TestCase):
-
     def setUp(self):
         self.mock_notify_patcher = patch(
             "xcube_clms.preload.ExecutorPreloadHandle.notify"

@@ -164,7 +164,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                 PreloadState(
                     data_id=data_id,
                     progress=0.1,
-                    message=f"Requesting URLs for download",
+                    message="Requesting URLs for download",
                 )
             )
             links = self._download_manager.request_download(
@@ -176,7 +176,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                 PreloadState(
                     data_id=data_id,
                     progress=0.2,
-                    message=f"Downloaded URLs. Starting download now.",
+                    message="Downloaded URLs. Starting download now.",
                 )
             )
 
@@ -199,7 +199,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                         PreloadState(
                             data_id=data_id,
                             progress=progress / 100,
-                            message=f"Downloading ...",
+                            message="Downloading ...",
                         )
                     )
 
@@ -212,7 +212,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                 PreloadState(
                     data_id=data_id,
                     progress=0.6,
-                    message=f"Downloading files complete. Creating .zarr...",
+                    message="Downloading files complete. Creating .zarr...",
                 )
             )
 
@@ -233,7 +233,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                 PreloadState(
                     data_id=data_id,
                     progress=1.0,
-                    message=f"Preloading complete",
+                    message="Preloading complete",
                 )
             )
 

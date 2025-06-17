@@ -19,7 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import Tuple, Iterator, Container, Any, Union
+from typing import Tuple, Iterator, Container, Any
 
 import xarray as xr
 from xcube.core.store import DATASET_TYPE, PreloadedDataStore
@@ -28,7 +28,6 @@ from xcube.core.store import DataStore
 from xcube.core.store import DataTypeLike
 from xcube.core.store import DatasetDescriptor
 from xcube.core.store import MutableDataStore
-from xcube.core.store import PreloadHandle
 from xcube.util.jsonschema import (
     JsonBooleanSchema,
     JsonComplexSchema,
@@ -108,9 +107,7 @@ class ClmsDataStore(DataStore):
         assert_valid_data_type(data_type)
         data_ids = self._clms.get_data_ids(include_attrs)
         for data_id in data_ids:
-            if ((include_attrs is not None) and (include_attrs != False)) or (
-                include_attrs == True
-            ):
+            if include_attrs:
                 yield data_id[0], data_id[1]
             else:
                 yield data_id
@@ -173,8 +170,7 @@ class ClmsDataStore(DataStore):
     def get_preload_data_params_schema(self) -> JsonObjectSchema:
         params = dict(
             blocking=JsonBooleanSchema(
-                title="Option to make the preload_data method blocking or "
-                "non-blocking",
+                title="Option to make the preload_data method blocking or non-blocking",
                 description=(
                     "If True, (the default) if the constructor should wait for"
                     "all preload task to finish before the calling thread"
