@@ -25,6 +25,7 @@ dependencies = [
     "cryptography",
     "requests",
     "fsspec",
+    "zappend"
 ]
 
 [tool.setuptools.dynamic]
