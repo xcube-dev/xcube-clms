@@ -69,7 +69,7 @@ class ClmsApiTokenHandler:
                 LOG.debug("Token refreshed successfully.")
             except RequestException as e:
                 LOG.error("Token refresh failed: ", e)
-                raise e
+                raise
         else:
             LOG.debug("Current token valid. Reusing it.")
 

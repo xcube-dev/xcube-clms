@@ -20,10 +20,12 @@
 # SOFTWARE.
 
 import tempfile
+import time
 from datetime import datetime, timedelta
 from typing import Any
 
 import fsspec
+from requests import RequestException
 from xcube.core.store import PreloadedDataStore
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
@@ -75,6 +77,7 @@ _NOT_SUPPORTED_LIST = [
 ]
 _GEO_FILE_EXTS = (".tif", ".tiff")
 _ITEMS_KEY = "items"
+_MAX_RETRIES = 7
 
 
 class DownloadTaskManager:
@@ -497,12 +500,23 @@ class DownloadTaskManager:
             self.fs.makedirs(dir_path, exist_ok=True)
         if not self.fs.isfile(filename):
             try:
-                response = make_api_request(url, timeout=600, stream=True)
-                with self.fs.open(filename, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=1024 * 1024):
-                        f.write(chunk)
-            except IOError as e:
-                raise IOError(f"Error downloading {url}: {e}") from e
+                for attempt in range(1, _MAX_RETRIES + 1):
+                    response = make_api_request(url, timeout=600, stream=True)
+
+                    if response.status_code == 200:
+                        with self.fs.open(filename, "wb") as f:
+                            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                                f.write(chunk)
+                        break
+
+                    elif response.status_code == 429:
+                        wait_time = 2**attempt
+                        LOG.debug(
+                            f"429 Too Many Requests. Attempt {attempt}. Waiting {wait_time} seconds before retrying..."
+                        )
+                        time.sleep(wait_time)
+            except (RequestException, IOError) as e:
+                raise Exception(f"Error downloading {url}: {e}") from e
 
     @staticmethod
     def _find_geo_in_dir(path: str, zip_fs: Any) -> list[str]:
