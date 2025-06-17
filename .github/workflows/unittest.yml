@@ -25,6 +25,7 @@ jobs:
             python=${{ matrix.python-version }}
 
       - name: Linting with ruff
+        shell: bash -l {0}
         run:
           ruff check xcube_clms test
 
