@@ -214,7 +214,7 @@ class UtilsTest(unittest.TestCase):
 
     def test_build_api_url_no_query_parameters(self):
         api_endpoint = "data"
-        expected_url = "http://example.com/api/data/"
+        expected_url = "http://example.com/api/data"
         result = build_api_url(url, api_endpoint)
         self.assertEqual(result, expected_url)
 

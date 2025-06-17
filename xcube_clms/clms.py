@@ -172,9 +172,9 @@ class Clms:
         """
         if is_valid_data_type(data_type):
             if DATA_ID_SEPARATOR in data_id:
-                dataset = self._get_extracted_component(data_id, item_type="item")
+                dataset = self._extract_dataset_component(data_id, item_type="item")
             else:
-                dataset = self._get_extracted_component(data_id)
+                dataset = self._extract_dataset_component(data_id, item_type="product")
             return bool(dataset)
         return False
 

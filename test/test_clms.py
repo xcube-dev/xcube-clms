@@ -55,6 +55,7 @@ class ClmsTest(unittest.TestCase):
                     "items": [{"file": "file1", "area": "area1", "format": "geotiff"}]
                 },
                 "downloadable_full_dataset": True,
+                "dataset_download_information": {"items": [{"full_source": "EEA"}]},
             },
             {
                 "id": "dataset2",
@@ -62,6 +63,7 @@ class ClmsTest(unittest.TestCase):
                     "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
                 },
                 "downloadable_full_dataset": True,
+                "dataset_download_information": {"items": [{"full_source": "EEA"}]},
             },
         ]
         mock_make_api_request_patcher = patch("xcube_clms.clms.make_api_request")
@@ -150,27 +152,27 @@ class ClmsTest(unittest.TestCase):
         result = list(clms.get_data_ids(include_attrs=["size"]))
         self.assertEqual([], result)
 
-    @patch("xcube_clms.clms.Clms._get_item")
-    def test_has_data(self, mock_get_item):
+    @patch("xcube_clms.clms.Clms._extract_dataset_component")
+    def test_has_data(self, mock_extract_dataset_component):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
 
         # Case 1: Valid data type and dataset exists
         self.mock_is_valid_data_type.return_value = True
-        mock_get_item.return_value = {"some": "data"}
+        mock_extract_dataset_component.return_value = {"some": "data"}
         self.assertEqual(True, clms.has_data("valid_id", "valid_type"))
 
         # Case 2: Valid data type but dataset does not exist
         self.mock_is_valid_data_type.return_value = True
-        mock_get_item.return_value = None
+        mock_extract_dataset_component.return_value = None
         self.assertEqual(False, clms.has_data("invalid_id", "valid_type"))
 
         # Case 3: Invalid data type
         self.mock_is_valid_data_type.return_value = False
         self.assertEqual(False, clms.has_data("valid_id", "invalid_type"))
 
-    @patch("xcube_clms.clms.Clms._access_item")
-    def test_describe_data(self, mock_access_item):
-        mock_access_item.return_value = {
+    @patch("xcube_clms.clms.Clms._get_extracted_component")
+    def test_describe_data(self, mock_get_extracted_component):
+        mock_get_extracted_component.return_value = {
             "file": "file1",
             "area": "area1",
             "format": "geotiff",
@@ -186,7 +188,7 @@ class ClmsTest(unittest.TestCase):
             clms.describe_data("dataset1|file1"),
         )
 
-        mock_access_item.return_value = {
+        mock_get_extracted_component.return_value = {
             "file": "file1",
             "coordinateReferenceSystemList": ["WGS84"],
             "temporalExtentStart": "01-12-2022",
@@ -202,7 +204,7 @@ class ClmsTest(unittest.TestCase):
             clms.describe_data("dataset1|file1"),
         )
 
-        mock_access_item.return_value = {
+        mock_get_extracted_component.return_value = {
             "file": "file1",
             "coordinateReferenceSystemList": ["WGS84", "EPSG:3032"],
             "temporalExtentStart": "01-12-2022",
@@ -249,9 +251,9 @@ class ClmsTest(unittest.TestCase):
 
         self.assertEqual(expected_datasets_info, datasets_info)
 
-    def test_access_item(self):
+    def test_get_extracted_component(self):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
-        item = clms._get_extracted_component("dataset2|file2")
+        item = clms._get_extracted_component("dataset2|file2", item_type="item")
         expected_item = {"file": "file2", "area": "area2", "format": "geotiff"}
         self.assertEqual(expected_item, item)
 
@@ -261,26 +263,28 @@ class ClmsTest(unittest.TestCase):
                 "downloadable_files": {
                     "items": [{"file": "file2", "area": "area1", "format": "geotiff"}]
                 },
+                "dataset_download_information": {"items": [{"full_source": "EEA"}]},
             },
             {
                 "id": "dataset2",
                 "downloadable_files": {
                     "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
                 },
+                "dataset_download_information": {"items": [{"full_source": "EEA"}]},
             },
         ]
         self.mock_fetch_all_datasets.return_value = datasets_info
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
         with self.assertRaises(ValueError):
-            clms._get_extracted_component("dataset2|file2")
+            clms._get_extracted_component("dataset2|file2", item_type="item")
 
-    def test_get_item(self):
+    def test_extract_dataset_component(self):
         clms = Clms(self.mock_credentials, cache_store_params=self.cache_data_params)
-        item = clms._get_item("dataset2|file2")
+        item = clms._extract_dataset_component("dataset2|file2", item_type="item")
         expected_item = [{"file": "file2", "area": "area2", "format": "geotiff"}]
         self.assertEqual(expected_item, item)
 
-        item = clms._get_item("dataset2")
+        item = clms._extract_dataset_component("dataset2", item_type="product")
         expected_item = [
             {
                 "id": "dataset2",
@@ -288,6 +292,7 @@ class ClmsTest(unittest.TestCase):
                     "items": [{"file": "file2", "area": "area2", "format": "geotiff"}]
                 },
                 "downloadable_full_dataset": True,
+                "dataset_download_information": {"items": [{"full_source": "EEA"}]},
             }
         ]
         self.assertEqual(expected_item, item)

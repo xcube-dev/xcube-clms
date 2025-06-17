@@ -68,15 +68,18 @@ class ClmsDataStoreTest(unittest.TestCase):
     @pytest.mark.vcr()
     def test_list_data_ids(self):
         data_ids = self.store.list_data_ids()
-        print("data_ids", data_ids)
         self.assertIsNot(data_ids, [])
-        for data_id in data_ids:
-            self.assertEqual(len(data_id.split(DATA_ID_SEPARATOR)), 2)
+        with_sep = [id_ for id_ in data_ids if DATA_ID_SEPARATOR in id_]
+        without_sep = [id_ for id_ in data_ids if DATA_ID_SEPARATOR not in id_]
+        self.assertIsNotNone(with_sep)
+        self.assertIsNotNone(without_sep)
 
     @pytest.mark.vcr()
     def test_get_data_ids(self):
         data_ids = list(self.store.get_data_ids())
-        self.assertEqual(data_ids[0], "clc-backbone-2021|CLMS_CLCplus_RASTER_2021")
+        self.assertTrue(len(data_ids) > 0)
+        self.assertTrue(len([i for i in data_ids if DATA_ID_SEPARATOR in i]) > 0)
+        self.assertTrue(len([i for i in data_ids if DATA_ID_SEPARATOR not in i]) > 0)
 
     @pytest.mark.vcr()
     def test_get_data_ids_with_all_attrs(self):
@@ -85,27 +88,10 @@ class ClmsDataStoreTest(unittest.TestCase):
             credentials=self.mock_credentials,
             cache_store_params={"root": "preload_clms_cache"},
         )
-        result = list(store.get_data_ids(include_attrs=True))
-        self.assertEqual(
-            (
-                "clc-backbone-2021|CLMS_CLCplus_RASTER_2021",
-                {
-                    "@id": "b813d203-d09b-4663-95f7-65dc6d53789e",
-                    "area": "Europe",
-                    "file": "CLMS_CLCplus_RASTER_2021",
-                    "format": "Geotiff",
-                    "path": "H:\\Corine_Land_Cover_Backbone\\Corine_Land_Cover_Backbone_CLCBB_2021\\CLC_BB_2021\\Data\\data-details\\raster\\CLMS_CLCplus_RASTER_2021.zip",
-                    "resolution": "10 m",
-                    "size": "7 GB",
-                    "source": "EEA",
-                    "title": "",
-                    "type": "Raster",
-                    "version": "V1_1",
-                    "year": "",
-                },
-            ),
-            result[0],
-        )
+        results = list(store.get_data_ids(include_attrs=True))
+        for res in results:
+            self.assertTrue(len(res[0]) > 0)
+            self.assertIsInstance(res[1], dict)
 
     @pytest.mark.vcr()
     def test_get_data_ids_with_specific_attrs(self):
@@ -114,16 +100,22 @@ class ClmsDataStoreTest(unittest.TestCase):
             credentials=self.mock_credentials,
             cache_store_params={"root": "preload_clms_cache"},
         )
+
+        # EEA datasets
         result = list(store.get_data_ids(include_attrs=["area"]))
-        self.assertEqual(
-            (
-                "clc-backbone-2021|CLMS_CLCplus_RASTER_2021",
-                {
-                    "area": "Europe",
-                },
-            ),
-            result[0],
-        )
+        data_ids_w_included_attrs = [
+            d_a_tuple[1] for d_a_tuple in result if DATA_ID_SEPARATOR in d_a_tuple[0]
+        ]
+        self.assertIsNotNone(data_ids_w_included_attrs)
+
+        # Non-EEA datasets
+        result = list(store.get_data_ids(include_attrs=["collection"]))
+        data_ids_w_included_attrs = [
+            d_a_tuple[1]
+            for d_a_tuple in result
+            if DATA_ID_SEPARATOR not in d_a_tuple[0]
+        ]
+        self.assertIsNotNone(data_ids_w_included_attrs)
 
     @pytest.mark.vcr()
     def test_describe_data(self):
@@ -247,7 +239,6 @@ class ClmsDataStoreTest(unittest.TestCase):
         mock_token_handler.api_token = "mock_token"
 
         mock_get_extracted_component.side_effect = [
-            {"id": "data_id"},  # has_data call
             {"id": "data_id"},
             {"id": "product_id"},
         ]

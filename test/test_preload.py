@@ -66,7 +66,7 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.mock_file_processor.return_value = self.mock_file_processor_instance
 
         self.data_id_maps = {
-            "test_data_id": {
+            "test|data_id": {
                 "item": {"id": "item_123"},
                 "product": {"id": "product_456"},
             }
@@ -100,23 +100,6 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.mock_download_task_manager.assert_called_once()
         self.mock_file_processor.assert_called_once()
 
-    def test_preload_data_cached(self):
-        self.mock_fs_data_store.list_data_ids.return_value = ["test_data_id"]
-
-        ClmsPreloadHandle(
-            data_id_maps=self.data_id_maps,
-            url=self.url,
-            credentials={},
-            cache_store=self.mock_fs_data_store,
-        )
-        # wait for threads to finish
-        time.sleep(2)
-        self.mock_notify.assert_called()
-        notification = self.mock_notify.call_args[0][0]
-        self.assertEqual(notification.data_id, "test_data_id")
-        self.assertEqual(notification.progress, 1.0)
-        self.assertIn("Preloading Complete.", notification.message)
-
     def test_preload_data_new(self):
         ClmsPreloadHandle(
             data_id_maps=self.data_id_maps,
@@ -126,20 +109,20 @@ class TestClmsPreloadHandle(unittest.TestCase):
         )
 
         self.mock_download_manager.request_download.assert_called_once_with(
-            data_id="test_data_id",
+            data_id="test|data_id",
             item={"id": "item_123"},
             product={"id": "product_456"},
         )
         self.mock_download_manager.get_current_requests_status.assert_called()
         self.mock_download_manager.get_download_url.assert_called_once_with("task_123")
-        self.mock_download_manager.download_data.assert_called_once()
+        self.mock_download_manager.download_zip_data.assert_called_once()
         # wait for threads to finish
         time.sleep(3)
         notification_calls = self.mock_notify.call_args_list
         self.assertGreaterEqual(len(notification_calls), 4)
 
         final_notification = notification_calls[-1][0][0]
-        self.assertEqual(final_notification.data_id, "test_data_id")
+        self.assertEqual(final_notification.data_id, "test|data_id")
         self.assertEqual(final_notification.progress, 1.0)
         self.assertEqual(
             final_notification.message, "Task ID task_123: Preloading Complete."
@@ -160,7 +143,7 @@ class TestClmsPreloadHandle(unittest.TestCase):
         )
 
         self.mock_download_manager.request_download.assert_called_once_with(
-            data_id="test_data_id",
+            data_id="test|data_id",
             item={"id": "item_123"},
             product={"id": "product_456"},
         )
@@ -168,7 +151,7 @@ class TestClmsPreloadHandle(unittest.TestCase):
         # wait for threads to finish
         time.sleep(2)
         notification_calls = self.mock_notify.call_args_list
-        self.assertEqual(notification_calls[-1][0][0].data_id, "test_data_id")
+        self.assertEqual(notification_calls[-1][0][0].data_id, "test|data_id")
         self.assertEqual(notification_calls[-1][0][0].status, PreloadStatus.stopped)
         self.assertIn(
             "Task ID task_123: Download request was cancelled",

@@ -48,11 +48,9 @@ class TestDownloadTaskManager(unittest.TestCase):
         )
         self.download_manager._token_handler = MagicMock()
 
-        self.item = {"@id": "mock_id", "path": "mock_path", "source": "mock_source"}
+        self.item = {"@id": "mock_id", "path": "mock_path", "source": "EEA"}
         self.product = {
-            "dataset_download_information": {
-                "items": [{"full_source": "valid_source"}]
-            },
+            "dataset_download_information": {"items": [{"full_source": "EEA"}]},
             "UID": "mock_uid",
         }
 
@@ -242,7 +240,7 @@ class TestDownloadTaskManager(unittest.TestCase):
         expected_json = {"Datasets": [{"DatasetID": "mock_uid", "FileID": "mock_id"}]}
 
         url, headers, json_payload = self.download_manager._prepare_download_request(
-            "data_id", self.item, self.product
+            "data_id", self.item, self.product, source="EEA"
         )
         self.assertEqual("http://mock-api-url/@datarequest_post", url)
         self.assertEqual(
