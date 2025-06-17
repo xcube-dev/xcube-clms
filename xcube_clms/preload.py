@@ -24,7 +24,7 @@ import time
 from typing import Any
 
 import fsspec
-from xcube.core.store import PreloadedDataStore
+from xcube.core.store import PreloadedDataStore, new_data_store
 from xcube.core.store.preload import ExecutorPreloadHandle
 from xcube.core.store.preload import PreloadState
 from zappend.api import zappend
@@ -222,12 +222,25 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             files = sorted(
                 [item["name"] for item in items if (item.get("type") != "directory")]
             )
-            target_path = self._cache_fs.sep.join([self._cache_root, data_id + ".zarr"])
+            raw_filename = data_id + "_raw.zarr"
+            target_path = self._cache_fs.sep.join([self._cache_root, raw_filename])
 
-            if self._cache_fs.exists(target_path):
-                self._cache_fs.rm(target_path, recursive=True)
+            zappend(files, target_dir=target_path, force_new=True)
 
-            zappend(files, target_dir=target_path, tile_size=self.tile_size)
+            self.notify(
+                PreloadState(
+                    data_id=data_id,
+                    progress=0.95,
+                    message="Writing to zarr complete. Postprocessing",
+                )
+            )
+
+            # TODO: Move to processor
+            file_data_store = new_data_store("file", root=self._cache_root)
+            raw_dataset = file_data_store.open_data(raw_filename)
+            final_dataset = raw_dataset.chunk(self.tile_size)
+            file_data_store.write_data(final_dataset, data_id + ".zarr")
+            file_data_store.delete_data(raw_filename)
 
             self.notify(
                 PreloadState(
