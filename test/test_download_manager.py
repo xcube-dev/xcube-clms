@@ -461,8 +461,6 @@ class TestDownloadTaskManager(unittest.TestCase):
 
         download_manager.download_file("http://test.com/file.nc", "test_id")
 
-        dir_path = "/mock/download/test_id"
-        filename = "/mock/download/test_id/file.nc"
         mock_fs.makedirs.assert_called_once()
         mock_fs.open.assert_called_once()
         handle = mock_fs.open.return_value.__enter__.return_value
