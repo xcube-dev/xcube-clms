@@ -18,7 +18,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
+import os
+import shutil
 import tempfile
 import unittest
 from collections import defaultdict
@@ -26,7 +27,9 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import numpy as np
+import rasterio
 import xarray as xr
+from rasterio.transform import from_origin
 from xcube.core.store import new_data_store
 
 from xcube_clms.constants import DATA_ID_SEPARATOR
@@ -35,113 +38,181 @@ from xcube_clms.processor import cleanup_dir
 from xcube_clms.processor import find_easting_northing
 
 
+def save_dataset_as_tif(ds: xr.Dataset, path: str):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    data = ds["band_1"].values.astype("float32")
+    height, width = data.shape
+
+    transform = from_origin(0, 0, 1, 1)
+
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=height,
+        width=width,
+        count=1,
+        dtype=data.dtype,
+        crs="+proj=latlong",
+        transform=transform,
+    ) as dst:
+        dst.write(data, 1)
+
+
 class FileProcessorTest(unittest.TestCase):
     def setUp(self):
         self.mock_data_id = "product_id|dataset_id"
-        self.test_path = "/test/path"
+        self.test_path = "/tmp/test/path"
+        if os.path.exists(self.test_path):
+            shutil.rmtree(self.test_path)
+        os.makedirs(self.test_path)
         self.file_store = new_data_store("file", root=self.test_path)
         self.mock_file_store = MagicMock()
 
-    @patch("xcube_clms.processor.LOG")
-    @patch("xcube_clms.processor.fsspec.filesystem")
-    @patch("xcube_clms.processor.cleanup_dir")
-    def test_postprocess_single_file(self, mock_cleanup_dir, mock_fsspec, mock_log):
-        mock_fsspec.return_value.ls.return_value = [
-            "/mock/path/product_id|dataset_id/file_1.tif"
-        ]
+    def tearDown(self):
+        shutil.rmtree(self.test_path)
+
+    def create_dummy_dataset(self):
+        data = xr.Dataset(
+            {"band_1": (("y", "x"), [[1, 2], [3, 4]])},
+            coords={"y": [0, 1], "x": [0, 1]},
+        )
+        return data
+
+    def test_preprocess_eea_datasets_no_files(self):
         processor = FileProcessor(self.file_store, cleanup=True)
-        processor.cache_store = MagicMock()
-        processor.cache_store.open_data.return_value = MagicMock()
-        processor.cache_store.write_data.return_value = MagicMock()
-        processor.cache_store.root.return_value = self.test_path
+        processor.tile_size = (1, 1)
+        processor.download_folder = self.test_path + "/downloads"
+        processor.fs = self.file_store.fs
+        processor.cache_store = self.file_store
+
+        dataset_dir = os.path.join(self.test_path, "downloads", self.mock_data_id)
+        os.makedirs(dataset_dir, exist_ok=True)
+
         processor.preprocess_eea_datasets(self.mock_data_id)
 
-        mock_cleanup_dir.assert_called_once()
-        mock_log.debug.assert_called()
+        data_ids = self.file_store.list_data_ids()
+        self.assertNotIn(self.mock_data_id + ".zarr", data_ids)
 
-    @patch("xcube_clms.processor.LOG")
-    @patch("xcube_clms.processor.fsspec.filesystem")
-    @patch("xcube_clms.processor.cleanup_dir")
-    def test_postprocess_single_file_no_cleanup(
-        self, mock_cleanup_dir, mock_fsspec, mock_log
+    @patch.object(FileProcessor, "_merge_and_save")
+    @patch.object(FileProcessor, "_prepare_merge", return_value={"dummy": "map"})
+    def test_preprocess_eea_datasets_multiple_files(
+        self, mock_prepare_merge, mock_merge_and_save
     ):
-        mock_fsspec.return_value.ls.return_value = [
-            "/mock/path/product_id|dataset_id/file_1.tif"
-        ]
+        processor = FileProcessor(self.file_store, cleanup=True)
+        processor.tile_size = (1, 1)
+        processor.download_folder = self.test_path + "/downloads"
+        processor.fs = self.file_store.fs
+        processor.cache_store = self.file_store
+
+        dataset_dir = os.path.join(self.test_path, "downloads", self.mock_data_id)
+        os.makedirs(dataset_dir, exist_ok=True)
+
+        for i in range(2):
+            file_path = os.path.join(dataset_dir, f"file_{i}.tif")
+            save_dataset_as_tif(self.create_dummy_dataset(), file_path)
+
+        processor.preprocess_eea_datasets(self.mock_data_id)
+
+        mock_prepare_merge.assert_called_once()
+        mock_merge_and_save.assert_called_once_with(
+            mock_prepare_merge.return_value, self.mock_data_id
+        )
+
+    def test_preprocess_eea_datasets_single_file(self):
+        processor = FileProcessor(self.file_store, cleanup=True)
+        processor.tile_size = (1, 1)
+        processor.download_folder = self.test_path + "/downloads"
+        processor.fs = self.file_store.fs
+        processor.cache_store = self.file_store
+
+        dataset_dir = os.path.join(self.test_path, "downloads", self.mock_data_id)
+        os.makedirs(dataset_dir, exist_ok=True)
+
+        file_name = "file_1.tif"
+        full_data_id = os.path.join(dataset_dir, file_name)
+
+        save_dataset_as_tif(self.create_dummy_dataset(), full_data_id)
+
+        processor.preprocess_eea_datasets(self.mock_data_id)
+
+        final_data_id = self.mock_data_id + ".zarr"
+        data_ids = self.file_store.list_data_ids()
+
+        self.assertIn(final_data_id, data_ids)
+
+        final_dataset = self.file_store.open_data(final_data_id)
+        self.assertIsInstance(final_dataset, xr.Dataset)
+        self.assertEqual(final_dataset["dataset_id"].shape, (2, 2))
+        self.assertIsNotNone(final_dataset.chunks)
+
+        remaining_files = self.file_store.fs.ls(self.test_path)
+        only_zarr = [f for f in remaining_files if f.endswith(".zarr")]
+        self.assertEqual(
+            len(only_zarr),
+            1,
+            f"Expected only .zarr after cleanup, found: {remaining_files}",
+        )
+
+    def test_preprocess_eea_datasets_single_file_cleanup_false(self):
         processor = FileProcessor(self.file_store, cleanup=False)
-        processor.cache_store = MagicMock()
-        processor.cache_store.open_data.return_value = MagicMock()
-        processor.cache_store.write_data.return_value = MagicMock()
-        processor.cache_store.root.return_value = self.test_path
+        processor.tile_size = (1, 1)
+        processor.download_folder = self.test_path + "/downloads"
+        processor.fs = self.file_store.fs
+        processor.cache_store = self.file_store
+
+        dataset_dir = os.path.join(self.test_path, "downloads", self.mock_data_id)
+        os.makedirs(dataset_dir, exist_ok=True)
+
+        file_name = "file_1.tif"
+        full_data_id = os.path.join(dataset_dir, file_name)
+
+        save_dataset_as_tif(self.create_dummy_dataset(), full_data_id)
+
         processor.preprocess_eea_datasets(self.mock_data_id)
 
-        mock_log.debug.assert_called()
-        mock_cleanup_dir.assert_not_called()
+        final_data_id = self.mock_data_id + ".zarr"
+        data_ids = self.file_store.list_data_ids()
 
-    @patch("xcube_clms.processor.LOG")
-    @patch("xcube_clms.processor.fsspec.filesystem")
-    @patch("xcube_clms.processor.cleanup_dir")
-    def test_postprocess_no_files(self, mock_cleanup_dir, mock_fsspec, mock_log):
-        mock_fsspec.return_value.ls.return_value = []
-        processor = FileProcessor(self.mock_file_store, cleanup=True)
-        processor.preprocess_eea_datasets(self.mock_data_id)
+        self.assertIn(final_data_id, data_ids)
 
-        mock_log.warn.assert_called()
-        mock_cleanup_dir.assert_called_once()
+        final_dataset = self.file_store.open_data(final_data_id)
+        self.assertIsInstance(final_dataset, xr.Dataset)
+        self.assertEqual(final_dataset["dataset_id"].shape, (2, 2))
+        self.assertIsNotNone(final_dataset.chunks)
 
-    @patch("xcube_clms.processor.LOG")
-    @patch("xcube_clms.processor.fsspec.filesystem")
-    @patch("xcube_clms.processor.cleanup_dir")
-    def test_postprocess_unsupported_naming(
-        self, mock_cleanup_dir, mock_fsspec, mock_log
-    ):
-        mock_files = ["file_1.tif", "file_2.tif", "file_3.tif"]
-        mock_fsspec.return_value.ls.return_value = mock_files
-        self.mock_file_store.fs = MagicMock()
-        self.mock_file_store.fs.sep = "/"
-        self.mock_file_store.fs.sep = MagicMock()
-        self.mock_file_store.fs.sep.join.return_value = [
-            self.test_path + "/invalid_data_id",
-        ]
-        self.mock_file_store.fs.ls.return_value = [
-            f"{self.test_path}/" + file for file in mock_files
-        ]
+        remaining_files = self.file_store.fs.ls(self.test_path, recursive=True)
+        only_zarr = [f for f in remaining_files if f.endswith(".zarr")]
+        self.assertNotEqual(
+            len(only_zarr),
+            len(remaining_files),
+        )
 
-        processor = FileProcessor(self.mock_file_store, cleanup=True, tile_size=2000)
-        processor.preprocess_eea_datasets("invalid_data_id")
+    def test_preprocess_legacy_datasets_functional(self):
+        processor = FileProcessor(self.file_store)
+        processor.cache_store = self.file_store
 
-        mock_log.error.assert_called()
-        mock_cleanup_dir.assert_not_called()
-        self.mock_file_store.write_data.assert_not_called()
+        raw_data_id = self.mock_data_id + "_raw.zarr"
+        final_data_id = self.mock_data_id + ".zarr"
 
-    @patch("xcube_clms.processor.FileProcessor._prepare_merge")
-    @patch("xcube_clms.processor.FileProcessor._merge_and_save")
-    @patch("xcube_clms.processor.LOG")
-    @patch("xcube_clms.processor.fsspec.filesystem")
-    @patch("xcube_clms.processor.cleanup_dir")
-    def test_postprocess_multiple_files(
-        self,
-        mock_cleanup_dir,
-        mock_fsspec,
-        mock_log,
-        mock_merge_and_save,
-        mock_prepare_merge,
-    ):
-        mock_fsspec.return_value.ls.return_value = [
-            "/mock/path/product_id|dataset_id1/file_1.tif",
-            "/mock/path/product_id|dataset_id2/file_2.tif",
-        ]
-        processor = FileProcessor(self.file_store, cleanup=True)
-        processor.preprocess_eea_datasets(self.mock_data_id)
+        raw_dataset = self.create_dummy_dataset()
+        self.file_store.write_data(raw_dataset, raw_data_id, replace=True)
 
-        mock_log.debug.assert_not_called()
-        mock_merge_and_save.assert_called()
-        mock_cleanup_dir.assert_called()
+        processor.preprocess_legacy_datasets(self.mock_data_id)
+
+        data_ids = self.file_store.list_data_ids()
+        self.assertIn(final_data_id, data_ids)
+        final_dataset = self.file_store.open_data(final_data_id)
+        self.assertIsInstance(final_dataset, xr.Dataset)
+        self.assertEqual(final_dataset["band_1"].shape, (2, 2))
+        self.assertIsNotNone(final_dataset.chunks)
+
+        self.assertNotIn(raw_data_id, data_ids)
 
     @patch("xcube_clms.processor.rasterio.open")
     @patch("xcube_clms.processor.rioxarray.open_rasterio")
     @patch("xcube_clms.processor.xr.concat")
-    def test_postprocess_merge_and_save(
+    def test_preprocess_merge_and_save(
         self, mock_xr_concat, mock_rioxarray_open_rasterio, mock_rasterio_open
     ):
         dsa = xr.Dataset()
