@@ -30,10 +30,11 @@ import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import PreloadedDataStore
+from xcube.core.store import PreloadedDataStore, new_data_store
 
 from xcube_clms.constants import DATA_ID_SEPARATOR, DOWNLOAD_FOLDER
 from xcube_clms.constants import LOG
+from xcube_clms.utils import get_spatial_dims
 
 _ZARR_FORMAT = ".zarr"
 _PREFERRED_CHUNK_SIZE: Final = 2000
@@ -63,7 +64,7 @@ class FileProcessor:
             [self.cache_store.root, DOWNLOAD_FOLDER]
         )
 
-    def preprocess(self, data_id: str) -> None:
+    def preprocess_eea_datasets(self, data_id: str) -> None:
         """Performs preprocessing on the files for a given data ID.
 
         This includes preparing files for merging, merging them based on their
@@ -112,6 +113,26 @@ class FileProcessor:
                 folder_path=self.download_folder,
                 keep_extension=".zarr",
             )
+
+    def preprocess_legacy_datasets(self, data_id: str) -> None:
+        raw_data_id = data_id + "_raw.zarr"
+        final_data_id = data_id + ".zarr"
+
+        file_data_store = new_data_store(
+            self.cache_store.protocol, root=self.cache_store.root
+        )
+
+        if self.cache_store.fs.isdir(self.cache_store.root + "/" + final_data_id):
+            file_data_store.delete_data(final_data_id)
+
+        raw_dataset = file_data_store.open_data(raw_data_id)
+
+        y_coord, x_coord = get_spatial_dims(raw_dataset)
+        chunk_size = {y_coord: self.tile_size[0], x_coord: self.tile_size[1]}
+        final_dataset = chunk_dataset(raw_dataset, chunk_size, "zarr")
+
+        file_data_store.write_data(final_dataset, final_data_id)
+        file_data_store.delete_data(raw_data_id)
 
     def _prepare_merge(
         self, files: list[str], data_id: str

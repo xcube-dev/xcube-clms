@@ -23,6 +23,7 @@ from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
 
 import requests
+import xarray as xr
 from requests import HTTPError
 from requests import JSONDecodeError
 from requests import RequestException
@@ -239,3 +240,26 @@ def get_response_of_type(api_response: Response, data_type: Union[ResponseType, 
         )
 
     return response
+
+
+def get_spatial_dims(ds: xr.Dataset) -> (str, str):
+    """Identifies the spatial coordinate names in a dataset.
+    The function checks for common spatial dimension naming conventions: ("lat", "lon")
+    or ("y", "x"). If neither pair is found, it raises a DataStoreError.
+
+    Args:
+        ds: The dataset to inspect.
+
+    Returns:
+        A tuple of strings representing the names of the spatial dimensions.
+
+    Raises:
+        DataStoreError: If no recognizable spatial dimensions are found.
+    """
+    if "lat" in ds and "lon" in ds:
+        y_coord, x_coord = "lat", "lon"
+    elif "y" in ds and "x" in ds:
+        y_coord, x_coord = "y", "x"
+    else:
+        raise DataStoreError("No spatial dimensions found in dataset.")
+    return y_coord, x_coord

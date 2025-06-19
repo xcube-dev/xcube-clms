@@ -499,24 +499,23 @@ class DownloadTaskManager:
         if not self.fs.exists(dir_path):
             self.fs.makedirs(dir_path, exist_ok=True)
         if not self.fs.isfile(filename):
-            try:
-                for attempt in range(1, _MAX_RETRIES + 1):
-                    response = make_api_request(url, timeout=600, stream=True)
 
+            for attempt in range(1, _MAX_RETRIES + 1):
+                try:
+                    response = make_api_request(url, timeout=600, stream=True)
                     if response.status_code == 200:
                         with self.fs.open(filename, "wb") as f:
                             for chunk in response.iter_content(chunk_size=1024 * 1024):
                                 f.write(chunk)
                         break
 
-                    elif response.status_code == 429:
-                        wait_time = 2**attempt
-                        LOG.debug(
-                            f"429 Too Many Requests. Attempt {attempt}. Waiting {wait_time} seconds before retrying..."
-                        )
-                        time.sleep(wait_time)
-            except (RequestException, IOError) as e:
-                raise Exception(f"Error downloading {url}: {e}") from e
+                except (RequestException, IOError) as e:
+                    LOG.error(f"Error downloading {url}: {e}")
+                    wait_time = 2**attempt
+                    LOG.debug(
+                        f"Attempt {attempt}. Waiting {wait_time} seconds before retrying..."
+                    )
+                    time.sleep(wait_time)
 
     @staticmethod
     def _find_geo_in_dir(path: str, zip_fs: Any) -> list[str]:

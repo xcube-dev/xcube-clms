@@ -126,28 +126,31 @@ class TestClmsPreloadHandle(unittest.TestCase):
         self.assertEqual(
             final_notification.message, "Task ID task_123: Preloading Complete."
         )
-        self.mock_file_processor_instance.preprocess.assert_called_once()
+        self.mock_file_processor_instance.preprocess_eea_datasets.assert_called_once()
 
-    def test_preload_data_new_legacy(self):
+    @patch("xcube_clms.preload.zappend")
+    def test_preload_data_new_legacy(self, mock_zappend):
         data_id_maps = {
             "test_data_id": {
                 "item": {"id": "item_123"},
                 "product": {"id": "product_456"},
             }
         }
+        mock_zappend.return_value = 1
+        self.mock_download_manager.request_download.return_value = ["task_123"]
         ClmsPreloadHandle(
             data_id_maps=data_id_maps,
             url=self.url,
             credentials={},
             cache_store=self.mock_fs_data_store,
         )
-
         self.mock_download_manager.request_download.assert_called_once_with(
             data_id="test_data_id",
             item={"id": "item_123"},
             product={"id": "product_456"},
         )
         self.mock_download_manager.download_file.assert_called()
+        self.mock_file_processor_instance.preprocess_legacy_datasets.assert_called_once()
 
     def test_preload_data_cancel(self):
         self.mock_notify.reset_mock()

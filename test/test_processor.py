@@ -54,7 +54,7 @@ class FileProcessorTest(unittest.TestCase):
         processor.cache_store.open_data.return_value = MagicMock()
         processor.cache_store.write_data.return_value = MagicMock()
         processor.cache_store.root.return_value = self.test_path
-        processor.preprocess(self.mock_data_id)
+        processor.preprocess_eea_datasets(self.mock_data_id)
 
         mock_cleanup_dir.assert_called_once()
         mock_log.debug.assert_called()
@@ -73,7 +73,7 @@ class FileProcessorTest(unittest.TestCase):
         processor.cache_store.open_data.return_value = MagicMock()
         processor.cache_store.write_data.return_value = MagicMock()
         processor.cache_store.root.return_value = self.test_path
-        processor.preprocess(self.mock_data_id)
+        processor.preprocess_eea_datasets(self.mock_data_id)
 
         mock_log.debug.assert_called()
         mock_cleanup_dir.assert_not_called()
@@ -84,7 +84,7 @@ class FileProcessorTest(unittest.TestCase):
     def test_postprocess_no_files(self, mock_cleanup_dir, mock_fsspec, mock_log):
         mock_fsspec.return_value.ls.return_value = []
         processor = FileProcessor(self.mock_file_store, cleanup=True)
-        processor.preprocess(self.mock_data_id)
+        processor.preprocess_eea_datasets(self.mock_data_id)
 
         mock_log.warn.assert_called()
         mock_cleanup_dir.assert_called_once()
@@ -108,7 +108,7 @@ class FileProcessorTest(unittest.TestCase):
         ]
 
         processor = FileProcessor(self.mock_file_store, cleanup=True, tile_size=2000)
-        processor.preprocess("invalid_data_id")
+        processor.preprocess_eea_datasets("invalid_data_id")
 
         mock_log.error.assert_called()
         mock_cleanup_dir.assert_not_called()
@@ -132,7 +132,7 @@ class FileProcessorTest(unittest.TestCase):
             "/mock/path/product_id|dataset_id2/file_2.tif",
         ]
         processor = FileProcessor(self.file_store, cleanup=True)
-        processor.preprocess(self.mock_data_id)
+        processor.preprocess_eea_datasets(self.mock_data_id)
 
         mock_log.debug.assert_not_called()
         mock_merge_and_save.assert_called()

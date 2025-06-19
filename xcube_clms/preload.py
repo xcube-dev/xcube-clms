@@ -24,7 +24,7 @@ import time
 from typing import Any
 
 import fsspec
-from xcube.core.store import PreloadedDataStore, new_data_store
+from xcube.core.store import PreloadedDataStore
 from xcube.core.store.preload import ExecutorPreloadHandle
 from xcube.core.store.preload import PreloadState
 from zappend.api import zappend
@@ -136,7 +136,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                             f"Processing now...",
                         )
                     )
-                    self._file_processor.preprocess(data_id)
+                    self._file_processor.preprocess_eea_datasets(data_id)
                     self.notify(
                         PreloadState(
                             data_id=data_id,
@@ -204,7 +204,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                     )
 
                 # To avoid getting too many HTTP requests error from the server
-                if i % 200 == 0:
+                if (i + 1) % 200 == 0:
                     time.sleep(3)
                 time.sleep(delay)
 
@@ -230,23 +230,18 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             self.notify(
                 PreloadState(
                     data_id=data_id,
-                    progress=0.95,
-                    message="Writing to zarr complete. Postprocessing",
+                    progress=0.85,
+                    message="Writing to zarr complete. Preprocessing...",
                 )
             )
 
-            # TODO: Move to processor
-            file_data_store = new_data_store("file", root=self._cache_root)
-            raw_dataset = file_data_store.open_data(raw_filename)
-            final_dataset = raw_dataset.chunk(self.tile_size)
-            file_data_store.write_data(final_dataset, data_id + ".zarr")
-            file_data_store.delete_data(raw_filename)
+            self._file_processor.preprocess_legacy_datasets(data_id)
 
             self.notify(
                 PreloadState(
                     data_id=data_id,
                     progress=1.0,
-                    message="Preloading complete",
+                    message="Preloading complete.",
                 )
             )
 
