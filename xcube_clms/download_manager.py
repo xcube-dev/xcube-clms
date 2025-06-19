@@ -184,9 +184,9 @@ class DownloadTaskManager:
             )
             response = get_response_of_type(response_data, "json")
             task_ids = response.get(_TASK_IDS_KEY)
-            assert (
-                len(task_ids) == 1
-            ), f"Expected API response with 1 task_id, got {len(task_ids)}"
+            assert len(task_ids) == 1, (
+                f"Expected API response with 1 task_id, got {len(task_ids)}"
+            )
             task_id = task_ids[0].get(_TASK_ID_KEY)
             LOG.debug(f"Download Requested with Task ID : {task_id}")
             return task_id
@@ -335,9 +335,9 @@ class DownloadTaskManager:
         Notes:
         """
         if dataset_id:
-            assert (
-                file_id is not None
-            ), "File ID is missing when dataset_id is provided."
+            assert file_id is not None, (
+                "File ID is missing when dataset_id is provided."
+            )
             if task_id:
                 LOG.warning(
                     "task_id provided will be ignored as dataset_id "
@@ -499,7 +499,6 @@ class DownloadTaskManager:
         if not self.fs.exists(dir_path):
             self.fs.makedirs(dir_path, exist_ok=True)
         if not self.fs.isfile(filename):
-
             for attempt in range(1, _MAX_RETRIES + 1):
                 try:
                     response = make_api_request(url, timeout=600, stream=True)
