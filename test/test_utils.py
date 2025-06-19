@@ -22,16 +22,20 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
+import xarray as xr
 from requests import HTTPError
 from requests import JSONDecodeError
 from requests import RequestException
 from requests import Response
 from requests import Timeout
+from xcube.core.store import DataStoreError
 
 from xcube_clms.utils import (
     get_response_of_type,
     make_api_request,
     build_api_url,
+    get_spatial_dims,
 )
 
 url = "http://example.com/api"
@@ -235,3 +239,18 @@ class UtilsTest(unittest.TestCase):
         expected_url = "http://example.com/api/data"
         result = build_api_url(url, api_endpoint)
         self.assertEqual(result, expected_url)
+
+    def test_get_spatial_dims_lat_lon(self):
+        ds = xr.Dataset(coords={"lat": [0, 1], "lon": [10, 20]})
+        y, x = get_spatial_dims(ds)
+        assert (y, x) == ("lat", "lon")
+
+    def test_get_spatial_dims_y_x(self):
+        ds = xr.Dataset(coords={"y": [0, 1], "x": [10, 20]})
+        y, x = get_spatial_dims(ds)
+        assert (y, x) == ("y", "x")
+
+    def test_get_spatial_dims_invalid(self):
+        ds = xr.Dataset(coords={"row": [0, 1], "col": [10, 20]})
+        with pytest.raises(DataStoreError):
+            get_spatial_dims(ds)
