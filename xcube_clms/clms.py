@@ -197,7 +197,7 @@ class Clms:
                 f"Expected 1 crs, got {len(crs)}. Outputting the first element."
             )
 
-        return dict(time_range=time_range, crs=crs[0] if crs else None)
+        return
 
     def preload_data(self, *data_ids: str, **preload_params) -> PreloadedDataStore:
         """Preloads the data into a cache for specified data IDs with optional

@@ -21,7 +21,7 @@
 
 import tempfile
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import fsspec
@@ -43,7 +43,6 @@ from xcube_clms.constants import DOWNLOAD_ENDPOINT
 from xcube_clms.constants import LOG
 from xcube_clms.constants import PENDING
 from xcube_clms.constants import TASK_STATUS_ENDPOINT
-from xcube_clms.constants import TIME_TO_EXPIRE
 from xcube_clms.utils import build_api_url
 from xcube_clms.utils import get_response_of_type
 from xcube_clms.utils import make_api_request
@@ -184,9 +183,9 @@ class DownloadTaskManager:
             )
             response = get_response_of_type(response_data, "json")
             task_ids = response.get(_TASK_IDS_KEY)
-            assert len(task_ids) == 1, (
-                f"Expected API response with 1 task_id, got {len(task_ids)}"
-            )
+            assert (
+                len(task_ids) == 1
+            ), f"Expected API response with 1 task_id, got {len(task_ids)}"
             task_id = task_ids[0].get(_TASK_ID_KEY)
             LOG.debug(f"Download Requested with Task ID : {task_id}")
             return task_id
@@ -335,9 +334,9 @@ class DownloadTaskManager:
         Notes:
         """
         if dataset_id:
-            assert file_id is not None, (
-                "File ID is missing when dataset_id is provided."
-            )
+            assert (
+                file_id is not None
+            ), "File ID is missing when dataset_id is provided."
             if task_id:
                 LOG.warning(
                     "task_id provided will be ignored as dataset_id "
@@ -416,8 +415,10 @@ class DownloadTaskManager:
             data_id: Unique identifier of the dataset.
         """
         LOG.debug(f"Downloading zip file from {download_url}")
+        print(f"Downloading zip file from {download_url}")
 
         response = make_api_request(download_url, timeout=600, stream=True)
+        print("after api request", response)
         chunk_size = 1024 * 1024  # 1 MB chunks
 
         with tempfile.NamedTemporaryFile(mode="wb", delete=True) as temp_file:
@@ -550,62 +551,3 @@ class DownloadTaskManager:
                     filename = item[_NAME_KEY]
                     geo_file.append(filename)
         return geo_file
-
-
-def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
-    """Generates download information for a specific dataset ID and file ID.
-
-    This function creates a dictionary containing dataset and file IDs,
-    formatted as required by the CLMS API.
-
-    Args:
-        dataset_id: The identifier for the dataset product.
-        file_id: The identifier for the file within the dataset product.
-
-    Returns:
-        A dictionary containing the dataset and file IDs.
-    """
-    return {
-        "Datasets": [
-            {
-                "DatasetID": dataset_id,
-                "FileID": file_id,
-            }
-        ]
-    }
-
-
-def get_authorization_header(access_token: str) -> dict:
-    """Creates an authorization header using the provided access token.
-
-    This function generates the HTTP authorization header required by the CLMS
-    API requests, formatted with the Bearer token.
-
-    Args:
-        access_token: The access token to include in the header.
-
-    Returns:
-        A dictionary containing the authorization header.
-    """
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-def has_expired(download_available_time: str) -> bool:
-    """Checks if the download availability time has expired.
-
-    This function compares the provided time against the current time to
-    determine whether the download window has expired.
-
-    Args:
-        download_available_time: The string representing the timestamp when the
-        download was made available.
-
-    Returns:
-        True if the download window has expired, otherwise False.
-    """
-    given_time = datetime.fromisoformat(download_available_time)
-    current_time = datetime.now()
-    if (current_time - given_time) > timedelta(hours=TIME_TO_EXPIRE):
-        return True
-    else:
-        return False

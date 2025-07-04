@@ -20,6 +20,7 @@
 # SOFTWARE.
 
 import logging
+from typing import Final
 
 DATA_STORE_ID = "clms"
 
@@ -46,15 +47,17 @@ ALL_DATASET_SOURCES = [
     "HOTSPOTS",
     "VITO_Geotiff_LSP",
     "WEKEO",
+    "EEA",
 ]
-SUPPORTED_NON_EEA_DATASET_SOURCES = ["LEGACY"]
-
+SUPPORTED_DATASET_SOURCES = ["eea", "legacy"]
 # Headers
 ACCEPT_HEADER = {"Accept": "application/json"}
 CONTENT_TYPE_HEADER = {"Content-Type": "application/json"}
 
 # Separator for creating data id
 DATA_ID_SEPARATOR = "|"
+
+PREFERRED_CHUNK_SIZE: Final = 2000
 
 # Request status
 PENDING = "PENDING"

@@ -21,7 +21,7 @@
 
 import threading
 import time
-from typing import Any
+from typing import Any, Protocol, Dict
 
 import fsspec
 from xcube.core.store import PreloadedDataStore
@@ -29,13 +29,33 @@ from xcube.core.store.preload import ExecutorPreloadHandle
 from xcube.core.store.preload import PreloadState
 from zappend.api import zappend
 
-from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import CANCELLED, DOWNLOAD_FOLDER, DATA_ID_SEPARATOR
 from xcube_clms.constants import COMPLETE
 from xcube_clms.constants import RETRY_TIMEOUT
-from xcube_clms.download_manager import DownloadTaskManager
-from xcube_clms.processor import FileProcessor
 from xcube_clms.processor import cleanup_dir
+from xcube_clms.utils import download_zip_data, get_tile_size
+
+
+class PreloadOperations(Protocol):
+    def request_download(self, data_id, item: dict, product: dict) -> list[str]:
+        """Request download URLs for given data ID maps"""
+        ...
+
+    def prepare_request(self, data_id: str) -> tuple[str, Dict]:
+        """Prepare request for a data ID"""
+        ...
+
+    def get_current_requests_status(
+        self,
+        dataset_id: str | None = None,
+        file_id: str | None = None,
+        task_id: str | None = None,
+    ) -> tuple[str, str]:
+        """Checks the status of existing download request task."""
+
+    def get_download_url(self, task_id: str) -> tuple[str, int]: ...
+
+    def preprocess_data(self, data_id): ...
 
 
 class ClmsPreloadHandle(ExecutorPreloadHandle):
@@ -50,8 +70,8 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         self,
         data_id_maps: dict[str, dict[str, dict[str, Any]]],
         url: str,
-        credentials: dict,
         cache_store: PreloadedDataStore,
+        operations: PreloadOperations,
         **preload_params,
     ) -> None:
         self.data_id_maps = data_id_maps
@@ -60,20 +80,10 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
         self._cache_root = cache_store.root
         self._cache_fs: fsspec.AbstractFileSystem = cache_store.fs
 
-        self._token_handler = ClmsApiTokenHandler(credentials=credentials)
-        self.cleanup = preload_params.pop("cleanup", True)
-        self.tile_size = preload_params.pop("tile_size", None)
-        self._file_processor = FileProcessor(
-            cache_store=self._cache_store,
-            cleanup=self.cleanup,
-            tile_size=self.tile_size,
-        )
-        self._download_manager = DownloadTaskManager(
-            token_handler=self._token_handler,
-            url=self._url,
-            cache_store=self._cache_store,
-        )
-
+        self.operations = operations
+        self.cleanup = preload_params.get("cleanup", True)
+        tile_size = preload_params.get("tile_size", None)
+        self.tile_size = get_tile_size(tile_size)
         self._download_folder = self._cache_fs.sep.join(
             [self._cache_root, DOWNLOAD_FOLDER]
         )
@@ -97,11 +107,11 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
 
         # EEA datasets
         if DATA_ID_SEPARATOR in data_id:
-            task_id = self._download_manager.request_download(
+            task_id = self.operations.request_download(
                 data_id=data_id,
                 item=data_id_info.get("item"),
                 product=data_id_info.get("product"),
-            )
+            )[0]
 
             self.notify(
                 PreloadState(
@@ -113,9 +123,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
             status_event.set()
 
             while status_event.is_set():
-                status, _ = self._download_manager.get_current_requests_status(
-                    task_id=task_id
-                )
+                status, _ = self.operations.get_current_requests_status(task_id=task_id)
                 if status == COMPLETE:
                     status_event.clear()
                     self.notify(
@@ -126,8 +134,8 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                             f"Downloading and extracting now...",
                         )
                     )
-                    download_url, _ = self._download_manager.get_download_url(task_id)
-                    self._download_manager.download_zip_data(download_url, data_id)
+                    download_url, _ = self.operations.get_download_url(task_id)
+                    download_zip_data(self._cache_store, download_url, data_id)
                     self.notify(
                         PreloadState(
                             data_id=data_id,
@@ -136,7 +144,7 @@ class ClmsPreloadHandle(ExecutorPreloadHandle):
                             f"Processing now...",
                         )
                     )
-                    self._file_processor.preprocess_eea_datasets(data_id)
+                    self.operations.preprocess_data(data_id)
                     self.notify(
                         PreloadState(
                             data_id=data_id,

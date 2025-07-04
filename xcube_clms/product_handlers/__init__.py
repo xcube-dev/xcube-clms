@@ -19,7 +19,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from xcube_clms.product_handlers.eea import EeaProductHandler
-from xcube_clms.product_handlers.legacy import LegacyProductHandler
 
-prod_handlers = {"eea": EeaProductHandler, "legacy": LegacyProductHandler}
+def get_prod_handlers() -> dict:
+    from xcube_clms.product_handlers.eea import EeaProductHandler
+
+    # from xcube_clms.product_handlers.legacy import LegacyProductHandler
+
+    return {
+        "eea": EeaProductHandler
+        # , "legacy": LegacyProductHandler
+    }

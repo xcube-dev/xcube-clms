@@ -22,12 +22,11 @@
 from typing import Tuple, Iterator, Container, Any
 
 import xarray as xr
-from xcube.core.store import DATASET_TYPE, PreloadedDataStore
+from xcube.core.store import DATASET_TYPE, PreloadedDataStore, new_data_store
 from xcube.core.store import DataDescriptor
 from xcube.core.store import DataStore
 from xcube.core.store import DataTypeLike
 from xcube.core.store import DatasetDescriptor
-from xcube.core.store import MutableDataStore
 from xcube.util.jsonschema import (
     JsonBooleanSchema,
     JsonComplexSchema,
@@ -37,19 +36,56 @@ from xcube.util.jsonschema import (
 from xcube.util.jsonschema import JsonObjectSchema
 from xcube.util.jsonschema import JsonStringSchema
 
-from .clms import Clms
-from .constants import DEFAULT_PRELOAD_CACHE_FOLDER
-from .utils import assert_valid_data_type
+from .api_token_handler import ClmsApiTokenHandler
+from .constants import (
+    DEFAULT_PRELOAD_CACHE_FOLDER,
+    LOG,
+    SUPPORTED_DATASET_SOURCES,
+    DATA_ID_SEPARATOR,
+)
+from .product_handler import ProductHandler
+from .product_handlers.eea import EeaProductHandler
+from .utils import assert_valid_data_type, fetch_all_datasets, get_extracted_component
+
+_CLMS_DATA_ID_KEY = "id"
+_DOWNLOADABLE_FILES_KEY = "downloadable_files"
+_DATASET_DOWNLOADABLE = "downloadable_full_dataset"
+_DATASET_DOWNLOAD_INFORMATION = "dataset_download_information"
+_FULL_SOURCE = "full_source"
+_FILE_KEY = "file"
+_CRS_KEY = "coordinateReferenceSystemList"
+_START_TIME_KEY = "temporalExtentStart"
+_END_TIME_KEY = "temporalExtentEnd"
+_BATCH = "batching"
+_NEXT = "next"
+_ITEMS_KEY = "items"
 
 
 class ClmsDataStore(DataStore):
     """CLMS implementation of the data store defined in the ``xcube_clms``
     plugin."""
 
-    def __init__(self, **clms_kwargs):
-        self._clms = Clms(**clms_kwargs)
-        self.cache_store: MutableDataStore = self._clms.cache_store
+    def __init__(
+        self,
+        credentials: dict,
+        cache_store_id: str = "file",
+        cache_store_params: dict | None = None,
+    ):
+        self.cache_store_params = cache_store_params
+        if cache_store_params is None or cache_store_params.get("root") is None:
+            cache_store_params = dict(root=DEFAULT_PRELOAD_CACHE_FOLDER)
+        cache_store_params["max_depth"] = cache_store_params.pop("max_depth", 2)
+        self.cache_store: PreloadedDataStore = new_data_store(
+            cache_store_id, **cache_store_params
+        )
+        self.cache_store_id = cache_store_id
+
+        self.fs = self.cache_store.fs
+        self._cache_root = self.cache_store.root
+        self.credentials = credentials
         self.data_opener_id = f"dataset:zarr:{self.cache_store.protocol}"
+        self._datasets_info: list[dict[str, Any]] = fetch_all_datasets()
+        self._api_token_handler = ClmsApiTokenHandler(credentials=credentials)
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -105,21 +141,66 @@ class ClmsDataStore(DataStore):
         include_attrs: Container[str] | bool = False,
     ) -> Iterator[str | tuple[str, dict[str, Any]]]:
         assert_valid_data_type(data_type)
-        data_ids = self._clms.get_data_ids(include_attrs)
-        for data_id in data_ids:
-            if include_attrs:
-                yield data_id[0], data_id[1]
-            else:
-                yield data_id
+        for item in self._datasets_info:
+            if item[_DATASET_DOWNLOADABLE]:
+                if len(item[_DATASET_DOWNLOAD_INFORMATION]) > 0:
+                    dataset_download_info = item[_DATASET_DOWNLOAD_INFORMATION][
+                        _ITEMS_KEY
+                    ][0]
+                    if dataset_download_info[_FULL_SOURCE] == "EEA":
+                        for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
+                            if _FILE_KEY in i and i[_FILE_KEY] != "":
+                                data_id = f"{item[_CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
+                                if not include_attrs:
+                                    yield data_id
+                                elif isinstance(include_attrs, bool) and include_attrs:
+                                    yield data_id, i
+                                elif isinstance(include_attrs, list):
+                                    filtered_attrs = {
+                                        attr: i[attr]
+                                        for attr in include_attrs
+                                        if attr in i
+                                    }
+                                    yield data_id, filtered_attrs
+                    elif (
+                        dataset_download_info[_FULL_SOURCE].lower()
+                        in SUPPORTED_DATASET_SOURCES
+                    ):
+                        data_id = f"{item['id']}"
+                        if not include_attrs:
+                            yield data_id
+                        elif isinstance(include_attrs, bool) and include_attrs:
+                            yield data_id, dataset_download_info
+                        elif isinstance(include_attrs, list):
+                            filtered_attrs = {
+                                attr: dataset_download_info[attr]
+                                for attr in include_attrs
+                                if attr in dataset_download_info
+                            }
+                            yield data_id, filtered_attrs
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
-        return self._clms.has_data(data_id, data_type)
+        handler = ProductHandler.guess(
+            data_id,
+            self._datasets_info,
+            self.cache_store,
+            self._api_token_handler,
+        )
+        return handler.has_data(data_id, data_type)
 
     def describe_data(
         self, data_id: str, data_type: DataTypeLike = None
     ) -> DataDescriptor:
         assert_valid_data_type(data_type)
-        metadata = self._clms.describe_data(data_id)
+        item = get_extracted_component(self._datasets_info, data_id)
+        crs = item.get(_CRS_KEY, [])
+        time_range = (item.get(_START_TIME_KEY), item.get(_END_TIME_KEY))
+
+        if len(crs) > 1:
+            LOG.warning(
+                f"Expected 1 crs, got {len(crs)}. Outputting the first element."
+            )
+        metadata = dict(time_range=time_range, crs=crs[0] if crs else None)
         return DatasetDescriptor(data_id, **metadata)
 
     def get_data_opener_ids(
@@ -142,7 +223,13 @@ class ClmsDataStore(DataStore):
     ) -> xr.Dataset:
         schema = self.get_open_data_params_schema()
         schema.validate_instance(open_params)
-        return self._clms.open_data(data_id, opener_id, **open_params)
+        handler = ProductHandler.guess(
+            data_id,
+            self._datasets_info,
+            self.cache_store,
+            self._api_token_handler,
+        )
+        return handler.open_data(data_id, **open_params)
 
     def search_data(
         self, data_type: DataTypeLike = None, **search_params
@@ -160,12 +247,28 @@ class ClmsDataStore(DataStore):
         *data_ids: str,
         **preload_params,
     ) -> PreloadedDataStore:
+        schema = self.get_preload_data_params_schema()
+        schema.validate_instance(preload_params)
+        handlers = []
         for data_id in data_ids:
             if not self.has_data(data_id):
                 raise ValueError(f"The requested data_id {data_id} is invalid.")
-        schema = self.get_preload_data_params_schema()
-        schema.validate_instance(preload_params)
-        return self._clms.preload_data(*data_ids, **preload_params)
+            handle = ProductHandler.guess(
+                data_id,
+                self._datasets_info,
+                self.cache_store,
+                self._api_token_handler,
+            )
+            if not isinstance(handle, EeaProductHandler):
+                raise ValueError(
+                    f"The requested data_id {data_id} cannot be "
+                    f"preloaded. Try using open_data()"
+                )
+            handlers.append(handle)
+
+        # Using the first one, because they are all the same if they are all
+        # are valid and need to be preloaded.
+        return handlers[0].preload_data(*data_ids, **preload_params)
 
     def get_preload_data_params_schema(self) -> JsonObjectSchema:
         params = dict(
