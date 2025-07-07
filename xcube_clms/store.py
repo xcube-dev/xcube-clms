@@ -211,9 +211,13 @@ class ClmsDataStore(DataStore):
     def get_open_data_params_schema(
         self, data_id: str = None, opener_id: str = None
     ) -> JsonObjectSchema:
-        if opener_id is None:
-            opener_id = self.data_opener_id
-        return self.cache_store.get_open_data_params_schema(data_id, opener_id)
+        handler = ProductHandler.guess(
+            data_id,
+            self._datasets_info,
+            self.cache_store,
+            self._api_token_handler,
+        )
+        return handler.get_open_data_params_schema(data_id)
 
     def open_data(
         self,
@@ -221,7 +225,7 @@ class ClmsDataStore(DataStore):
         opener_id: str = None,
         **open_params,
     ) -> xr.Dataset:
-        schema = self.get_open_data_params_schema()
+        schema = self.get_open_data_params_schema(data_id)
         schema.validate_instance(open_params)
         handler = ProductHandler.guess(
             data_id,

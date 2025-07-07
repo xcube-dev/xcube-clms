@@ -77,13 +77,6 @@ _ZARR_FORMAT = ".zarr"
 class EeaProductHandler(ProductHandler):
     """ """
 
-    def get_open_data_params_schema(self, data_id: str = None) -> JsonObjectSchema:
-        pass
-
-    @property
-    def product_type(self):
-        return "eea"
-
     def __init__(
         self,
         cache_store=None,
@@ -99,6 +92,39 @@ class EeaProductHandler(ProductHandler):
         )
         self.cleanup = None
         self.tile_size = None
+
+    @classmethod
+    def product_type(cls):
+        return "eea"
+
+    def has_data(self, data_id: str, data_type: DataTypeLike = None):
+        dataset = None
+        if is_valid_data_type(data_type):
+            if DATA_ID_SEPARATOR in data_id:
+                dataset = get_extracted_component(
+                    self.datasets_info, data_id, item_type="item"
+                )
+            return bool(dataset)
+        return False
+
+    def get_open_data_params_schema(self, data_id: str = None) -> JsonObjectSchema:
+        return self.cache_store.get_open_data_params_schema(data_id)
+
+    def open_data(
+        self,
+        data_id: str,
+        **open_params,
+    ) -> Any:
+        if not self.cache_store.has_data(data_id):
+            raise FileNotFoundError(
+                f"No cached data found for data_id: "
+                f"{data_id}. Please preload the data "
+                f"first using the `preload_data()` method."
+            )
+        opener_id = open_params.get("opener_id")
+        return self.cache_store.open_data(
+            data_id=data_id, opener_id=opener_id, **open_params
+        )
 
     def preload_data(
         self,
@@ -127,35 +153,14 @@ class EeaProductHandler(ProductHandler):
         )
         return self.cache_store
 
-    def open_data(
-        self,
-        data_id: str,
-        **open_params,
-    ) -> Any:
-        if not self.cache_store.has_data(data_id):
-            raise FileNotFoundError(
-                f"No cached data found for data_id: "
-                f"{data_id}. Please preload the data "
-                f"first using the `preload_data()` method."
-            )
-        opener_id = open_params.pop("opener_id")
-        return self.cache_store.open_data(
-            data_id=data_id, opener_id=opener_id, **open_params
-        )
-
-    def has_data(self, data_id: str, data_type: DataTypeLike = None):
-        dataset = None
-        if is_valid_data_type(data_type):
-            if DATA_ID_SEPARATOR in data_id:
-                dataset = get_extracted_component(
-                    self.datasets_info, data_id, item_type="item"
-                )
-            return bool(dataset)
-        return False
-
-    def request_download(self, data_id, item: dict, product: dict) -> list[str]:
+    def request_download(self, data_id) -> list[str]:
         self.api_token_handler.refresh_token()
-
+        item = get_extracted_component(
+            datasets_info=self.datasets_info, data_id=data_id, item_type="item"
+        )
+        product = get_extracted_component(
+            datasets_info=self.datasets_info, data_id=data_id
+        )
         # This is to make sure that there are pre-packaged files available for
         # download. Without this, the API throws the following error: Error,
         # the FileID is not valid.
@@ -373,7 +378,7 @@ class EeaProductHandler(ProductHandler):
 
         return _UNDEFINED, ""
 
-    def preprocess_data(self, data_id: str) -> None:
+    def preprocess_data(self, data_id: str, **preprocess_params) -> None:
         """Performs preprocessing on the files for a given data ID.
 
         This includes preparing files for merging, merging them based on their
@@ -391,13 +396,9 @@ class EeaProductHandler(ProductHandler):
 
         target_folder = self.fs.sep.join([self.download_folder, data_id])
         files = [entry.split("/")[-1] for entry in self.fs.ls(target_folder)]
-        print("files::::", files)
         if len(files) == 1:
             LOG.debug("Converting the file to zarr format.")
             cache_data_id = self.fs.sep.join([DOWNLOAD_FOLDER, data_id, files[0]])
-            print("cache_Data_id:::::", cache_data_id)
-            print("tile_size:::::", self.tile_size)
-            print("data_id:::::", data_id)
             data = self.cache_store.open_data(cache_data_id)
             new_cache_data_id = data_id + _ZARR_FORMAT
             data = chunk_dataset(

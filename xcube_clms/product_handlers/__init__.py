@@ -22,10 +22,9 @@
 
 def get_prod_handlers() -> dict:
     from xcube_clms.product_handlers.eea import EeaProductHandler
-
-    # from xcube_clms.product_handlers.legacy import LegacyProductHandler
+    from xcube_clms.product_handlers.legacy import LegacyProductHandler
 
     return {
-        "eea": EeaProductHandler
-        # , "legacy": LegacyProductHandler
+        EeaProductHandler.product_type(): EeaProductHandler,
+        LegacyProductHandler.product_type(): LegacyProductHandler,
     }

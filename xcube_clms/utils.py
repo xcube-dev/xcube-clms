@@ -20,6 +20,7 @@
 # SOFTWARE.
 import re
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Any, Union, Literal
 from urllib.parse import urlencode
@@ -634,3 +635,35 @@ def get_tile_size(tile_size):
         tile_size = tile_size
 
     return tile_size
+
+
+def extract_and_filter_dates(urls, time_range):
+    date_pattern = re.compile(r"(\d{8})")
+
+    start_date = datetime.strptime(time_range[0], "%Y-%m-%d")
+    end_date = datetime.strptime(time_range[1], "%Y-%m-%d")
+
+    dated_urls = []
+    for url in urls:
+        match = date_pattern.search(url)
+        if match:
+            date_str = match.group(1)
+            date_obj = datetime.strptime(date_str, "%Y%m%d")
+            dated_urls.append((date_obj, url))
+
+    filtered_sorted = [
+        url
+        for date_obj, url in sorted(dated_urls)
+        if start_date <= date_obj <= end_date
+    ]
+
+    return filtered_sorted
+
+
+def detect_format(url):
+    if url.endswith(".nc"):
+        return "netcdf"
+    elif url.endswith((".tif", ".tiff")):
+        return "geotiff"
+    else:
+        return "unknown"
