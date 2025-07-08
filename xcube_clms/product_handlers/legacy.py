@@ -146,7 +146,7 @@ class LegacyProductHandler(ProductHandler):
         return filtered_urls
 
     def open_data(self, data_id: str, **open_params) -> Any:
-        urls = self.filter_urls(data_id)
+        urls = self.filter_urls(data_id, **open_params)
         fmt = detect_format(urls[0])
         if fmt == "netcdf":
             return xr.open_mfdataset(urls, engine="h5netcdf")
