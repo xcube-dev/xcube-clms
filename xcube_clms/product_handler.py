@@ -34,7 +34,6 @@ from xcube.util.jsonschema import JsonObjectSchema
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import SUPPORTED_DATASET_SOURCES, DATA_ID_SEPARATOR
-from xcube_clms.preload import PreloadOperations
 from xcube_clms.product_handlers import get_prod_handlers
 
 
@@ -54,7 +53,7 @@ _ITEMS_KEY = "items"
 _ZARR_FORMAT = ".zarr"
 
 
-class ProductHandler(DataOpener, DataPreloader, PreloadOperations, ABC):
+class ProductHandler(DataOpener, DataPreloader, ABC):
     """Product handler class to handle various sources of products from the
     CLMS API
     """
@@ -157,17 +156,17 @@ class ProductHandler(DataOpener, DataPreloader, PreloadOperations, ABC):
         return JsonObjectSchema(additional_properties=False)
 
     @abstractmethod
+    def has_data(self, data_id, data_type: DataTypeLike = None):
+        pass
+
+    @abstractmethod
     def request_download(self, data_id: str) -> list[str]:
         pass
 
     @abstractmethod
-    def prepare_request(self, data_id: str) -> tuple[str, dict]:
+    def prepare_request(self, data_id: str) -> list[str]:
         pass
 
     @abstractmethod
-    def preprocess_data(self, data_id: str, **preprocess_params):
-        pass
-
-    @abstractmethod
-    def has_data(self, data_id, data_type: DataTypeLike = None):
+    def preprocess_data(self, data_id: str) -> list[str]:
         pass

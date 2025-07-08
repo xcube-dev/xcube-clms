@@ -458,10 +458,8 @@ def download_zip_data(
     """
     LOG.debug(f"Downloading zip file from {download_url}")
 
-    print(f"Downloading zip file from {download_url}")
     headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://source-website.com"}
     response = make_api_request(download_url, timeout=600, stream=True, headers=headers)
-    print("after api request", response)
     chunk_size = 1024 * 1024  # 1 MB chunks
 
     with tempfile.NamedTemporaryFile(mode="wb", delete=True) as temp_file:

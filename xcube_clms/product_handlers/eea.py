@@ -1,3 +1,5 @@
+import threading
+import time
 from collections import defaultdict
 from datetime import timedelta, datetime
 from math import ceil
@@ -7,7 +9,7 @@ import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import PreloadHandle, DataTypeLike
+from xcube.core.store import PreloadHandle, DataTypeLike, PreloadState
 from xcube.util.jsonschema import JsonObjectSchema
 
 from xcube_clms.constants import (
@@ -25,10 +27,10 @@ from xcube_clms.constants import (
     DOWNLOAD_ENDPOINT,
     TIME_TO_EXPIRE,
     DOWNLOAD_FOLDER,
+    RETRY_TIMEOUT,
 )
 
 from xcube_clms.preload import ClmsPreloadHandle
-from xcube_clms.processor import cleanup_dir
 from xcube_clms.product_handler import ProductHandler
 from xcube_clms.utils import (
     get_extracted_component,
@@ -40,6 +42,8 @@ from xcube_clms.utils import (
     get_dataset_download_info,
     find_easting_northing,
     get_tile_size,
+    download_zip_data,
+    cleanup_dir,
 )
 
 _UID_KEY = "UID"
@@ -134,7 +138,7 @@ class EeaProductHandler(ProductHandler):
         self.cleanup = preload_params.get("cleanup", True)
         tile_size = preload_params.get("tile_size", None)
         self.tile_size = get_tile_size(tile_size)
-        data_id_maps = {
+        self.data_id_maps = {
             data_id: {
                 ITEM_KEY: get_extracted_component(
                     self.datasets_info, data_id, item_type="item"
@@ -145,13 +149,76 @@ class EeaProductHandler(ProductHandler):
         }
         # noinspection PyPropertyAccess
         self.cache_store.preload_handle = ClmsPreloadHandle(
-            data_id_maps=data_id_maps,
+            data_id_maps=self.data_id_maps,
             url=CLMS_API_URL,
             cache_store=self.cache_store,
-            operations=self,
+            preload_data=self._preload_data,
             **preload_params,
         )
         return self.cache_store
+
+    def _preload_data(self, handle, data_id):
+        status_event = threading.Event()
+
+        # EEA datasets
+        if DATA_ID_SEPARATOR in data_id:
+            task_id = self.request_download(
+                data_id=data_id,
+            )[0]
+
+            handle.notify(
+                PreloadState(
+                    data_id=data_id,
+                    progress=0.1,
+                    message=f"Task ID {task_id}: Download request in queue.",
+                )
+            )
+            status_event.set()
+
+            while status_event.is_set():
+                status, _ = self._get_current_requests_status(task_id=task_id)
+                if status == COMPLETE:
+                    status_event.clear()
+                    handle.notify(
+                        PreloadState(
+                            data_id=data_id,
+                            progress=0.4,
+                            message=f"Task ID {task_id}: Download link created. "
+                            f"Downloading and extracting now...",
+                        )
+                    )
+                    download_url, _ = self._get_download_url(task_id)
+                    download_zip_data(self.cache_store, download_url, data_id)
+                    handle.notify(
+                        PreloadState(
+                            data_id=data_id,
+                            progress=0.8,
+                            message=f"Task ID {task_id}: Extraction complete. "
+                            f"Processing now...",
+                        )
+                    )
+                    self.preprocess_data(data_id)
+                    handle.notify(
+                        PreloadState(
+                            data_id=data_id,
+                            progress=1.0,
+                            message=f"Task ID {task_id}: Preloading Complete.",
+                        )
+                    )
+                    return
+                if status in CANCELLED:
+                    status_event.clear()
+                    handle.notify(
+                        PreloadState(
+                            data_id=data_id,
+                            message=f"Task ID {task_id}: Download request was cancelled by the user from "
+                            "the Land Copernicus UI.",
+                        )
+                    )
+                    handle.cancel()
+                    return
+
+                time.sleep(RETRY_TIMEOUT)
 
     def request_download(self, data_id) -> list[str]:
         self.api_token_handler.refresh_token()
@@ -173,9 +240,7 @@ class EeaProductHandler(ProductHandler):
         if (path == "") and (source == ""):
             LOG.info(f"No prepackaged downloadable items available for {data_id}")
 
-        status, task_id = self.get_current_requests_status(
-            dataset_id=product[_UID_KEY], file_id=item[_ID_KEY]
-        )
+        status, task_id = self._get_current_requests_status(data_id=data_id)
 
         if status == COMPLETE or status == PENDING:
             LOG.debug(
@@ -236,7 +301,7 @@ class EeaProductHandler(ProductHandler):
 
         return url, headers
 
-    def get_download_url(self, task_id: str) -> tuple[str, int]:
+    def _get_download_url(self, task_id: str) -> tuple[str, int]:
         """Retrieves the download URL and file size for a completed download
         task.
 
@@ -278,10 +343,9 @@ class EeaProductHandler(ProductHandler):
                 "No download url available yet."
             )
 
-    def get_current_requests_status(
+    def _get_current_requests_status(
         self,
-        dataset_id: str | None = None,
-        file_id: str | None = None,
+        data_id: str | None = None,
         task_id: str | None = None,
     ) -> tuple[str, str]:
         """Checks the status of existing download request task.
@@ -294,9 +358,8 @@ class EeaProductHandler(ProductHandler):
         priorities.
 
         Args:
-            dataset_id: Dataset ID to filter tasks (optional).
-            file_id: File ID to filter tasks (optional).
-            task_id: Task ID to filter tasks (optional).
+            data_id: Data ID of the the data to be requested (optional).
+            task_id: Task ID of the requested dataset (optional).
 
         Returns:
             tuple[str, str]: A tuple containing the status
@@ -304,15 +367,19 @@ class EeaProductHandler(ProductHandler):
 
         Notes:
         """
-        if dataset_id:
-            assert (
-                file_id is not None
-            ), "File ID is missing when dataset_id is provided."
-            if task_id:
-                LOG.warning(
-                    "task_id provided will be ignored as dataset_id "
-                    "and file_id are provided"
-                )
+        dataset_id = None
+        file_id = None
+
+        if data_id and not task_id:
+            item = get_extracted_component(
+                datasets_info=self.datasets_info, data_id=data_id, item_type="item"
+            )
+            product = get_extracted_component(
+                datasets_info=self.datasets_info, data_id=data_id
+            )
+
+            dataset_id = product[_UID_KEY]
+            file_id = item[_ID_KEY]
 
         self.api_token_handler.refresh_token()
         headers = ACCEPT_HEADER.copy()
@@ -341,11 +408,13 @@ class EeaProductHandler(ProductHandler):
                 if status in {"Finished_ok", "Cancelled"}
                 else None
             )  # Only get timestamp for Completed or Cancelled
-            condition = (
-                ((dataset_id == requested_data_id) and (file_id == requested_file_id))
-                if dataset_id
-                else (key == task_id)
-            )
+            if task_id:
+                condition = key == task_id
+            else:
+                condition = (dataset_id == requested_data_id) and (
+                    file_id == requested_file_id
+                )
+
             if condition:
                 current_entry = {
                     "status": status,

@@ -25,7 +25,7 @@ import xarray as xr
 from xcube.core.store import DataTypeLike, PreloadedDataStore
 from xcube.core.store import new_data_store
 
-from .constants import CLMS_API_URL, SUPPORTED_NON_EEA_DATASET_SOURCES
+from .constants import CLMS_API_URL
 from .constants import DATA_ID_SEPARATOR
 from .constants import DEFAULT_PRELOAD_CACHE_FOLDER
 from .constants import ITEM_KEY
