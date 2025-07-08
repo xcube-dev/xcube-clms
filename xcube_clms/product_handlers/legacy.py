@@ -10,6 +10,8 @@ from xcube_clms.constants import (
     GET_DOWNLOAD_FILE_URLS_ENDPOINT,
     ACCEPT_HEADER,
     CONTENT_TYPE_HEADER,
+    UID_KEY,
+    ID_KEY,
 )
 from xcube_clms.product_handler import ProductHandler
 from xcube_clms.utils import (
@@ -17,14 +19,14 @@ from xcube_clms.utils import (
     make_api_request,
     build_api_url,
     get_authorization_header,
-    _CHARACTERISTICS_TEMPORAL_EXTENT,
     get_extracted_component,
-    _UID_KEY,
-    _ID_KEY,
     is_valid_data_type,
     extract_and_filter_dates,
     detect_format,
 )
+
+
+_CHARACTERISTICS_TEMPORAL_EXTENT = "characteristics_temporal_extent"
 
 
 class LegacyProductHandler(ProductHandler):
@@ -78,8 +80,8 @@ class LegacyProductHandler(ProductHandler):
             datasets_info=self.datasets_info, data_id=data_id
         )
 
-        dataset_uid = product[_UID_KEY]
-        file_id = item[_ID_KEY]
+        dataset_uid = product[UID_KEY]
+        file_id = item[ID_KEY]
 
         extra_params = {
             "dataset_uid": dataset_uid,
@@ -111,7 +113,25 @@ class LegacyProductHandler(ProductHandler):
 
         return url, headers
 
-    def preprocess_data(self, data_id, **preprocess_params):
+    def filter_urls(self, data_id, **preprocess_params):
+        """
+        Filters download URLs for a given data ID based on an optional time range.
+
+        This method requests the available download URLs for a data_id and,
+        if a `time_range` is provided in `preprocess_params`, filters the
+        URLs to include only those that fall within the specified time range.
+
+        Args:
+            data_id: The identifier of the dataset.
+            **preprocess_params: Optional parameters, including `time_range` as
+                a tuple (start_date, end_date).
+
+        Returns:
+            A list of filtered download URLs.
+
+        Raises:
+            ValueError: If no URLs match the provided time range.
+        """
         urls = self.request_download(data_id)
         time_range = preprocess_params.get("time_range")
 
@@ -126,7 +146,7 @@ class LegacyProductHandler(ProductHandler):
         return filtered_urls
 
     def open_data(self, data_id: str, **open_params) -> Any:
-        urls = self.preprocess_data(data_id, **open_params)
+        urls = self.filter_urls(data_id)
         fmt = detect_format(urls[0])
         if fmt == "netcdf":
             return xr.open_mfdataset(urls, engine="h5netcdf")

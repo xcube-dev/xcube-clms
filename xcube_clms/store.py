@@ -42,23 +42,22 @@ from .constants import (
     LOG,
     SUPPORTED_DATASET_SOURCES,
     DATA_ID_SEPARATOR,
+    DATASET_DOWNLOAD_INFORMATION,
+    ITEMS_KEY,
+    FULL_SOURCE,
+    DOWNLOADABLE_FILES_KEY,
+    CLMS_DATA_ID_KEY,
 )
 from .product_handler import ProductHandler
 from .product_handlers.eea import EeaProductHandler
 from .utils import assert_valid_data_type, fetch_all_datasets, get_extracted_component
 
-_CLMS_DATA_ID_KEY = "id"
-_DOWNLOADABLE_FILES_KEY = "downloadable_files"
-_DATASET_DOWNLOADABLE = "downloadable_full_dataset"
-_DATASET_DOWNLOAD_INFORMATION = "dataset_download_information"
-_FULL_SOURCE = "full_source"
+
 _FILE_KEY = "file"
 _CRS_KEY = "coordinateReferenceSystemList"
 _START_TIME_KEY = "temporalExtentStart"
 _END_TIME_KEY = "temporalExtentEnd"
-_BATCH = "batching"
-_NEXT = "next"
-_ITEMS_KEY = "items"
+_DATASET_DOWNLOADABLE = "downloadable_full_dataset"
 
 
 class ClmsDataStore(DataStore):
@@ -143,14 +142,14 @@ class ClmsDataStore(DataStore):
         assert_valid_data_type(data_type)
         for item in self._datasets_info:
             if item[_DATASET_DOWNLOADABLE]:
-                if len(item[_DATASET_DOWNLOAD_INFORMATION]) > 0:
-                    dataset_download_info = item[_DATASET_DOWNLOAD_INFORMATION][
-                        _ITEMS_KEY
+                if len(item[DATASET_DOWNLOAD_INFORMATION]) > 0:
+                    dataset_download_info = item[DATASET_DOWNLOAD_INFORMATION][
+                        ITEMS_KEY
                     ][0]
-                    if dataset_download_info[_FULL_SOURCE] == "EEA":
-                        for i in item[_DOWNLOADABLE_FILES_KEY][_ITEMS_KEY]:
+                    if dataset_download_info[FULL_SOURCE] == "EEA":
+                        for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
                             if _FILE_KEY in i and i[_FILE_KEY] != "":
-                                data_id = f"{item[_CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
+                                data_id = f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
                                 if not include_attrs:
                                     yield data_id
                                 elif isinstance(include_attrs, bool) and include_attrs:
@@ -163,7 +162,7 @@ class ClmsDataStore(DataStore):
                                     }
                                     yield data_id, filtered_attrs
                     elif (
-                        dataset_download_info[_FULL_SOURCE].lower()
+                        dataset_download_info[FULL_SOURCE].lower()
                         in SUPPORTED_DATASET_SOURCES
                     ):
                         data_id = f"{item['id']}"

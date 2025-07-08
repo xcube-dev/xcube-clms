@@ -30,6 +30,7 @@ CLMS_API_URL = "https://land.copernicus.eu/api"
 TIME_TO_EXPIRE = 24  # (in hours)
 RETRY_TIMEOUT = 15  # (in seconds)
 
+# Folders
 DEFAULT_PRELOAD_CACHE_FOLDER = "clms_cache/"
 DOWNLOAD_FOLDER = "downloads"
 
@@ -50,6 +51,7 @@ ALL_DATASET_SOURCES = [
     "EEA",
 ]
 SUPPORTED_DATASET_SOURCES = ["eea", "legacy"]
+
 # Headers
 ACCEPT_HEADER = {"Accept": "application/json"}
 CONTENT_TYPE_HEADER = {"Content-Type": "application/json"}
@@ -57,15 +59,23 @@ CONTENT_TYPE_HEADER = {"Content-Type": "application/json"}
 # Separator for creating data id
 DATA_ID_SEPARATOR = "|"
 
+# CLMS METADATA KEYS
+ID_KEY = "@id"
+UID_KEY = "UID"
+ITEM_KEY = "item"
+ITEMS_KEY = "items"
+PRODUCT_KEY = "product"
+FULL_SOURCE = "full_source"
+CLMS_DATA_ID_KEY = "id"
+DOWNLOADABLE_FILES_KEY = "downloadable_files"
+DATASET_DOWNLOAD_INFORMATION = "dataset_download_information"
+
 PREFERRED_CHUNK_SIZE: Final = 2000
 
 # Request status
 PENDING = "PENDING"
 COMPLETE = "COMPLETE"
 CANCELLED = "CANCELLED"
-
-ITEM_KEY = "item"
-PRODUCT_KEY = "product"
 
 # Logging
 LOG = logging.getLogger("xcube.clms")

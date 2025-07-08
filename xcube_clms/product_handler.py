@@ -33,24 +33,15 @@ from xcube.core.store.preload import NullPreloadHandle
 from xcube.util.jsonschema import JsonObjectSchema
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import SUPPORTED_DATASET_SOURCES, DATA_ID_SEPARATOR
+from xcube_clms.constants import (
+    SUPPORTED_DATASET_SOURCES,
+    DATA_ID_SEPARATOR,
+    CLMS_DATA_ID_KEY,
+    DATASET_DOWNLOAD_INFORMATION,
+    ITEMS_KEY,
+    FULL_SOURCE,
+)
 from xcube_clms.product_handlers import get_prod_handlers
-
-
-_CLMS_DATA_ID_KEY = "id"
-_DOWNLOADABLE_FILES_KEY = "downloadable_files"
-_DATASET_DOWNLOADABLE = "downloadable_full_dataset"
-_DATASET_DOWNLOAD_INFORMATION = "dataset_download_information"
-_FULL_SOURCE = "full_source"
-_FILE_KEY = "file"
-_CRS_KEY = "coordinateReferenceSystemList"
-_START_TIME_KEY = "temporalExtentStart"
-_END_TIME_KEY = "temporalExtentEnd"
-_BATCH = "batching"
-_NEXT = "next"
-_ITEMS_KEY = "items"
-
-_ZARR_FORMAT = ".zarr"
 
 
 class ProductHandler(DataOpener, DataPreloader, ABC):
@@ -103,11 +94,11 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
                     clms_data_product_id, dataset_filename = data_id.split(
                         DATA_ID_SEPARATOR
                     )
-                if product[_CLMS_DATA_ID_KEY] == clms_data_product_id:
-                    dataset_download_info = product[_DATASET_DOWNLOAD_INFORMATION][
-                        _ITEMS_KEY
+                if product[CLMS_DATA_ID_KEY] == clms_data_product_id:
+                    dataset_download_info = product[DATASET_DOWNLOAD_INFORMATION][
+                        ITEMS_KEY
                     ][0]
-                    full_source = dataset_download_info.get(_FULL_SOURCE)
+                    full_source = dataset_download_info.get(FULL_SOURCE)
                     return full_source.lower()
             return None
 
@@ -142,7 +133,12 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
 
     @classmethod
     @abstractmethod
-    def product_type(cls):
+    def product_type(cls) -> str:
+        """Returns the product type handled by this class.
+
+        Returns:
+            str: The string identifier for the EEA product type.
+        """
         pass
 
     def preload_data(
@@ -161,12 +157,28 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
 
     @abstractmethod
     def request_download(self, data_id: str) -> list[str]:
+        """Requests a download for a given dataset through the CLMS API.
+
+        Args:
+            data_id : The dataset identifier to request.
+
+        Returns:
+            list[str]: A list containing the task ID for the dataset requested
+                which will be tracked and used for next steps or a list of
+                URLs that can be lazily loaded.
+        """
         pass
 
     @abstractmethod
     def prepare_request(self, data_id: str) -> list[str]:
-        pass
+        """Prepares the API request for for accessing the dataset requested.
 
-    @abstractmethod
-    def preprocess_data(self, data_id: str) -> list[str]:
+        NOTE: Include authorization headers.
+
+        Args:
+            data_id : The dataset identifier.
+
+        Returns:
+            tuple[str, dict]: The URL and headers needed for the request.
+        """
         pass

@@ -45,52 +45,24 @@ from xcube_clms.constants import (
     SEARCH_ENDPOINT,
     DOWNLOAD_FOLDER,
     PREFERRED_CHUNK_SIZE,
+    ITEMS_KEY,
+    CLMS_DATA_ID_KEY,
+    DOWNLOADABLE_FILES_KEY,
+    DATASET_DOWNLOAD_INFORMATION,
+    FULL_SOURCE,
 )
 from xcube_clms.constants import LOG
 
-_PORTAL_TYPE = {"portal_type": "DataSet"}
-_METADATA_FIELDS = "metadata_fields"
-_FULL_SCHEMA = "fullobjects"
-_CLMS_DATA_ID_KEY = "id"
-_DOWNLOADABLE_FILES_KEY = "downloadable_files"
-_DATASET_DOWNLOADABLE = "downloadable_full_dataset"
-_DATASET_DOWNLOAD_INFORMATION = "dataset_download_information"
-_FULL_SOURCE = "full_source"
-_FILE_KEY = "file"
-_CRS_KEY = "coordinateReferenceSystemList"
-_START_TIME_KEY = "temporalExtentStart"
-_END_TIME_KEY = "temporalExtentEnd"
-_BATCH = "batching"
-_NEXT = "next"
-_ITEMS_KEY = "items"
 
-_UID_KEY = "UID"
-_DATASET_DOWNLOAD_INFORMATION_KEY = "dataset_download_information"
-_CHARACTERISTICS_TEMPORAL_EXTENT = "characteristics_temporal_extent"
-_ID_KEY = "@id"
-_FILE_ID_KEY = "FileID"
-_DOWNLOAD_URL_KEY = "DownloadURL"
-_STATUS_KEY = "Status"
-_DATASETS_KEY = "Datasets"
-_DATASET_ID_KEY = "DatasetID"
-_FILENAME_KEY = "filename"
-_NAME_KEY = "name"
-_TITLE_KEY = "title"
-_PATH_KEY = "path"
-_SOURCE_KEY = "source"
-_FULL_SOURCE_KEY = "full_source"
-_TASK_IDS_KEY = "TaskIds"
-_TASK_ID_KEY = "TaskID"
-_DOWNLOAD_AVAILABLE_TIME_KEY = "FinalizationDateTime"
-_ORIGINAL_FILENAME_KEY = "orig_filename"
-_STATUS_PENDING = ["Queued", "In_progress"]
-_STATUS_COMPLETE = ["Finished_ok"]
-_STATUS_CANCELLED = ["Cancelled"]
-_UNDEFINED = "UNDEFINED"
 _RESULTS = "Results/"
 _GEO_FILE_EXTS = (".tif", ".tiff")
-_ITEMS_KEY = "items"
-_MAX_RETRIES = 7
+_PORTAL_TYPE = {"portal_type": "DataSet"}
+_FULL_SCHEMA = "fullobjects"
+_ORIGINAL_FILENAME_KEY = "orig_filename"
+_NAME_KEY = "name"
+_FILENAME_KEY = "filename"
+_BATCH = "batching"
+_NEXT = "next"
 
 ResponseType = Literal["json", "text", "bytes"]
 
@@ -330,7 +302,7 @@ def fetch_all_datasets() -> list[dict[str, Any]]:
     )
     while True:
         response = get_response_of_type(response_data, "json")
-        datasets_info.extend(response.get(_ITEMS_KEY, []))
+        datasets_info.extend(response.get(ITEMS_KEY, []))
         next_page = response.get(_BATCH, {}).get(_NEXT)
         if not next_page:
             break
@@ -369,20 +341,20 @@ def get_extracted_component(
                 return [
                     item
                     for product in datasets_info
-                    if product[_CLMS_DATA_ID_KEY] == clms_data_product_id
-                    for item in product.get(_DOWNLOADABLE_FILES_KEY, {}).get(
-                        _ITEMS_KEY, []
+                    if product[CLMS_DATA_ID_KEY] == clms_data_product_id
+                    for item in product.get(DOWNLOADABLE_FILES_KEY, {}).get(
+                        ITEMS_KEY, []
                     )
                     if item.get("file") == dataset_filename
                 ]
 
             for product in datasets_info:
-                if product[_CLMS_DATA_ID_KEY] == data_id:
-                    dataset_download_info = product[_DATASET_DOWNLOAD_INFORMATION][
-                        _ITEMS_KEY
+                if product[CLMS_DATA_ID_KEY] == data_id:
+                    dataset_download_info = product[DATASET_DOWNLOAD_INFORMATION][
+                        ITEMS_KEY
                     ][0]
                     if (
-                        dataset_download_info.get(_FULL_SOURCE).lower()
+                        dataset_download_info.get(FULL_SOURCE).lower()
                         in SUPPORTED_DATASET_SOURCES
                     ):
                         return [dataset_download_info]
@@ -393,7 +365,7 @@ def get_extracted_component(
             return [
                 product
                 for product in datasets_info
-                if data_id.split(DATA_ID_SEPARATOR)[0] == product[_CLMS_DATA_ID_KEY]
+                if data_id.split(DATA_ID_SEPARATOR)[0] == product[CLMS_DATA_ID_KEY]
             ]
 
         else:

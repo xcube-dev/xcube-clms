@@ -28,6 +28,8 @@ from xcube_clms.constants import (
     TIME_TO_EXPIRE,
     DOWNLOAD_FOLDER,
     RETRY_TIMEOUT,
+    UID_KEY,
+    ID_KEY,
 )
 
 from xcube_clms.preload import ClmsPreloadHandle
@@ -46,40 +48,32 @@ from xcube_clms.utils import (
     cleanup_dir,
 )
 
-_UID_KEY = "UID"
-_DATASET_DOWNLOAD_INFORMATION_KEY = "dataset_download_information"
-_CHARACTERISTICS_TEMPORAL_EXTENT = "characteristics_temporal_extent"
-_ID_KEY = "@id"
+
 _FILE_ID_KEY = "FileID"
 _DOWNLOAD_URL_KEY = "DownloadURL"
 _STATUS_KEY = "Status"
 _DATASETS_KEY = "Datasets"
 _DATASET_ID_KEY = "DatasetID"
-_FILENAME_KEY = "filename"
-_NAME_KEY = "name"
-_TITLE_KEY = "title"
 _PATH_KEY = "path"
 _SOURCE_KEY = "source"
-_FULL_SOURCE_KEY = "full_source"
 _TASK_IDS_KEY = "TaskIds"
 _TASK_ID_KEY = "TaskID"
 _DOWNLOAD_AVAILABLE_TIME_KEY = "FinalizationDateTime"
-_ORIGINAL_FILENAME_KEY = "orig_filename"
 _STATUS_PENDING = ["Queued", "In_progress"]
 _STATUS_COMPLETE = ["Finished_ok"]
 _STATUS_CANCELLED = ["Cancelled"]
 _UNDEFINED = "UNDEFINED"
-_RESULTS = "Results/"
-
-_GEO_FILE_EXTS = (".tif", ".tiff")
-_ITEMS_KEY = "items"
-_MAX_RETRIES = 7
-
 _ZARR_FORMAT = ".zarr"
 
 
 class EeaProductHandler(ProductHandler):
-    """ """
+    """
+    Implements support for EEA pre-packaged products available via the CLMS API.
+
+    These products are provided as a ZIP archive containing ZIP files,
+    which can be downloaded through a link received after submitting a dataset
+    request.
+    """
 
     def __init__(
         self,
@@ -119,6 +113,18 @@ class EeaProductHandler(ProductHandler):
         data_id: str,
         **open_params,
     ) -> Any:
+        """Opens and returns data for a given data ID from the cache.
+
+        Args:
+            data_id : Identifier for the dataset.
+            **open_params: Additional parameters, including opener_id.
+
+        Returns:
+            Any: The opened dataset.
+
+        Raises:
+            FileNotFoundError: If the data is not cached and needs to be preloaded first.
+        """
         if not self.cache_store.has_data(data_id):
             raise FileNotFoundError(
                 f"No cached data found for data_id: "
@@ -135,6 +141,16 @@ class EeaProductHandler(ProductHandler):
         *data_ids: str,
         **preload_params: Any,
     ) -> PreloadHandle:
+        """Initiates the data preload process for one or more datasets.
+
+        Args:
+            *data_ids : One or more dataset IDs to preload.
+            **preload_params : Additional parameters.
+
+        Returns:
+            PreloadHandle: The preload handle to track and control the process.
+        """
+
         self.cleanup = preload_params.get("cleanup", True)
         tile_size = preload_params.get("tile_size", None)
         self.tile_size = get_tile_size(tile_size)
@@ -158,9 +174,17 @@ class EeaProductHandler(ProductHandler):
         return self.cache_store
 
     def _preload_data(self, handle, data_id):
+        """Handles the full lifecycle of preloading a single dataset.
+
+        This includes initiating the download request, monitoring task status,
+        downloading and extracting data, and preprocessing it.
+
+        Args:
+            handle (PreloadHandle): The preload handle for managing updates and status.
+            data_id (str): The identifier for the dataset to preload.
+        """
         status_event = threading.Event()
 
-        # EEA datasets
         if DATA_ID_SEPARATOR in data_id:
             task_id = self.request_download(
                 data_id=data_id,
@@ -264,8 +288,8 @@ class EeaProductHandler(ProductHandler):
 
         download_request_url, headers = self.prepare_request(data_id)
         json = get_dataset_download_info(
-            dataset_id=product[_UID_KEY],
-            file_id=item[_ID_KEY],
+            dataset_id=product[UID_KEY],
+            file_id=item[ID_KEY],
         )
 
         response_data = make_api_request(
@@ -283,15 +307,6 @@ class EeaProductHandler(ProductHandler):
     def prepare_request(
         self, data_id: str
     ) -> tuple[str, dict, dict] | tuple[str, dict]:
-        """Prepares the API request details for downloading a dataset.
-
-        Args:
-            data_id: Unique identifier of the dataset.
-
-        Returns:
-            tuple[str, dict]: A tuple containing the
-                request URL and headers
-        """
         LOG.debug(f"Preparing download request for {data_id}")
 
         headers = ACCEPT_HEADER.copy()
@@ -350,22 +365,20 @@ class EeaProductHandler(ProductHandler):
     ) -> tuple[str, str]:
         """Checks the status of existing download request task.
 
-        You can either provide the dataset_id and file_id or just the
-        task_id to enquire the status of the request.
+        Either provide the data_id or the task_id to enquire the
+        status of the request. If task_id is provided, data_id will be ignored.
 
         The sorting is performed based on the priority and timestamps so that
         we have the result of the latest requests in the decreasing order of
         priorities.
 
         Args:
-            data_id: Data ID of the the data to be requested (optional).
+            data_id: Data ID of the data to be requested (optional).
             task_id: Task ID of the requested dataset (optional).
 
         Returns:
             tuple[str, str]: A tuple containing the status
                 (e.g., COMPLETE, PENDING) and task ID.
-
-        Notes:
         """
         dataset_id = None
         file_id = None
@@ -378,8 +391,8 @@ class EeaProductHandler(ProductHandler):
                 datasets_info=self.datasets_info, data_id=data_id
             )
 
-            dataset_id = product[_UID_KEY]
-            file_id = item[_ID_KEY]
+            dataset_id = product[UID_KEY]
+            file_id = item[ID_KEY]
 
         self.api_token_handler.refresh_token()
         headers = ACCEPT_HEADER.copy()
