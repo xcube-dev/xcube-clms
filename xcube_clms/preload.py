@@ -26,6 +26,7 @@ from xcube.core.store.preload import ExecutorPreloadHandle, PreloadHandle
 from xcube.core.store.preload import PreloadState
 
 from xcube_clms.constants import DOWNLOAD_FOLDER
+from xcube_clms.utils import cleanup_dir
 
 
 class ClmsPreloadHandle(ExecutorPreloadHandle):

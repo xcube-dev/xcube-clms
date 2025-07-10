@@ -315,7 +315,7 @@ def get_extracted_component(
     datasets_info: list[dict[str, Any]],
     data_id,
     item_type: Literal["item", "product"] = "product",
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Extracts either an item or product from the list of datasets
     available
 
@@ -374,10 +374,13 @@ def get_extracted_component(
             )
 
     dataset = extract_dataset_component()
-    if len(dataset) != 1:
-        raise ValueError(
+    if len(dataset) > 1:
+        LOG.warning(
             f"Expected one dataset for data_id: {data_id}, found {len(dataset)}."
         )
+    elif len(dataset) < 1:
+        LOG.warning(f"No dataset found for data_id: {data_id}")
+        return None
     return dataset[0]
 
 

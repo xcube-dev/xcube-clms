@@ -430,7 +430,6 @@ class EeaProductHandler(ProductHandler):
 
             if condition:
                 current_entry = {
-                    "status": status,
                     "key": key,
                     "timestamp": timestamp,
                     "response": response[key],
@@ -442,7 +441,6 @@ class EeaProductHandler(ProductHandler):
                         timestamp and (timestamp > existing_entry.get("timestamp", ""))
                     ):
                         latest_entries[status] = current_entry
-
         for status in sorted(
             status_priority, key=lambda s: status_priority[s], reverse=False
         ):

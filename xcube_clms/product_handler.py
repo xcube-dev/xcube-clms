@@ -104,7 +104,9 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
 
         handler_type = _determine_handler_type()
         if handler_type is None:
-            raise ValueError(f"Unable to detect product handler for " f"{data_id!r}.")
+            raise ValueError(
+                f"Unable to detect product handler for data_id {data_id!r}."
+            )
         if handler_type not in SUPPORTED_DATASET_SOURCES:
             raise ValueError(
                 f"Data source {handler_type} is currently not " f"supported."
