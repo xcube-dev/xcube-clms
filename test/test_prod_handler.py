@@ -1,6 +1,5 @@
 import unittest
-from unittest.mock import Mock
-
+from unittest.mock import Mock, patch
 
 from xcube_clms.constants import (
     CLMS_DATA_ID_KEY,
@@ -18,7 +17,7 @@ class TestProductHandler(unittest.TestCase):
     def setUp(self):
         self.cache_store = Mock()
         self.api_token_handler = Mock()
-
+        self.mock_credentials = {"secret": 42}
         self.datasets_info = [
             {
                 CLMS_DATA_ID_KEY: "forest-type-2015",
@@ -30,12 +29,20 @@ class TestProductHandler(unittest.TestCase):
             },
         ]
 
+        mock_clms_token_handler_patcher = patch(
+            "xcube_clms.product_handler.ClmsApiTokenHandler"
+        )
+        self.mock_clms_token_handler = mock_clms_token_handler_patcher.start()
+
+    def tearDown(self):
+        patch.stopall()
+
     def test_guess_eea(self):
         handler = ProductHandler.guess(
             data_id="forest-type-2015|FTY_2015_020m_eu_03035_d04_E00N20",
             datasets_info=self.datasets_info,
             cache_store=self.cache_store,
-            api_token_handler=self.api_token_handler,
+            credentials=self.mock_credentials,
         )
         self.assertIsInstance(handler, EeaProductHandler)
 
@@ -44,7 +51,7 @@ class TestProductHandler(unittest.TestCase):
             data_id="daily-surface-soil-moisture-v1.0",
             datasets_info=self.datasets_info,
             cache_store=self.cache_store,
-            api_token_handler=self.api_token_handler,
+            credentials=self.mock_credentials,
         )
         self.assertIsInstance(handler, LegacyProductHandler)
 
@@ -61,7 +68,7 @@ class TestProductHandler(unittest.TestCase):
                 data_id="unknown_id",
                 datasets_info=self.datasets_info,
                 cache_store=self.cache_store,
-                api_token_handler=self.api_token_handler,
+                credentials=self.mock_credentials,
             )
         self.assertIn("Unable to detect product handler", str(context.exception))
 
@@ -79,6 +86,6 @@ class TestProductHandler(unittest.TestCase):
                 data_id="product123",
                 datasets_info=datasets_info,
                 cache_store=self.cache_store,
-                api_token_handler=self.api_token_handler,
+                credentials=self.mock_credentials,
             )
         self.assertIn("currently not supported", str(context.exception))

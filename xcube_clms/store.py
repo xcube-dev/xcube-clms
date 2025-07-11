@@ -41,7 +41,6 @@ from xcube.util.jsonschema import (
 from xcube.util.jsonschema import JsonObjectSchema
 from xcube.util.jsonschema import JsonStringSchema
 
-from .api_token_handler import ClmsApiTokenHandler
 from .constants import (
     DEFAULT_PRELOAD_CACHE_FOLDER,
     LOG,
@@ -93,7 +92,6 @@ class ClmsDataStore(DataStore):
             "dataset:netcdf:https",
         )
         self._datasets_info: list[dict[str, Any]] = fetch_all_datasets()
-        self._api_token_handler = ClmsApiTokenHandler(credentials=credentials)
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -193,7 +191,7 @@ class ClmsDataStore(DataStore):
                 data_id,
                 self._datasets_info,
                 self.cache_store,
-                self._api_token_handler,
+                self.credentials,
             )
         except ValueError:
             return False
@@ -229,24 +227,24 @@ class ClmsDataStore(DataStore):
                 data_id,
                 self._datasets_info,
                 self.cache_store,
-                self._api_token_handler,
+                self.credentials,
             )
             return handler.get_open_data_params_schema(data_id)
         elif opener_id is not None:
             if opener_id == "dataset:zarr:file":
                 return get_prod_handlers()["eea"](
-                    self._datasets_info, self.cache_store, self._api_token_handler
+                    self._datasets_info, self.cache_store, self.credentials
                 ).get_open_data_params_schema()
-            elif opener_id == "dataset:netcdf:https":
+            else:
                 return get_prod_handlers()["legacy"](
-                    self._datasets_info, self.cache_store, self._api_token_handler
+                    self._datasets_info, self.cache_store, self.credentials
                 ).get_open_data_params_schema()
         else:
             return JsonObjectSchema(
                 title="Opening parameters for all supported CLMS products.",
                 properties={
                     key: ph(
-                        self._datasets_info, self.cache_store, self._api_token_handler
+                        self._datasets_info, self.cache_store, self.credentials
                     ).get_open_data_params_schema()
                     for (key, ph) in get_prod_handlers().items()
                 },
@@ -271,7 +269,7 @@ class ClmsDataStore(DataStore):
             data_id,
             self._datasets_info,
             self.cache_store,
-            self._api_token_handler,
+            self.credentials,
         )
         return handler.open_data(data_id, **open_params)
 
@@ -301,7 +299,7 @@ class ClmsDataStore(DataStore):
                 data_id,
                 self._datasets_info,
                 self.cache_store,
-                self._api_token_handler,
+                self.credentials,
             )
             if not isinstance(handle, EeaProductHandler):
                 raise ValueError(

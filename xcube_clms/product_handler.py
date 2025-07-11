@@ -65,7 +65,7 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
         data_id: str,
         datasets_info: list[dict[str, Any]] = None,
         cache_store: PreloadedDataStore = None,
-        api_token_handler: ClmsApiTokenHandler = None,
+        credentials: dict = None,
     ) -> "ProductHandler":
         """Guess the suitable product handler for the data id requested.
 
@@ -75,16 +75,16 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
                 To be passed on to the handlers.
             cache_store: Cache data store to be used by the handlers when
                 they use preload_data method. To be passed on to the handlers.
-            api_token_handler: Token handler to refresh the token required
-                to communicate with the CLMS API. To be passed on to the
-                handlers.
+            credentials: Credentials to create a Token handler object to
+                refresh the token required to communicate with the CLMS API.
+                To be passed on to the handlers.
 
         Returns:
             The product handler.
         Raises:
             ValueError: if guessing the product handler failed.
         """
-        if not all([cache_store, datasets_info, api_token_handler]):
+        if not all([cache_store, datasets_info, credentials]):
             raise ValueError("All parameters are required")
 
         def _determine_handler_type():
@@ -112,6 +112,7 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
                 f"Data source {handler_type} is currently not " f"supported."
             )
         handler = get_prod_handlers().get(handler_type)
+        api_token_handler = ClmsApiTokenHandler(credentials=credentials)
         return handler(
             cache_store=cache_store,
             datasets_info=datasets_info,

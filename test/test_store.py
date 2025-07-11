@@ -54,6 +54,10 @@ class ClmsDataStoreTest(unittest.TestCase):
             cache_store_params={"root": "preload_clms_cache"},
         )
 
+        # Comment these lines when running pytest vcr in record mode
+        mock_jwt_encode_patcher = patch("xcube_clms.api_token_handler.jwt.encode")
+        self.mock_jwt_encode = mock_jwt_encode_patcher.start()
+
     def tearDown(self):
         patch.stopall()
         self.store = None
@@ -241,7 +245,7 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     @patch("xcube_clms.product_handlers.eea.get_extracted_component")
-    @patch("xcube_clms.store.ClmsApiTokenHandler")
+    @patch("xcube_clms.product_handler.ClmsApiTokenHandler")
     def test_preload_data(self, mock_token_handler, mock_get_extracted_component):
         mock_token_handler.api_token = "mock_token"
 
