@@ -77,12 +77,13 @@ class EeaProductHandler(ProductHandler):
 
     def __init__(
         self,
-        cache_store=None,
         datasets_info=None,
+        cache_store=None,
         api_token_handler=None,
     ):
         super().__init__(cache_store, datasets_info, api_token_handler)
 
+        self.data_id_maps = None
         self._api_token = self.api_token_handler.api_token
         self.fs = self.cache_store.fs
         self.download_folder = self.fs.sep.join(

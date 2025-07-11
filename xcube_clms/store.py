@@ -22,7 +22,12 @@
 from typing import Tuple, Iterator, Container, Any
 
 import xarray as xr
-from xcube.core.store import DATASET_TYPE, PreloadedDataStore, new_data_store
+from xcube.core.store import (
+    DATASET_TYPE,
+    PreloadedDataStore,
+    new_data_store,
+    DataStoreError,
+)
 from xcube.core.store import DataDescriptor
 from xcube.core.store import DataStore
 from xcube.core.store import DataTypeLike
@@ -49,6 +54,7 @@ from .constants import (
     CLMS_DATA_ID_KEY,
 )
 from .product_handler import ProductHandler
+from .product_handlers import get_prod_handlers
 from .product_handlers.eea import EeaProductHandler
 from .utils import assert_valid_data_type, fetch_all_datasets, get_extracted_component
 
@@ -82,7 +88,10 @@ class ClmsDataStore(DataStore):
         self.fs = self.cache_store.fs
         self._cache_root = self.cache_store.root
         self.credentials = credentials
-        self.data_opener_id = f"dataset:zarr:{self.cache_store.protocol}"
+        self.data_opener_id = (
+            f"dataset:zarr:{self.cache_store.protocol}",
+            "dataset:netcdf:https",
+        )
         self._datasets_info: list[dict[str, Any]] = fetch_all_datasets()
         self._api_token_handler = ClmsApiTokenHandler(credentials=credentials)
 
@@ -179,12 +188,15 @@ class ClmsDataStore(DataStore):
                             yield data_id, filtered_attrs
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
-        handler = ProductHandler.guess(
-            data_id,
-            self._datasets_info,
-            self.cache_store,
-            self._api_token_handler,
-        )
+        try:
+            handler = ProductHandler.guess(
+                data_id,
+                self._datasets_info,
+                self.cache_store,
+                self._api_token_handler,
+            )
+        except ValueError:
+            return False
         return handler.has_data(data_id, data_type)
 
     def describe_data(
@@ -205,18 +217,47 @@ class ClmsDataStore(DataStore):
     def get_data_opener_ids(
         self, data_id: str = None, data_type: DataTypeLike = None
     ) -> Tuple[str, ...]:
-        return (self.data_opener_id,)
+        return self.data_opener_id
 
     def get_open_data_params_schema(
         self, data_id: str = None, opener_id: str = None
     ) -> JsonObjectSchema:
-        handler = ProductHandler.guess(
-            data_id,
-            self._datasets_info,
-            self.cache_store,
-            self._api_token_handler,
-        )
-        return handler.get_open_data_params_schema(data_id)
+        if opener_id:
+            self._assert_valid_opener_id(opener_id)
+        if data_id is not None:
+            handler = ProductHandler.guess(
+                data_id,
+                self._datasets_info,
+                self.cache_store,
+                self._api_token_handler,
+            )
+            return handler.get_open_data_params_schema(data_id)
+        elif opener_id is not None:
+            if opener_id == "dataset:zarr:file":
+                return get_prod_handlers()["eea"](
+                    self._datasets_info, self.cache_store, self._api_token_handler
+                ).get_open_data_params_schema()
+            elif opener_id == "dataset:netcdf:https":
+                return get_prod_handlers()["legacy"](
+                    self._datasets_info, self.cache_store, self._api_token_handler
+                ).get_open_data_params_schema()
+        else:
+            return JsonObjectSchema(
+                title="Opening parameters for all supported CLMS products.",
+                properties={
+                    key: ph(
+                        self._datasets_info, self.cache_store, self._api_token_handler
+                    ).get_open_data_params_schema()
+                    for (key, ph) in get_prod_handlers().items()
+                },
+            )
+
+    def _assert_valid_opener_id(self, opener_id: str) -> None:
+        if opener_id is not None and opener_id not in self.data_opener_id:
+            raise DataStoreError(
+                f"Data opener identifiers must be {self.data_opener_id!r}, "
+                f"but got {opener_id!r}."
+            )
 
     def open_data(
         self,

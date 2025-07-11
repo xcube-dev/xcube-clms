@@ -34,8 +34,8 @@ class LegacyProductHandler(ProductHandler):
 
     def __init__(
         self,
-        cache_store=None,
         datasets_info=None,
+        cache_store=None,
         api_token_handler=None,
     ):
         super().__init__(cache_store, datasets_info, api_token_handler)
@@ -57,7 +57,6 @@ class LegacyProductHandler(ProductHandler):
 
     def get_open_data_params_schema(self, data_id: str = None) -> JsonObjectSchema:
         params = dict(time_range=JsonDateSchema.new_range())
-
         return JsonObjectSchema(
             properties=dict(**params),
             additional_properties=False,

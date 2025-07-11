@@ -46,7 +46,8 @@ class ClmsDataStoreTest(unittest.TestCase):
             "token_uri": "",
             "user_id": "",
         }
-        self.data_id = "clc-backbone-2021|CLMS_CLCplus_RASTER_2021"
+        self.eea_data_id = "clc-backbone-2021|CLMS_CLCplus_RASTER_2021"
+        self.legacy_data_id = "daily-surface-soil-moisture-v1.0"
         self.store = new_data_store(
             DATA_STORE_ID,
             credentials=self.mock_credentials,
@@ -118,9 +119,9 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_describe_data(self):
-        descriptor = self.store.describe_data(self.data_id)
+        descriptor = self.store.describe_data(self.eea_data_id)
         expected_descriptor = {
-            "data_id": self.data_id,
+            "data_id": self.eea_data_id,
             "data_type": "dataset",
             "crs": "EPSG:3035",
             "time_range": ("2020-10-01", "2022-03-31"),
@@ -130,7 +131,7 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_data_types_for_data(self):
-        data_types = self.store.get_data_types_for_data(self.data_id)
+        data_types = self.store.get_data_types_for_data(self.eea_data_id)
         expected_data_types = ("dataset",)
         self.assertEqual(data_types, expected_data_types)
 
@@ -147,26 +148,29 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_data_opener_ids(self):
-        data_opener_ids = ("dataset:zarr:file",)
+        data_opener_ids = ("dataset:zarr:file", "dataset:netcdf:https")
         opener_ids = self.store.get_data_opener_ids()
         expected_opener_ids = data_opener_ids
         self.assertEqual(expected_opener_ids, opener_ids)
 
-        opener_ids = self.store.get_data_opener_ids(self.data_id)
+        opener_ids = self.store.get_data_opener_ids(self.eea_data_id)
         expected_opener_ids = data_opener_ids
         self.assertEqual(expected_opener_ids, opener_ids)
 
     @pytest.mark.vcr()
     def test_has_data(self):
-        has_data = self.store.has_data(self.data_id)
+        has_data = self.store.has_data(self.eea_data_id)
         self.assertTrue(has_data)
 
-        not_has_data = self.store.has_data("invalid|data")
+        has_data = self.store.has_data(self.legacy_data_id)
+        self.assertTrue(has_data)
+
+        not_has_data = self.store.has_data("invalid_data")
         self.assertFalse(not_has_data)
 
     @pytest.mark.vcr()
     def test_get_open_data_params_schema(self):
-        schema = self.store.get_open_data_params_schema(self.data_id)
+        schema = self.store.get_open_data_params_schema(self.eea_data_id + ".zarr")
         self.assertIsInstance(schema, JsonObjectSchema)
         self.assertIn("log_access", schema.properties)
         self.assertIn("cache_size", schema.properties)
@@ -179,13 +183,17 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertIn("drop_variables", schema.properties)
         self.assertIn("consolidated", schema.properties)
 
+        schema = self.store.get_open_data_params_schema(self.legacy_data_id)
+        self.assertIsInstance(schema, JsonObjectSchema)
+        self.assertIn("time_range", schema.properties)
+
     @pytest.mark.vcr()
     def test_search_data(self):
         self.assertRaises(NotImplementedError, self.store.search_data)
 
     @pytest.mark.vcr()
     def test_get_search_params_schema(self):
-        schema = self.store.get_search_params_schema(self.data_id)
+        schema = self.store.get_search_params_schema(self.eea_data_id)
         self.assertIsInstance(schema, JsonObjectSchema)
         self.assertEqual({}, schema.properties)
 
@@ -198,7 +206,7 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertIn("tile_size", schema.properties)
 
     @pytest.mark.vcr()
-    @patch("xcube_clms.clms.new_data_store")
+    @patch("xcube_clms.store.new_data_store")
     def test_open_data(self, mock_new_data_store):
         mock_data_store = MagicMock()
         mock_data_store.has_data.return_value = True
@@ -232,12 +240,13 @@ class ClmsDataStoreTest(unittest.TestCase):
         )
 
     @pytest.mark.vcr()
-    @patch("xcube_clms.clms.Clms._get_extracted_component")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
+    @patch("xcube_clms.product_handlers.eea.get_extracted_component")
+    @patch("xcube_clms.store.ClmsApiTokenHandler")
     def test_preload_data(self, mock_token_handler, mock_get_extracted_component):
         mock_token_handler.api_token = "mock_token"
 
         mock_get_extracted_component.side_effect = [
+            {"id": "dummy"},  # has_data() call
             {"id": "data_id"},
             {"id": "product_id"},
         ]
