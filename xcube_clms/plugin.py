@@ -26,25 +26,9 @@ from xcube_clms.constants import DATA_STORE_ID
 
 
 def init_plugin(ext_registry: extension.ExtensionRegistry):
-    data_completeness_content = (
-        "This data store currently provides **only a subset of all "
-        "datasets** provided by the 'Copernicus Land Monitoring Services ( "
-        "CLMS)', namely EEA pre-packaged and Legacy datasets.\n"
-        "In upcoming versions, the store will also allow for "
-        "accessing the remaining CLMS datasets."
-    )
     ext_registry.add_extension(
         loader=extension.import_component("xcube_clms.store:ClmsDataStore"),
         point=EXTENSION_POINT_DATA_STORES,
         name=DATA_STORE_ID,
         description="CLMS DataStore",
-        data_store_notices=[
-            dict(
-                id="dataCompleteness",
-                title="Data Completeness",
-                content=data_completeness_content,
-                intent="warning",
-                icon="warning-sign",
-            )
-        ],
     )
