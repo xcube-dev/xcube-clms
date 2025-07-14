@@ -1,13 +1,13 @@
 ## Changes in 1.1.0 (in development)
 
-* Added support for `LEGACY` datasets
-
-* Performed internal code refactoring for improved maintainability
-
 ### Enhancements
 
 * The `xcube-clms` now supports datasets from the `LEGACY` sources of the
   [CLMS API.](https://eea.github.io/clms-api-docs/download.html#auxiliary-api-to-get-direct-download-links-for-non-eea-hosted-datasets)
+
+### Other changes
+
+* Performed internal code refactoring for improved maintainability
 
 ## Changes in 1.0.0
 

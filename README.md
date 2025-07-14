@@ -87,7 +87,7 @@ cassettes, testing can be then performed as usual.
 
 ## Additional Notes about the data store
 
-This data store currently only supports some datasets from the CLMS API:
+This data store currently only supports some dataset sources from the CLMS API:
 
 - EEA
 - LEGACY
