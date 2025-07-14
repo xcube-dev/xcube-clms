@@ -1,5 +1,9 @@
 ## Changes in 1.1.0 (in development)
 
+* Added support for `LEGACY` datasets
+
+* Performed internal code refactoring for improved maintainability
+
 ### Enhancements
 
 * The `xcube-clms` now supports datasets from the `LEGACY` sources of the
