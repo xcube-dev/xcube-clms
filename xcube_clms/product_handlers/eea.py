@@ -1,7 +1,7 @@
 import threading
 import time
 from collections import defaultdict
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from math import ceil
 from typing import Any
 
@@ -9,45 +9,43 @@ import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import PreloadHandle, DataTypeLike, PreloadState
+from xcube.core.store import DataTypeLike, PreloadHandle, PreloadState
 from xcube.util.jsonschema import JsonObjectSchema
 
-from xcube_clms.constants import (
-    ITEM_KEY,
-    PRODUCT_KEY,
-    CLMS_API_URL,
-    DATA_ID_SEPARATOR,
-    LOG,
+from ..constants import (
     ACCEPT_HEADER,
-    TASK_STATUS_ENDPOINT,
-    COMPLETE,
-    PENDING,
     CANCELLED,
+    CLMS_API_URL,
+    COMPLETE,
     CONTENT_TYPE_HEADER,
+    DATA_ID_SEPARATOR,
     DOWNLOAD_ENDPOINT,
-    TIME_TO_EXPIRE,
     DOWNLOAD_FOLDER,
-    RETRY_TIMEOUT,
-    UID_KEY,
     ID_KEY,
+    ITEM_KEY,
+    LOG,
+    PENDING,
+    PRODUCT_KEY,
+    RETRY_TIMEOUT,
+    TASK_STATUS_ENDPOINT,
+    TIME_TO_EXPIRE,
+    UID_KEY,
 )
-
-from xcube_clms.preload import ClmsPreloadHandle
-from xcube_clms.product_handler import ProductHandler
-from xcube_clms.utils import (
-    get_extracted_component,
-    is_valid_data_type,
+from ..preload import ClmsPreloadHandle
+from ..product_handler import ProductHandler
+from ..utils import (
     build_api_url,
-    make_api_request,
-    get_response_of_type,
+    cleanup_dir,
+    download_zip_data,
+    find_easting_northing,
     get_authorization_header,
     get_dataset_download_info,
-    find_easting_northing,
+    get_extracted_component,
+    get_response_of_type,
     get_tile_size,
-    download_zip_data,
-    cleanup_dir,
+    is_valid_data_type,
+    make_api_request,
 )
-
 
 _FILE_ID_KEY = "FileID"
 _DOWNLOAD_URL_KEY = "DownloadURL"
@@ -298,9 +296,9 @@ class EeaProductHandler(ProductHandler):
         )
         response = get_response_of_type(response_data, "json")
         task_ids = response.get(_TASK_IDS_KEY)
-        assert (
-            len(task_ids) == 1
-        ), f"Expected API response with 1 task_id, got {len(task_ids)}"
+        assert len(task_ids) == 1, (
+            f"Expected API response with 1 task_id, got {len(task_ids)}"
+        )
         task_id = task_ids[0].get(_TASK_ID_KEY)
         LOG.debug(f"Download Requested with Task ID : {task_id}")
         return [task_id]

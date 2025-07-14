@@ -3,28 +3,27 @@ from typing import Any
 
 import xarray as xr
 from xcube.core.store import DataTypeLike
-from xcube.util.jsonschema import JsonObjectSchema, JsonDateSchema
+from xcube.util.jsonschema import JsonDateSchema, JsonObjectSchema
 
-from xcube_clms.constants import (
-    CLMS_API_URL,
-    GET_DOWNLOAD_FILE_URLS_ENDPOINT,
+from ..constants import (
     ACCEPT_HEADER,
+    CLMS_API_URL,
     CONTENT_TYPE_HEADER,
-    UID_KEY,
+    GET_DOWNLOAD_FILE_URLS_ENDPOINT,
     ID_KEY,
+    UID_KEY,
 )
-from xcube_clms.product_handler import ProductHandler
-from xcube_clms.utils import (
-    get_response_of_type,
-    make_api_request,
+from ..product_handler import ProductHandler
+from ..utils import (
     build_api_url,
+    detect_format,
+    extract_and_filter_dates,
     get_authorization_header,
     get_extracted_component,
+    get_response_of_type,
     is_valid_data_type,
-    extract_and_filter_dates,
-    detect_format,
+    make_api_request,
 )
-
 
 _CHARACTERISTICS_TEMPORAL_EXTENT = "characteristics_temporal_extent"
 

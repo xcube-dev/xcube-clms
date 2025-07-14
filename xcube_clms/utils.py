@@ -18,41 +18,39 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
 import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any, Union, Literal
+from typing import Any, Final, Literal, Optional, Union
 from urllib.parse import urlencode
 
 import fsspec
 import requests
 import xarray as xr
-from requests import HTTPError
-from requests import JSONDecodeError
-from requests import RequestException
-from requests import Response
-from requests import Timeout
-from xcube.core.store import DATASET_TYPE, PreloadedDataStore
-from xcube.core.store import DataStoreError
-from xcube.core.store import DataTypeLike
-
-from xcube_clms.constants import (
-    ACCEPT_HEADER,
-    DATA_ID_SEPARATOR,
-    SUPPORTED_DATASET_SOURCES,
-    CLMS_API_URL,
-    SEARCH_ENDPOINT,
-    DOWNLOAD_FOLDER,
-    PREFERRED_CHUNK_SIZE,
-    ITEMS_KEY,
-    CLMS_DATA_ID_KEY,
-    DOWNLOADABLE_FILES_KEY,
-    DATASET_DOWNLOAD_INFORMATION,
-    FULL_SOURCE,
+from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
+from xcube.core.store import (
+    DATASET_TYPE,
+    DataStoreError,
+    DataTypeLike,
+    PreloadedDataStore,
 )
-from xcube_clms.constants import LOG
 
+from .constants import (
+    ACCEPT_HEADER,
+    CLMS_API_URL,
+    CLMS_DATA_ID_KEY,
+    DATA_ID_SEPARATOR,
+    DATASET_DOWNLOAD_INFORMATION,
+    DOWNLOAD_FOLDER,
+    DOWNLOADABLE_FILES_KEY,
+    FULL_SOURCE,
+    ITEMS_KEY,
+    LOG,
+    SEARCH_ENDPOINT,
+    SUPPORTED_DATASET_SOURCES,
+)
 
 _RESULTS = "Results/"
 _GEO_FILE_EXTS = (".tif", ".tiff")
@@ -63,6 +61,8 @@ _NAME_KEY = "name"
 _FILENAME_KEY = "filename"
 _BATCH = "batching"
 _NEXT = "next"
+_PREFERRED_CHUNK_SIZE: Final = 2000
+
 
 ResponseType = Literal["json", "text", "bytes"]
 
@@ -601,7 +601,7 @@ def cleanup_dir(folder_path: Path | str, fs=None, keep_extension=None):
 
 def get_tile_size(tile_size):
     if tile_size is None:
-        tile_size = (PREFERRED_CHUNK_SIZE, PREFERRED_CHUNK_SIZE)
+        tile_size = (_PREFERRED_CHUNK_SIZE, _PREFERRED_CHUNK_SIZE)
     elif isinstance(tile_size, int):
         tile_size = (tile_size, tile_size)
     else:

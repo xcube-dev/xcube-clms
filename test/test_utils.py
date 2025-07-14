@@ -21,27 +21,18 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import fsspec
 import pytest
 import xarray as xr
-from requests import HTTPError
-from requests import JSONDecodeError
-from requests import RequestException
-from requests import Response
-from requests import Timeout
+from requests import (HTTPError, JSONDecodeError, RequestException, Response,
+                      Timeout)
 from xcube.core.store import DataStoreError
 
-from xcube_clms.utils import (
-    get_response_of_type,
-    make_api_request,
-    build_api_url,
-    get_spatial_dims,
-    cleanup_dir,
-    extract_and_filter_dates,
-    download_zip_data,
-)
+from xcube_clms.utils import (build_api_url, cleanup_dir, download_zip_data,
+                              extract_and_filter_dates, get_response_of_type,
+                              get_spatial_dims, make_api_request)
 
 url = "http://example.com/api"
 
@@ -401,9 +392,9 @@ class UtilsTest(unittest.TestCase):
 
     def test_extract_and_filter_dates_multiple_matches(self):
         urls = [
-            "https://x/20220101/a.nc",
-            "https://x/20220115/b.nc",
-            "https://x/20220130/c.nc",
+            "https://example.com/20220101/a.nc",
+            "https://example.com/20220115/b.nc",
+            "https://example.com/20220130/c.nc",
         ]
         time_range = ("2022-01-01", "2022-01-31")
         expected = sorted(urls)
@@ -412,8 +403,8 @@ class UtilsTest(unittest.TestCase):
 
     def test_extract_and_filter_dates_none_in_range(self):
         urls = [
-            "https://x/20210101/a.tif",
-            "https://x/20210315/b.tif",
+            "https://example.com/20210101/a.tif",
+            "https://example.com/20210315/b.tif",
         ]
         time_range = ("2022-01-01", "2022-12-31")
         result = extract_and_filter_dates(urls, time_range)

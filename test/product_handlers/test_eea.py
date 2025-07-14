@@ -1,11 +1,9 @@
+import logging
 import os
 import unittest
 from collections import defaultdict
-from unittest.mock import MagicMock, patch, Mock, call
 from datetime import datetime, timedelta
-
-
-import logging
+from unittest.mock import MagicMock, Mock, call, patch
 
 import fsspec
 import numpy as np
@@ -14,19 +12,13 @@ import xarray as xr
 from rasterio.transform import from_origin
 from xcube.core.store import PreloadState
 
-from xcube_clms.product_handlers.eea import EeaProductHandler, _UNDEFINED, has_expired
-from xcube_clms.utils import (
-    get_authorization_header,
-    get_dataset_download_info,
-    find_geo_in_dir,
-)
-from xcube_clms.constants import (
-    CLMS_API_URL,
-    DOWNLOAD_ENDPOINT,
-    TASK_STATUS_ENDPOINT,
-    TIME_TO_EXPIRE,
-    DATA_ID_SEPARATOR,
-)
+from xcube_clms.constants import (CLMS_API_URL, DATA_ID_SEPARATOR,
+                                  DOWNLOAD_ENDPOINT, TASK_STATUS_ENDPOINT,
+                                  TIME_TO_EXPIRE)
+from xcube_clms.product_handlers.eea import (_UNDEFINED, EeaProductHandler,
+                                             has_expired)
+from xcube_clms.utils import (find_geo_in_dir, get_authorization_header,
+                              get_dataset_download_info)
 
 LOG = logging.getLogger(__name__)
 
@@ -529,7 +521,6 @@ class TestEeaProductHandler(unittest.TestCase):
         mock_zip_fs.ls.assert_any_call("/folder1/subfolder")
 
     def test_get_dataset_download_info(self):
-
         dataset_id = "dataset123"
         file_id = "file456"
         expected_result = {
@@ -544,7 +535,6 @@ class TestEeaProductHandler(unittest.TestCase):
         self.assertEqual(result, expected_result)
 
     def test_get_authorization_header(self):
-
         token = "test_token"
         expected = {"Authorization": "Bearer test_token"}
         self.assertEqual(get_authorization_header(token), expected)

@@ -25,23 +25,23 @@ from typing import Any
 from xcube.core.store import (
     DataOpener,
     DataPreloader,
-    PreloadHandle,
     DataTypeLike,
     PreloadedDataStore,
+    PreloadHandle,
 )
 from xcube.core.store.preload import NullPreloadHandle
 from xcube.util.jsonschema import JsonObjectSchema
 
-from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import (
-    SUPPORTED_DATASET_SOURCES,
-    DATA_ID_SEPARATOR,
+from .api_token_handler import ClmsApiTokenHandler
+from .constants import (
     CLMS_DATA_ID_KEY,
+    DATA_ID_SEPARATOR,
     DATASET_DOWNLOAD_INFORMATION,
-    ITEMS_KEY,
     FULL_SOURCE,
+    ITEMS_KEY,
+    SUPPORTED_DATASET_SOURCES,
 )
-from xcube_clms.product_handlers import get_prod_handlers
+from .product_handlers import get_prod_handlers
 
 
 class ProductHandler(DataOpener, DataPreloader, ABC):
@@ -108,9 +108,7 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
                 f"Unable to detect product handler for data_id {data_id!r}."
             )
         if handler_type not in SUPPORTED_DATASET_SOURCES:
-            raise ValueError(
-                f"Data source {handler_type} is currently not " f"supported."
-            )
+            raise ValueError(f"Data source {handler_type} is currently not supported.")
         handler = get_prod_handlers().get(handler_type)
         api_token_handler = ClmsApiTokenHandler(credentials=credentials)
         return handler(
@@ -140,7 +138,7 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
         """Returns the product type handled by this class.
 
         Returns:
-            str: The string identifier for the EEA product type.
+            str: The string identifier for the CLMS product type.
         """
         pass
 

@@ -22,11 +22,10 @@
 from typing import Any, Callable
 
 from xcube.core.store import PreloadedDataStore
-from xcube.core.store.preload import ExecutorPreloadHandle, PreloadHandle
-from xcube.core.store.preload import PreloadState
+from xcube.core.store.preload import ExecutorPreloadHandle, PreloadHandle, PreloadState
 
-from xcube_clms.constants import DOWNLOAD_FOLDER
-from xcube_clms.utils import cleanup_dir
+from .constants import DOWNLOAD_FOLDER
+from .utils import cleanup_dir
 
 
 class ClmsPreloadHandle(ExecutorPreloadHandle):

@@ -24,10 +24,8 @@ import time
 import jwt
 from requests import RequestException
 
-from .constants import ACCEPT_HEADER
-from .constants import LOG
-from .utils import get_response_of_type
-from .utils import make_api_request
+from .constants import ACCEPT_HEADER, LOG
+from .utils import get_response_of_type, make_api_request
 
 _CLMS_API_AUTH = "https://land.copernicus.eu/@@oauth2-token"
 

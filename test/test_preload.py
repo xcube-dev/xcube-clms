@@ -20,17 +20,15 @@
 # SOFTWARE.
 
 import unittest
-
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
 from xcube.core.store import PreloadState
 
 from xcube_clms.preload import ClmsPreloadHandle
 
 
 class TestClmsPreloadHandle(unittest.TestCase):
-
     @pytest.fixture(autouse=True)
     def setup(self, tmp_path):
         self.sample_data_id_maps = {

@@ -20,17 +20,15 @@
 # SOFTWARE.
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import xarray as xr
-from xcube.core.store import DatasetDescriptor
-from xcube.core.store import new_data_store
+from xcube.core.store import DatasetDescriptor, new_data_store
 from xcube.util.jsonschema import JsonObjectSchema
 
-from xcube_clms.constants import DATA_ID_SEPARATOR
-from xcube_clms.constants import DATA_STORE_ID
+from xcube_clms.constants import DATA_ID_SEPARATOR, DATA_STORE_ID
 
 
 class ClmsDataStoreTest(unittest.TestCase):

@@ -3,9 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from xcube_clms.constants import ID_KEY, UID_KEY
 from xcube_clms.product_handlers.legacy import (
-    LegacyProductHandler,
-    _CHARACTERISTICS_TEMPORAL_EXTENT,
-)
+    _CHARACTERISTICS_TEMPORAL_EXTENT, LegacyProductHandler)
 
 
 class TestLegacyProductHandler(unittest.TestCase):

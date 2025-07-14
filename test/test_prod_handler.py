@@ -1,19 +1,15 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from xcube_clms.constants import (
-    CLMS_DATA_ID_KEY,
-    DATASET_DOWNLOAD_INFORMATION,
-    ITEMS_KEY,
-    FULL_SOURCE,
-)
+from xcube_clms.constants import (CLMS_DATA_ID_KEY,
+                                  DATASET_DOWNLOAD_INFORMATION, FULL_SOURCE,
+                                  ITEMS_KEY)
 from xcube_clms.product_handler import ProductHandler
 from xcube_clms.product_handlers.eea import EeaProductHandler
 from xcube_clms.product_handlers.legacy import LegacyProductHandler
 
 
 class TestProductHandler(unittest.TestCase):
-
     def setUp(self):
         self.cache_store = Mock()
         self.api_token_handler = Mock()

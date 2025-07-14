@@ -19,44 +19,43 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import Tuple, Iterator, Container, Any
+from typing import Any, Container, Iterator, Tuple
 
 import xarray as xr
 from xcube.core.store import (
     DATASET_TYPE,
+    DataDescriptor,
+    DatasetDescriptor,
+    DataStore,
+    DataStoreError,
+    DataTypeLike,
     PreloadedDataStore,
     new_data_store,
-    DataStoreError,
 )
-from xcube.core.store import DataDescriptor
-from xcube.core.store import DataStore
-from xcube.core.store import DataTypeLike
-from xcube.core.store import DatasetDescriptor
 from xcube.util.jsonschema import (
+    JsonArraySchema,
     JsonBooleanSchema,
     JsonComplexSchema,
     JsonIntegerSchema,
-    JsonArraySchema,
+    JsonObjectSchema,
+    JsonStringSchema,
 )
-from xcube.util.jsonschema import JsonObjectSchema
-from xcube.util.jsonschema import JsonStringSchema
 
 from .constants import (
-    DEFAULT_PRELOAD_CACHE_FOLDER,
-    LOG,
-    SUPPORTED_DATASET_SOURCES,
+    CLMS_DATA_ID_KEY,
     DATA_ID_SEPARATOR,
     DATASET_DOWNLOAD_INFORMATION,
-    ITEMS_KEY,
-    FULL_SOURCE,
+    DEFAULT_PRELOAD_CACHE_FOLDER,
     DOWNLOADABLE_FILES_KEY,
-    CLMS_DATA_ID_KEY,
+    FULL_SOURCE,
+    ITEMS_KEY,
+    LOG,
+    SUPPORTED_DATASET_SOURCES,
 )
 from .product_handler import ProductHandler
 from .product_handlers import get_prod_handlers
 from .product_handlers.eea import EeaProductHandler
 from .utils import assert_valid_data_type, fetch_all_datasets, get_extracted_component
-
 
 _FILE_KEY = "file"
 _CRS_KEY = "coordinateReferenceSystemList"

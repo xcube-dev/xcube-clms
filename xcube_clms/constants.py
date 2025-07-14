@@ -20,7 +20,6 @@
 # SOFTWARE.
 
 import logging
-from typing import Final
 
 DATA_STORE_ID = "clms"
 
@@ -42,14 +41,13 @@ CANCEL_ENDPOINT = "@datarequest_delete"
 GET_DOWNLOAD_FILE_URLS_ENDPOINT = "@get-download-file-urls"
 
 # List of dataset sources that are available via CLMS.
-ALL_DATASET_SOURCES = [
-    "LEGACY",
-    "LANDCOVER",
-    "HOTSPOTS",
-    "VITO_Geotiff_LSP",
-    "WEKEO",
-    "EEA",
-]
+# "LEGACY"
+# "LANDCOVER"
+# "HOTSPOTS"
+# "VITO_Geotiff_LSP"
+# "WEKEO"
+# "EEA"
+
 SUPPORTED_DATASET_SOURCES = ["eea", "legacy"]
 
 # Headers
@@ -69,8 +67,6 @@ FULL_SOURCE = "full_source"
 CLMS_DATA_ID_KEY = "id"
 DOWNLOADABLE_FILES_KEY = "downloadable_files"
 DATASET_DOWNLOAD_INFORMATION = "dataset_download_information"
-
-PREFERRED_CHUNK_SIZE: Final = 2000
 
 # Request status
 PENDING = "PENDING"
