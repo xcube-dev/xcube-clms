@@ -9,7 +9,7 @@ import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import DataTypeLike, PreloadHandle, PreloadState
+from xcube.core.store import DataTypeLike, PreloadHandle, PreloadState, DataStoreError
 from xcube.util.jsonschema import JsonObjectSchema
 
 from ..constants import (
@@ -122,10 +122,10 @@ class EeaProductHandler(ProductHandler):
             Any: The opened dataset.
 
         Raises:
-            FileNotFoundError: If the data is not cached and needs to be preloaded first.
+            DataStoreError: If the data is not cached and needs to be preloaded first.
         """
         if not self.cache_store.has_data(data_id):
-            raise FileNotFoundError(
+            raise DataStoreError(
                 f"No cached data found for data_id: "
                 f"{data_id}. Please preload the data "
                 f"first using the `preload_data()` method."
@@ -296,9 +296,9 @@ class EeaProductHandler(ProductHandler):
         )
         response = get_response_of_type(response_data, "json")
         task_ids = response.get(_TASK_IDS_KEY)
-        assert len(task_ids) == 1, (
-            f"Expected API response with 1 task_id, got {len(task_ids)}"
-        )
+        assert (
+            len(task_ids) == 1
+        ), f"Expected API response with 1 task_id, got {len(task_ids)}"
         task_id = task_ids[0].get(_TASK_ID_KEY)
         LOG.debug(f"Download Requested with Task ID : {task_id}")
         return [task_id]

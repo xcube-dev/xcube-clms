@@ -1,9 +1,13 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from xcube.core.store import DataStoreError
+
 from xcube_clms.constants import ID_KEY, UID_KEY
 from xcube_clms.product_handlers.legacy import (
-    _CHARACTERISTICS_TEMPORAL_EXTENT, LegacyProductHandler)
+    _CHARACTERISTICS_TEMPORAL_EXTENT,
+    LegacyProductHandler,
+)
 
 
 class TestLegacyProductHandler(unittest.TestCase):
@@ -131,7 +135,7 @@ class TestLegacyProductHandler(unittest.TestCase):
     ):
         mock_request_download.return_value = ["url1", "url2"]
         mock_filter_dates.return_value = []
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DataStoreError):
             self.legacy_handler.filter_urls(
                 "id123", time_range=("2020-01-01", "2021-01-01")
             )
@@ -159,5 +163,5 @@ class TestLegacyProductHandler(unittest.TestCase):
     @patch.object(LegacyProductHandler, "filter_urls")
     def test_open_data_invalid_format(self, mock_filter_urls):
         mock_filter_urls.return_value = ["unknown_url.hdf"]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DataStoreError):
             self.legacy_handler.open_data("id123")

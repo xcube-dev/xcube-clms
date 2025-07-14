@@ -1,9 +1,15 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from xcube_clms.constants import (CLMS_DATA_ID_KEY,
-                                  DATASET_DOWNLOAD_INFORMATION, FULL_SOURCE,
-                                  ITEMS_KEY)
+from xcube.core.store.preload import NullPreloadHandle
+from xcube.util.jsonschema import JsonObjectSchema
+
+from xcube_clms.constants import (
+    CLMS_DATA_ID_KEY,
+    DATASET_DOWNLOAD_INFORMATION,
+    FULL_SOURCE,
+    ITEMS_KEY,
+)
 from xcube_clms.product_handler import ProductHandler
 from xcube_clms.product_handlers.eea import EeaProductHandler
 from xcube_clms.product_handlers.legacy import LegacyProductHandler
@@ -50,6 +56,21 @@ class TestProductHandler(unittest.TestCase):
             credentials=self.mock_credentials,
         )
         self.assertIsInstance(handler, LegacyProductHandler)
+
+    def test_legacy_preload(self):
+        handler = ProductHandler.guess(
+            data_id="daily-surface-soil-moisture-v1.0",
+            datasets_info=self.datasets_info,
+            cache_store=self.cache_store,
+            credentials=self.mock_credentials,
+        )
+        preload_handle = handler.preload_data(("daily-surface-soil-moisture-v1.0",))
+        self.assertIsInstance(preload_handle, NullPreloadHandle)
+
+        schema = handler.get_preload_data_params_schema()
+        self.assertEqual(
+            vars(JsonObjectSchema(additional_properties=False)), vars(schema)
+        )
 
     def test_guess_missing_args_raises(self):
         with self.assertRaises(ValueError) as context:

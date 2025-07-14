@@ -122,7 +122,23 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
         self,
         data_id: str = None,
     ) -> JsonObjectSchema:
-        pass
+        """Get the schema for the parameters passed as *open_params* to
+        :meth:`open_data`.
+        If *data_id* is given, the returned schema will be tailored
+        to the constraints implied by the identified data resource.
+        Some openers might not support this, therefore *data_id*
+        is optional, and if it is omitted, the returned schema will be
+        less restrictive.
+
+        Args:
+            data_id: An optional data resource identifier.
+
+        Returns:
+            The schema for the parameters in *open_params*.
+
+        Raises:
+            DataStoreError: If an error occurs.
+        """
 
     @abstractmethod
     def open_data(
@@ -130,7 +146,21 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
         data_id: str,
         **open_params,
     ) -> Any:
-        pass
+        """Open the data resource given by the data resource identifier
+        *data_id* using the supplied *open_params*.
+
+        Raises if *data_id* does not exist.
+
+        Args:
+            data_id: The data resource identifier.
+            **open_params: Opener-specific parameters.
+
+        Returns:
+            An xarray.Dataset instance.
+
+        Raises:
+            DataStoreError: If an error occurs.
+        """
 
     @classmethod
     @abstractmethod
@@ -140,7 +170,6 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
         Returns:
             str: The string identifier for the CLMS product type.
         """
-        pass
 
     def preload_data(
         self,
@@ -154,7 +183,20 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
 
     @abstractmethod
     def has_data(self, data_id, data_type: DataTypeLike = None):
-        pass
+        """Check if the data resource given by *data_id* is
+        available in this store.
+
+        Args:
+            data_id: A data identifier
+            data_type: An optional data type. If given, it will also be
+                checked whether the data is available as the specified
+                type. May be given as type alias name, as a type, or as
+                a :class:`DataType` instance.
+
+        Returns:
+            True, if the data resource is available in this store, False
+            otherwise.
+        """
 
     @abstractmethod
     def request_download(self, data_id: str) -> list[str]:
@@ -168,7 +210,6 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
                 which will be tracked and used for next steps or a list of
                 URLs that can be lazily loaded.
         """
-        pass
 
     @abstractmethod
     def prepare_request(self, data_id: str) -> list[str]:
@@ -182,4 +223,3 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
         Returns:
             tuple[str, dict]: The URL and headers needed for the request.
         """
-        pass

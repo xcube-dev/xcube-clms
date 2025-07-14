@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 import xarray as xr
-from xcube.core.store import DataTypeLike
+from xcube.core.store import DataTypeLike, DataStoreError
 from xcube.util.jsonschema import JsonDateSchema, JsonObjectSchema
 
 from ..constants import (
@@ -128,7 +128,7 @@ class LegacyProductHandler(ProductHandler):
             A list of filtered download URLs.
 
         Raises:
-            ValueError: If no URLs match the provided time range.
+            DataStoreError: If no URLs match the provided time range.
         """
         urls = self.request_download(data_id)
         time_range = preprocess_params.get("time_range")
@@ -139,7 +139,7 @@ class LegacyProductHandler(ProductHandler):
         filtered_urls = extract_and_filter_dates(urls, time_range)
 
         if len(filtered_urls) == 0:
-            raise ValueError("No data found for the time range provided.")
+            raise DataStoreError("No data found for the time range provided.")
 
         return filtered_urls
 
@@ -151,4 +151,4 @@ class LegacyProductHandler(ProductHandler):
         elif fmt == "geotiff":
             return xr.open_mfdataset(urls, engine="rasterio")
         else:
-            raise ValueError("Unsupported format detected.")
+            raise DataStoreError("Unsupported format detected.")

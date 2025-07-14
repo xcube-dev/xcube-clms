@@ -10,7 +10,7 @@ import numpy as np
 import rasterio
 import xarray as xr
 from rasterio.transform import from_origin
-from xcube.core.store import PreloadState
+from xcube.core.store import PreloadState, DataStoreError
 
 from xcube_clms.constants import (CLMS_API_URL, DATA_ID_SEPARATOR,
                                   DOWNLOAD_ENDPOINT, TASK_STATUS_ENDPOINT,
@@ -266,13 +266,13 @@ class TestEeaProductHandler(unittest.TestCase):
         self.assertIsInstance(opened_data, xr.Dataset)
 
         self.eea_handler.cache_store.has_data.return_value = False
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(DataStoreError):
             self.eea_handler.open_data("non-existing|data-id")
 
     def test_open_data_file_not_found(self):
         self.mock_cache_store.has_data.return_value = False
 
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(DataStoreError):
             self.eea_handler.open_data("data_id")
 
     @patch("xcube_clms.product_handlers.eea.ClmsPreloadHandle")
