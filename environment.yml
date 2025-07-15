@@ -10,10 +10,12 @@ dependencies:
   - requests
   - fsspec
   - xcube>=1.9.0
+  - zappend
   # Testing
   - numpy
   - black
   - flake8
+  - ruff
   - pytest
   - pytest-cov
   - pytest-recording

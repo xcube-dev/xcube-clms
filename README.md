@@ -87,6 +87,15 @@ cassettes, testing can be then performed as usual.
 
 ## Additional Notes about the data store
 
+This data store currently only supports some dataset sources from the CLMS API:
+
+- EEA
+- LEGACY
+
+NOTE: More dataset sources will be supported in newer versions
+
+### EEA
+
 This data store introduces the initial mechanism of preloading data, including
 cache management, downloading, and file processing.
 This uses the experimental Preload API from the xcube data store.
@@ -95,7 +104,7 @@ This new addition of a preload interface is due to the nature of the CLMS API
 which allows the user to create data requests, with undetermined time to wait in
 the queue for the request to be processed, followed by downloading zip files,
 unzipping them, extracting them in a cache and processing them which can be then
-finally opened using a cache data store.
+finally opened using a cache data store for `EEA pre-packaged` data sources.
 The default is `file` data store stored at `/clms_cache` location in your `cwd`,
 but the users are free to choose their data store of their liking.
 
@@ -107,42 +116,10 @@ the request status, downloading the data, extracting and post-processing it.
 The preload mechanism can be used using
 `.preload_data(*data_ids, **preload_params)` on the CLMS data store instance.
 
-The following classes (components) are responsible for this mechanism:
+### LEGACY
 
-**Clms**
-
-- Serves as the main interface to interact with the CLMS API. This class
-  coordinates with the `ClmsPreloadHandle` class to preload the data into a
-  cache data store.
-
-**DownloadTaskManager**
-
-- Handles the download process, including managing download requests and
-  checking their statuses.
-- Retrieves task statuses based on dataset and file IDs or task IDs, determining
-  whether the download is pending, completed, or cancelled.
-- Initiates data downloads in chunks and manages zip file extraction, looking
-  specifically for geo data. Definition of geo data is defined in the function
-  docstring in the notes.
-
-**ClmsApiTokenHandler**
-
-- Handles the creation and refreshing of the CLMS API token given the
-  credentials which can be obtained following the
-  steps [here](https://eea.github.io/clms-api-docs/authentication.html)
-
-**FileProcessor**
-
-- Handles the processing of downloaded data, extracting, stacking and
-  storing geo files from downloaded zip files.
-
-**ClmsPreloadHandle**
-
-- The main class responsible for orchestrating the preloading of datasets.
-- It coordinates with _DownloadTaskManager_,
-  _ClmsApiTokenHandler_ and _FileProcessor_ classes to handle the complete
-  process of caching, data downloading, making sure token is valid and
-  processing of downloaded data.
+For datasets available via the `LEGACY` source, they can be lazily loaded
+directly using `open_data(...)`
 
 ## CLMS API
 

@@ -1,3 +1,14 @@
+## Changes in 1.1.0 (in development)
+
+### Enhancements
+
+* The `xcube-clms` now supports datasets from the `LEGACY` sources of the
+  [CLMS API.](https://eea.github.io/clms-api-docs/download.html#auxiliary-api-to-get-direct-download-links-for-non-eea-hosted-datasets)
+
+### Other changes
+
+* Performed internal code refactoring for improved maintainability
+
 ## Changes in 1.0.0
 
 ### Major Changes
@@ -11,7 +22,8 @@
   assets. (#21)
 * Ensures consistency of data_ids between the CLMS data store and the preloaded
   data store. (#21)
-* Preload jobs now always restart from scratch, regardless of whether a dataset was previously preloaded. Any existing preloaded data will be overwritten.
+* Preload jobs now always restart from scratch, regardless of whether a dataset
+  was previously preloaded. Any existing preloaded data will be overwritten.
 
 ## Changes in 0.2.2
 

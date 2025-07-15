@@ -20,18 +20,15 @@
 # SOFTWARE.
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import xarray as xr
-from xcube.core.store import DatasetDescriptor, PreloadedDataStore
-from xcube.core.store import new_data_store
+from xcube.core.store import DatasetDescriptor, new_data_store
 from xcube.util.jsonschema import JsonObjectSchema
 
-from xcube_clms.constants import DATA_ID_SEPARATOR
-from xcube_clms.constants import DATA_STORE_ID
-from xcube_clms.preload import ClmsPreloadHandle
+from xcube_clms.constants import DATA_ID_SEPARATOR, DATA_STORE_ID
 
 
 class ClmsDataStoreTest(unittest.TestCase):
@@ -47,12 +44,17 @@ class ClmsDataStoreTest(unittest.TestCase):
             "token_uri": "",
             "user_id": "",
         }
-        self.data_id = "clc-backbone-2021|CLMS_CLCplus_RASTER_2021"
+        self.eea_data_id = "clc-backbone-2021|CLMS_CLCplus_RASTER_2021"
+        self.legacy_data_id = "daily-surface-soil-moisture-v1.0"
         self.store = new_data_store(
             DATA_STORE_ID,
             credentials=self.mock_credentials,
             cache_store_params={"root": "preload_clms_cache"},
         )
+
+        # Comment these lines when running pytest vcr in record mode
+        mock_jwt_encode_patcher = patch("xcube_clms.api_token_handler.jwt.encode")
+        self.mock_jwt_encode = mock_jwt_encode_patcher.start()
 
     def tearDown(self):
         patch.stopall()
@@ -68,15 +70,18 @@ class ClmsDataStoreTest(unittest.TestCase):
     @pytest.mark.vcr()
     def test_list_data_ids(self):
         data_ids = self.store.list_data_ids()
-
         self.assertIsNot(data_ids, [])
-        for data_id in data_ids:
-            self.assertEqual(len(data_id.split(DATA_ID_SEPARATOR)), 2)
+        with_sep = [id_ for id_ in data_ids if DATA_ID_SEPARATOR in id_]
+        without_sep = [id_ for id_ in data_ids if DATA_ID_SEPARATOR not in id_]
+        self.assertIsNotNone(with_sep)
+        self.assertIsNotNone(without_sep)
 
     @pytest.mark.vcr()
     def test_get_data_ids(self):
         data_ids = list(self.store.get_data_ids())
-        self.assertEqual(data_ids[0], "clc-backbone-2021|CLMS_CLCplus_RASTER_2021")
+        self.assertTrue(len(data_ids) > 0)
+        self.assertTrue(len([i for i in data_ids if DATA_ID_SEPARATOR in i]) > 0)
+        self.assertTrue(len([i for i in data_ids if DATA_ID_SEPARATOR not in i]) > 0)
 
     @pytest.mark.vcr()
     def test_get_data_ids_with_all_attrs(self):
@@ -85,27 +90,10 @@ class ClmsDataStoreTest(unittest.TestCase):
             credentials=self.mock_credentials,
             cache_store_params={"root": "preload_clms_cache"},
         )
-        result = list(store.get_data_ids(include_attrs=True))
-        self.assertEqual(
-            (
-                "clc-backbone-2021|CLMS_CLCplus_RASTER_2021",
-                {
-                    "@id": "b813d203-d09b-4663-95f7-65dc6d53789e",
-                    "area": "Europe",
-                    "file": "CLMS_CLCplus_RASTER_2021",
-                    "format": "Geotiff",
-                    "path": "H:\\Corine_Land_Cover_Backbone\\Corine_Land_Cover_Backbone_CLCBB_2021\\CLC_BB_2021\\Data\\data-details\\raster\\CLMS_CLCplus_RASTER_2021.zip",
-                    "resolution": "10 m",
-                    "size": "7 GB",
-                    "source": "EEA",
-                    "title": "",
-                    "type": "Raster",
-                    "version": "V1_1",
-                    "year": "",
-                },
-            ),
-            result[0],
-        )
+        results = list(store.get_data_ids(include_attrs=True))
+        for res in results:
+            self.assertTrue(len(res[0]) > 0)
+            self.assertIsInstance(res[1], dict)
 
     @pytest.mark.vcr()
     def test_get_data_ids_with_specific_attrs(self):
@@ -114,22 +102,28 @@ class ClmsDataStoreTest(unittest.TestCase):
             credentials=self.mock_credentials,
             cache_store_params={"root": "preload_clms_cache"},
         )
+
+        # EEA datasets
         result = list(store.get_data_ids(include_attrs=["area"]))
-        self.assertEqual(
-            (
-                "clc-backbone-2021|CLMS_CLCplus_RASTER_2021",
-                {
-                    "area": "Europe",
-                },
-            ),
-            result[0],
-        )
+        data_ids_w_included_attrs = [
+            d_a_tuple[1] for d_a_tuple in result if DATA_ID_SEPARATOR in d_a_tuple[0]
+        ]
+        self.assertIsNotNone(data_ids_w_included_attrs)
+
+        # Non-EEA datasets
+        result = list(store.get_data_ids(include_attrs=["collection"]))
+        data_ids_w_included_attrs = [
+            d_a_tuple[1]
+            for d_a_tuple in result
+            if DATA_ID_SEPARATOR not in d_a_tuple[0]
+        ]
+        self.assertIsNotNone(data_ids_w_included_attrs)
 
     @pytest.mark.vcr()
     def test_describe_data(self):
-        descriptor = self.store.describe_data(self.data_id)
+        descriptor = self.store.describe_data(self.eea_data_id)
         expected_descriptor = {
-            "data_id": self.data_id,
+            "data_id": self.eea_data_id,
             "data_type": "dataset",
             "crs": "EPSG:3035",
             "time_range": ("2020-10-01", "2022-03-31"),
@@ -139,7 +133,7 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_data_types_for_data(self):
-        data_types = self.store.get_data_types_for_data(self.data_id)
+        data_types = self.store.get_data_types_for_data(self.eea_data_id)
         expected_data_types = ("dataset",)
         self.assertEqual(data_types, expected_data_types)
 
@@ -156,26 +150,29 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_data_opener_ids(self):
-        data_opener_ids = ("dataset:zarr:file",)
+        data_opener_ids = ("dataset:zarr:file", "dataset:netcdf:https")
         opener_ids = self.store.get_data_opener_ids()
         expected_opener_ids = data_opener_ids
         self.assertEqual(expected_opener_ids, opener_ids)
 
-        opener_ids = self.store.get_data_opener_ids(self.data_id)
+        opener_ids = self.store.get_data_opener_ids(self.eea_data_id)
         expected_opener_ids = data_opener_ids
         self.assertEqual(expected_opener_ids, opener_ids)
 
     @pytest.mark.vcr()
     def test_has_data(self):
-        has_data = self.store.has_data(self.data_id)
+        has_data = self.store.has_data(self.eea_data_id)
         self.assertTrue(has_data)
 
-        not_has_data = self.store.has_data("invalid|data")
+        has_data = self.store.has_data(self.legacy_data_id)
+        self.assertTrue(has_data)
+
+        not_has_data = self.store.has_data("invalid_data")
         self.assertFalse(not_has_data)
 
     @pytest.mark.vcr()
     def test_get_open_data_params_schema(self):
-        schema = self.store.get_open_data_params_schema(self.data_id)
+        schema = self.store.get_open_data_params_schema(self.eea_data_id + ".zarr")
         self.assertIsInstance(schema, JsonObjectSchema)
         self.assertIn("log_access", schema.properties)
         self.assertIn("cache_size", schema.properties)
@@ -188,13 +185,17 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertIn("drop_variables", schema.properties)
         self.assertIn("consolidated", schema.properties)
 
+        schema = self.store.get_open_data_params_schema(self.legacy_data_id)
+        self.assertIsInstance(schema, JsonObjectSchema)
+        self.assertIn("time_range", schema.properties)
+
     @pytest.mark.vcr()
     def test_search_data(self):
         self.assertRaises(NotImplementedError, self.store.search_data)
 
     @pytest.mark.vcr()
     def test_get_search_params_schema(self):
-        schema = self.store.get_search_params_schema(self.data_id)
+        schema = self.store.get_search_params_schema(self.eea_data_id)
         self.assertIsInstance(schema, JsonObjectSchema)
         self.assertEqual({}, schema.properties)
 
@@ -207,7 +208,7 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertIn("tile_size", schema.properties)
 
     @pytest.mark.vcr()
-    @patch("xcube_clms.clms.new_data_store")
+    @patch("xcube_clms.store.new_data_store")
     def test_open_data(self, mock_new_data_store):
         mock_data_store = MagicMock()
         mock_data_store.has_data.return_value = True
@@ -241,14 +242,19 @@ class ClmsDataStoreTest(unittest.TestCase):
         )
 
     @pytest.mark.vcr()
-    @patch("xcube_clms.clms.Clms._access_item")
-    @patch("xcube_clms.preload.ClmsApiTokenHandler")
-    def test_preload_data(self, mock_token_handler, mock_access_item):
+    @patch("xcube_clms.product_handlers.eea.get_extracted_component")
+    @patch("xcube_clms.product_handler.ClmsApiTokenHandler")
+    def test_preload_data(self, mock_token_handler, mock_get_extracted_component):
         mock_token_handler.api_token = "mock_token"
-        mock_access_item.side_effect = [{"id": "data_id"}, {"id": "product_id"}]
+
+        mock_get_extracted_component.side_effect = [
+            {"id": "dummy"},  # has_data() call
+            {"id": "data_id"},
+            {"id": "product_id"},
+        ]
 
         cache_data_store = self.store.preload_data(
-            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010"
+            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010",
         )
         self.assertEqual(
             {

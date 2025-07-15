@@ -18,21 +18,21 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
+import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
 
-from requests import HTTPError
-from requests import JSONDecodeError
-from requests import RequestException
-from requests import Response
-from requests import Timeout
+import fsspec
+import pytest
+import xarray as xr
+from requests import (HTTPError, JSONDecodeError, RequestException, Response,
+                      Timeout)
+from xcube.core.store import DataStoreError
 
-from xcube_clms.utils import (
-    get_response_of_type,
-    make_api_request,
-    build_api_url,
-)
+from xcube_clms.utils import (build_api_url, cleanup_dir, download_zip_data,
+                              extract_and_filter_dates, get_response_of_type,
+                              get_spatial_dims, make_api_request)
 
 url = "http://example.com/api"
 
@@ -45,7 +45,6 @@ def setup_requests_mock(
     headers: dict[str, str] | None = None,
     raise_for_status_side_effect: Exception | None = None,
 ):
-
     mock_response = MagicMock()
     mock_response.status_code = status_code
     mock_response.text = text
@@ -212,26 +211,201 @@ class UtilsTest(unittest.TestCase):
         ):
             get_response_of_type(mock_response, "bytes")
 
-    def test_build_api_url_no_parameters(self):
+    def test_build_api_url_no_query_parameters(self):
         api_endpoint = "data"
-        expected_url = (
-            "http://example.com/api/data/?portal_type=DataSet" "&fullobjects=1"
-        )
+        expected_url = "http://example.com/api/data"
         result = build_api_url(url, api_endpoint)
+        self.assertEqual(result, expected_url)
+
+    def test_build_api_url_with_dataset_parameters(self):
+        api_endpoint = "data"
+        expected_url = "http://example.com/api/data/?portal_type=DataSet&fullobjects=1"
+        result = build_api_url(url, api_endpoint, datasets_request=True)
         self.assertEqual(result, expected_url)
 
     def test_build_api_url_with_metadata_fields(self):
         api_endpoint = "data"
-        metadata_fields = ["field1", "field2"]
-        expected_url = (
-            "http://example.com/api/data/?portal_type=DataSet"
-            "&fullobjects=1&metadata_fields=field1%2Cfield2"
-        )
+        metadata_fields = {"metadata_fields": "field1,field2"}
+        expected_url = "http://example.com/api/data/?metadata_fields=field1%2Cfield2"
         result = build_api_url(url, api_endpoint, metadata_fields)
         self.assertEqual(result, expected_url)
 
     def test_build_api_url_with_datasets_request_false(self):
         api_endpoint = "data"
         expected_url = "http://example.com/api/data"
-        result = build_api_url(url, api_endpoint, datasets_request=False)
+        result = build_api_url(url, api_endpoint)
         self.assertEqual(result, expected_url)
+
+    def test_get_spatial_dims_lat_lon(self):
+        ds = xr.Dataset(coords={"lat": [0, 1], "lon": [10, 20]})
+        y, x = get_spatial_dims(ds)
+        assert (y, x) == ("lat", "lon")
+
+    def test_get_spatial_dims_y_x(self):
+        ds = xr.Dataset(coords={"y": [0, 1], "x": [10, 20]})
+        y, x = get_spatial_dims(ds)
+        assert (y, x) == ("y", "x")
+
+    def test_get_spatial_dims_invalid(self):
+        ds = xr.Dataset(coords={"row": [0, 1], "col": [10, 20]})
+        with pytest.raises(DataStoreError):
+            get_spatial_dims(ds)
+
+    def test_cleanup_dir_deletes_files(self):
+        with tempfile.TemporaryDirectory() as tmp_path_str:
+            tmp_path = Path(tmp_path_str)
+            folder_path = tmp_path / "test_folder"
+            folder_path.mkdir()
+
+            delete_file = folder_path / "file1.tif"
+            keep_file = folder_path / "file2.zarr"
+            delete_file.write_text("test")
+            keep_file.write_text("test")
+
+            cleanup_dir(folder_path, keep_extension=".zarr")
+
+            self.assertFalse(delete_file.exists())
+            self.assertTrue(keep_file.exists())
+
+    def test_cleanup_dir_deletes_all_files_without_keep_extension(self):
+        with tempfile.TemporaryDirectory() as tmp_path_str:
+            tmp_path = Path(tmp_path_str)
+            folder_path = tmp_path / "test_folder"
+            folder_path.mkdir()
+
+            keep_file = folder_path / "file1.zarr"
+            delete_file = folder_path / "file2.tif"
+            keep_file.write_text("test")
+            delete_file.write_text("test")
+
+            cleanup_dir(folder_path)
+
+            self.assertFalse(keep_file.exists())
+            self.assertFalse(delete_file.exists())
+
+    def test_cleanup_dir_deletes_nested_directories(self):
+        with tempfile.TemporaryDirectory() as tmp_path_str:
+            tmp_path = Path(tmp_path_str)
+            folder_path = tmp_path / "test_folder"
+            folder_path.mkdir()
+            nested_folder = folder_path / "nested_folder"
+            nested_folder.mkdir()
+
+            nested_file = nested_folder / "file.txt"
+            nested_file.write_text("test")
+
+            cleanup_dir(folder_path)
+
+            self.assertFalse(nested_folder.exists())
+            self.assertFalse(nested_file.exists())
+
+    def test_cleanup_dir_non_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_path_str:
+            tmp_path = Path(tmp_path_str)
+            folder_path = tmp_path / "test_folder"
+            folder_path.mkdir()
+
+            delete_file = folder_path / "file1.tif"
+            delete_file.write_text("test")
+
+            with self.assertRaises(ValueError):
+                cleanup_dir(delete_file, keep_extension=".zarr")
+
+    @patch("xcube_clms.utils.fsspec.filesystem")
+    @patch("xcube_clms.utils.make_api_request")
+    @patch("tempfile.NamedTemporaryFile")
+    @patch("builtins.open")
+    def test_download_zip_data(
+        self, mock_dest_open, mock_temp_file, mock_make_api_request, mock_fsspec
+    ):
+        mock_temp_file.return_value.__enter__.return_value.name = "/tmp/test"
+
+        mock = Mock()
+        mock.iter_content.return_value = [b"chunk1", b"chunk2"]
+        mock_make_api_request.return_value = mock
+
+        mock_file_fs = Mock(spec=fsspec.AbstractFileSystem)
+
+        mock_outer_zip_fs = Mock()
+        mock_outer_zip_fs.ls.return_value = [
+            {
+                "filename": "test.zip",
+                "name": "test.zip",
+            }
+        ]
+
+        mock_inner_zip_fs = Mock()
+        mock_inner_zip_fs.ls.return_value = [{"name": "test.tif"}]
+        mock_inner_zip_fs.isdir.return_value = False
+
+        mock_fsspec.side_effect = lambda protocol, fo=None: {
+            "zip": mock_outer_zip_fs if fo == "/tmp/test" else mock_inner_zip_fs,
+            "file": mock_file_fs,
+        }[protocol]
+
+        outer_file = Mock()
+        outer_context = Mock()
+        outer_context.__enter__ = Mock(return_value=outer_file)
+        outer_context.__exit__ = Mock()
+        mock_outer_zip_fs.open.return_value = outer_context
+
+        mock_source_file = Mock()
+        mock_source_file.read.side_effect = [b"data", b""]
+        inner_context = Mock()
+        inner_context.__enter__ = Mock(return_value=mock_source_file)
+        inner_context.__exit__ = Mock()
+        mock_inner_zip_fs.open.return_value = inner_context
+
+        mock_cache_store = MagicMock()
+
+        download_zip_data(mock_cache_store, "http://test.com", "test_id")
+
+        mock_make_api_request.assert_called_once_with(
+            "http://test.com",
+            timeout=600,
+            stream=True,
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://source-website.com",
+            },
+        )
+        self.assertTrue(mock_cache_store.fs.makedirs.called)
+        self.assertTrue(mock_outer_zip_fs.ls.called)
+        self.assertTrue(mock_outer_zip_fs.open.called)
+        self.assertTrue(mock_inner_zip_fs.ls.called)
+        self.assertTrue(mock_inner_zip_fs.open.called)
+        self.assertTrue(mock_dest_open.called)
+
+    def test_extract_and_filter_dates_basic(self):
+        urls = [
+            "https://example.com/20220101/data.tif",
+            "https://example.com/20220215/data.tif",
+            "https://example.com/20220301/data.tif",
+            "https://example.com/invalid/data.tif",  # No date
+        ]
+        time_range = ("2022-01-15", "2022-02-28")
+        expected = [
+            "https://example.com/20220215/data.tif",
+        ]
+        result = extract_and_filter_dates(urls, time_range)
+        assert result == expected
+
+    def test_extract_and_filter_dates_multiple_matches(self):
+        urls = [
+            "https://example.com/20220101/a.nc",
+            "https://example.com/20220115/b.nc",
+            "https://example.com/20220130/c.nc",
+        ]
+        time_range = ("2022-01-01", "2022-01-31")
+        expected = sorted(urls)
+        result = extract_and_filter_dates(urls, time_range)
+        assert result == expected
+
+    def test_extract_and_filter_dates_none_in_range(self):
+        urls = [
+            "https://example.com/20210101/a.tif",
+            "https://example.com/20210315/b.tif",
+        ]
+        time_range = ("2022-01-01", "2022-12-31")
+        result = extract_and_filter_dates(urls, time_range)
+        assert result == []

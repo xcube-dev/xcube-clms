@@ -19,25 +19,50 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import Optional, Any, Union, Literal
+import re
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Final, Literal, Optional, Union
 from urllib.parse import urlencode
 
+import fsspec
 import requests
-from requests import HTTPError
-from requests import JSONDecodeError
-from requests import RequestException
-from requests import Response
-from requests import Timeout
-from xcube.core.store import DATASET_TYPE
-from xcube.core.store import DataStoreError
-from xcube.core.store import DataTypeLike
+import xarray as xr
+from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
+from xcube.core.store import (
+    DATASET_TYPE,
+    DataStoreError,
+    DataTypeLike,
+    PreloadedDataStore,
+)
 
-from xcube_clms.constants import ACCEPT_HEADER
-from xcube_clms.constants import LOG
+from .constants import (
+    ACCEPT_HEADER,
+    CLMS_API_URL,
+    CLMS_DATA_ID_KEY,
+    DATA_ID_SEPARATOR,
+    DATASET_DOWNLOAD_INFORMATION,
+    DOWNLOAD_FOLDER,
+    DOWNLOADABLE_FILES_KEY,
+    FULL_SOURCE,
+    ITEMS_KEY,
+    LOG,
+    SEARCH_ENDPOINT,
+    SUPPORTED_DATASET_SOURCES,
+)
 
+_RESULTS = "Results/"
+_GEO_FILE_EXTS = (".tif", ".tiff")
 _PORTAL_TYPE = {"portal_type": "DataSet"}
-_METADATA_FIELDS = "metadata_fields"
 _FULL_SCHEMA = "fullobjects"
+_ORIGINAL_FILENAME_KEY = "orig_filename"
+_NAME_KEY = "name"
+_FILENAME_KEY = "filename"
+_BATCH = "batching"
+_NEXT = "next"
+_PREFERRED_CHUNK_SIZE: Final = 2000
+
 
 ResponseType = Literal["json", "text", "bytes"]
 
@@ -156,8 +181,8 @@ def make_api_request(
 def build_api_url(
     url: str,
     api_endpoint: str,
-    metadata_fields: Optional[list] = None,
-    datasets_request: bool = True,
+    extra_params: dict[str, str] | None = None,
+    datasets_request: bool = False,
 ) -> str:
     """Builds a complete API URL by appending the endpoint and query parameters.
 
@@ -168,10 +193,10 @@ def build_api_url(
     Args:
         url: The base URL of the API.
         api_endpoint: The specific endpoint to be appended to the base URL.
-        metadata_fields: Optional list of metadata fields to include as query
-            parameters.
+        extra_params: Optional dictionary of additional query parameters to
+            include.
         datasets_request: Indicates whether the request targets datasets.
-            Defaults to True.
+            Defaults to False.
 
     Returns:
         A complete API URL string.
@@ -180,8 +205,8 @@ def build_api_url(
     if datasets_request:
         params = _PORTAL_TYPE
         params[_FULL_SCHEMA] = "1"
-    if metadata_fields:
-        params[_METADATA_FIELDS] = ",".join(metadata_fields)
+    if extra_params:
+        params.update(extra_params)
     if params:
         query_params = urlencode(params)
         return f"{url}/{api_endpoint}/?{query_params}"
@@ -239,3 +264,379 @@ def get_response_of_type(api_response: Response, data_type: Union[ResponseType, 
         )
 
     return response
+
+
+def get_spatial_dims(ds: xr.Dataset) -> (str, str):
+    """Identifies the spatial coordinate names in a dataset.
+    The function checks for common spatial dimension naming conventions: ("lat", "lon")
+    or ("y", "x"). If neither pair is found, it raises a DataStoreError.
+
+    Args:
+        ds: The dataset to inspect.
+
+    Returns:
+        A tuple of strings representing the names of the spatial dimensions.
+
+    Raises:
+        DataStoreError: If no recognizable spatial dimensions are found.
+    """
+    if "lat" in ds and "lon" in ds:
+        y_coord, x_coord = "lat", "lon"
+    elif "y" in ds and "x" in ds:
+        y_coord, x_coord = "y", "x"
+    else:
+        raise DataStoreError("No spatial dimensions found in dataset.")
+    return y_coord, x_coord
+
+
+def fetch_all_datasets() -> list[dict[str, Any]]:
+    """Fetches all datasets from the CLMS API and their metadata.
+
+    Returns:
+        A list of dictionaries representing all datasets.
+    """
+    LOG.info(f"Fetching datasets metadata from {CLMS_API_URL}")
+    datasets_info = []
+    response_data = make_api_request(
+        build_api_url(CLMS_API_URL, SEARCH_ENDPOINT, datasets_request=True)
+    )
+    while True:
+        response = get_response_of_type(response_data, "json")
+        datasets_info.extend(response.get(ITEMS_KEY, []))
+        next_page = response.get(_BATCH, {}).get(_NEXT)
+        if not next_page:
+            break
+        response_data = make_api_request(next_page)
+    LOG.info("Fetching complete.")
+    return datasets_info
+
+
+def get_extracted_component(
+    datasets_info: list[dict[str, Any]],
+    data_id,
+    item_type: Literal["item", "product"] = "product",
+) -> dict[str, Any] | None:
+    """Extracts either an item or product from the list of datasets
+    available
+
+    Args:
+        datasets_info: Complete list of metadata of all datasets from CLMS API.
+        data_id: The unique identifier for the dataset.
+        item_type: 'item' to return downloadable item(s), 'product' to
+                return the dataset entry.
+
+    Returns:
+        A dictionary representing the dataset item.
+
+    Raises:
+        ValueError: If the dataset item is not found or multiple items match.
+    """
+
+    def extract_dataset_component() -> list[dict[str, Any]] | list[Any]:
+        if item_type == "item":
+            if DATA_ID_SEPARATOR in data_id:
+                clms_data_product_id, dataset_filename = data_id.split(
+                    DATA_ID_SEPARATOR
+                )
+                return [
+                    item
+                    for product in datasets_info
+                    if product[CLMS_DATA_ID_KEY] == clms_data_product_id
+                    for item in product.get(DOWNLOADABLE_FILES_KEY, {}).get(
+                        ITEMS_KEY, []
+                    )
+                    if item.get("file") == dataset_filename
+                ]
+
+            for product in datasets_info:
+                if product[CLMS_DATA_ID_KEY] == data_id:
+                    dataset_download_info = product[DATASET_DOWNLOAD_INFORMATION][
+                        ITEMS_KEY
+                    ][0]
+                    if (
+                        dataset_download_info.get(FULL_SOURCE).lower()
+                        in SUPPORTED_DATASET_SOURCES
+                    ):
+                        return [dataset_download_info]
+
+            return []
+
+        elif item_type == "product":
+            return [
+                product
+                for product in datasets_info
+                if data_id.split(DATA_ID_SEPARATOR)[0] == product[CLMS_DATA_ID_KEY]
+            ]
+
+        else:
+            raise ValueError(
+                f"Invalid item_type: {item_type}. Must be 'item' or 'product'."
+            )
+
+    dataset = extract_dataset_component()
+    if len(dataset) > 1:
+        LOG.warning(
+            f"Expected one dataset for data_id: {data_id}, found {len(dataset)}."
+        )
+    elif len(dataset) < 1:
+        LOG.warning(f"No dataset found for data_id: {data_id}")
+        return None
+    return dataset[0]
+
+
+def get_dataset_download_info(dataset_id: str, file_id: str) -> dict:
+    """Generates download information for a specific dataset ID and file ID.
+
+    This function creates a dictionary containing dataset and file IDs,
+    formatted as required by the CLMS API.
+
+    Args:
+        dataset_id: The identifier for the dataset product.
+        file_id: The identifier for the file within the dataset product.
+
+    Returns:
+        A dictionary containing the dataset and file IDs.
+    """
+    return {
+        "Datasets": [
+            {
+                "DatasetID": dataset_id,
+                "FileID": file_id,
+            }
+        ]
+    }
+
+
+def get_authorization_header(access_token: str) -> dict:
+    """Creates an authorization header using the provided access token.
+
+    This function generates the HTTP authorization header required by the CLMS
+    API requests, formatted with the Bearer token.
+
+    Args:
+        access_token: The access token to include in the header.
+
+    Returns:
+        A dictionary containing the authorization header.
+    """
+    return {"Authorization": f"Bearer {access_token}"}
+
+
+def download_zip_data(
+    cache_store: PreloadedDataStore, download_url: str, data_id: str
+) -> None:
+    """Downloads, extracts, and saves the dataset from the provided URL.
+
+    Args:
+        download_url: URL for downloading the dataset.
+        data_id: Unique identifier of the dataset.
+    """
+    LOG.debug(f"Downloading zip file from {download_url}")
+
+    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://source-website.com"}
+    response = make_api_request(download_url, timeout=600, stream=True, headers=headers)
+    chunk_size = 1024 * 1024  # 1 MB chunks
+
+    with tempfile.NamedTemporaryFile(mode="wb", delete=True) as temp_file:
+        temp_file_path = temp_file.name
+        LOG.debug(f"Temporary file created at {temp_file_path}")
+
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            temp_file.write(chunk)
+            del chunk
+
+        outer_zip_fs = fsspec.filesystem("zip", fo=temp_file_path)
+        zip_contents = outer_zip_fs.ls(_RESULTS)
+        actual_zip_file = None
+        if len(zip_contents) == 1:
+            if ".zip" in zip_contents[0][_FILENAME_KEY]:
+                actual_zip_file = zip_contents[0]
+        elif len(zip_contents) > 1:
+            LOG.warn("Cannot handle more than one zip files at the moment.")
+        else:
+            LOG.warn("No downloadable zip file found inside.")
+        if actual_zip_file:
+            LOG.debug(
+                f"Found one zip file {actual_zip_file.get(_ORIGINAL_FILENAME_KEY)}."
+            )
+            with outer_zip_fs.open(actual_zip_file[_NAME_KEY], "rb") as f:
+                inner_zip_fs = fsspec.filesystem("zip", fo=f)
+
+                geo_files = find_geo_in_dir(
+                    "/",
+                    inner_zip_fs,
+                )
+                if geo_files:
+                    target_folder = cache_store.fs.sep.join(
+                        [cache_store.root, DOWNLOAD_FOLDER, data_id]
+                    )
+                    cache_store.fs.makedirs(
+                        target_folder,
+                        exist_ok=True,
+                    )
+                    for geo_file in geo_files:
+                        try:
+                            with inner_zip_fs.open(geo_file, "rb") as source_file:
+                                geo_file_name = geo_file.split("/")[-1]
+                                geo_file_path = cache_store.fs.sep.join(
+                                    [target_folder, geo_file_name]
+                                )
+                                with open(
+                                    geo_file_path,
+                                    "wb",
+                                ) as dest_file:
+                                    for chunk in iter(
+                                        lambda: source_file.read(chunk_size),
+                                        b"",
+                                    ):
+                                        dest_file.write(chunk)
+                            LOG.debug(
+                                f"The file {geo_file_name} has been successfully "
+                                f"downloaded to {geo_file_path}"
+                            )
+
+                        except OSError as e:
+                            LOG.error(f"Error occurred while reading/writing data. {e}")
+                            raise
+                        except Exception as e:
+                            LOG.error(f"An unexpected error occurred: {e}")
+                            raise
+
+                else:
+                    raise FileNotFoundError(
+                        "No file found in the downloaded zip file to load"
+                    )
+
+
+def find_geo_in_dir(path: str, zip_fs: Any) -> list[str]:
+    """Searches recursively a directory within a zip filesystem for geo
+    files.
+
+    Args:
+        path: Path within the zip filesystem to start searching.
+        zip_fs: Zip filesystem object supporting directory listing and file
+         checks.
+
+    Returns:
+        list[str]: A list of geo file paths found within the specified
+            directory.
+
+    Notes:
+        - A geo file is identified by its extension, which matches entries
+            in `_GEO_FILE_EXTS`.
+    """
+    geo_file: list[str] = []
+    contents = zip_fs.ls(path)
+    for item in contents:
+        if zip_fs.isdir(item[_NAME_KEY]):
+            geo_file.extend(
+                find_geo_in_dir(
+                    item[_NAME_KEY],
+                    zip_fs,
+                )
+            )
+        else:
+            if item[_NAME_KEY].endswith(_GEO_FILE_EXTS):
+                LOG.debug(f"Found geo file: {item[_NAME_KEY]}")
+                filename = item[_NAME_KEY]
+                geo_file.append(filename)
+    return geo_file
+
+
+def find_easting_northing(name: str) -> Optional[str]:
+    """Finds the easting/northing coordinate pattern in the provided filename.
+
+    This function searches for a specific pattern, "E##N##", in a string
+    and returns the first match if found.
+
+    Args:
+        name: The string to search for the easting/northing pattern.
+
+    Returns:
+        The matched coordinate string if found, otherwise None.
+    """
+    match = re.search(r"[E]\d{2}[N]\d{2}", name)
+    if match:
+        return match.group(0)
+    return None
+
+
+def cleanup_dir(folder_path: Path | str, fs=None, keep_extension=None):
+    """Removes all files from a directory, retaining only those with the
+    specified extension in the root directory.
+
+    Args:
+        folder_path: The path to the directory to clean up.
+        fs: A fsspec filesystem object. If None, the local filesystem is used.
+            Optional.
+        keep_extension: The file extension to retain. Optional
+    """
+    folder_path = str(folder_path)
+    fs = fs or fsspec.filesystem("file")
+
+    if not fs.isdir(folder_path):
+        raise ValueError(f"The specified path {folder_path} is not a directory.")
+
+    for item in fs.listdir(folder_path):
+        item_path = item["name"]
+        try:
+            # Adding the `not item_path.endswith(keep_extension)` condition
+            # here as `.zarr` files are recognized as folders
+            if fs.isdir(item_path) and (
+                keep_extension is None
+                or (keep_extension and not item_path.endswith(keep_extension))
+            ):
+                fs.rm(item_path, recursive=True)
+                LOG.debug(f"Deleted directory: {item_path}")
+            else:
+                if keep_extension and item_path.endswith(keep_extension):
+                    LOG.debug(f"Kept file: {item_path}")
+                else:
+                    fs.rm(item_path)
+                    LOG.debug(f"Deleted file: {item_path}")
+        except Exception as e:
+            LOG.error(f"Failed to delete {item_path}: {e}")
+    LOG.debug("Cleaning up finished")
+
+
+def get_tile_size(tile_size):
+    if tile_size is None:
+        tile_size = (_PREFERRED_CHUNK_SIZE, _PREFERRED_CHUNK_SIZE)
+    elif isinstance(tile_size, int):
+        tile_size = (tile_size, tile_size)
+    else:
+        tile_size = tile_size
+
+    return tile_size
+
+
+def extract_and_filter_dates(urls, time_range):
+    date_pattern = re.compile(r"(\d{8})")
+
+    start_date = datetime.strptime(time_range[0], "%Y-%m-%d")
+    end_date = datetime.strptime(time_range[1], "%Y-%m-%d")
+
+    dated_urls = []
+    for url in urls:
+        match = date_pattern.search(url)
+        if match:
+            date_str = match.group(1)
+            date_obj = datetime.strptime(date_str, "%Y%m%d")
+            dated_urls.append((date_obj, url))
+
+    filtered_sorted = [
+        url
+        for date_obj, url in sorted(dated_urls)
+        if start_date <= date_obj <= end_date
+    ]
+
+    return filtered_sorted
+
+
+def detect_format(url):
+    if url.endswith(".nc"):
+        return "netcdf"
+    elif url.endswith((".tif", ".tiff")):
+        return "geotiff"
+    else:
+        return "unknown"
