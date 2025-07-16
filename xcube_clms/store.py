@@ -41,6 +41,7 @@ from xcube.util.jsonschema import (
     JsonStringSchema,
 )
 
+from .api_token_handler import ClmsApiTokenHandler
 from .constants import (
     CLMS_DATA_ID_KEY,
     DATA_ID_SEPARATOR,
@@ -239,11 +240,12 @@ class ClmsDataStore(DataStore):
                     self._datasets_info, self.cache_store, self.credentials
                 ).get_open_data_params_schema()
         else:
+            api_token_handler = ClmsApiTokenHandler(credentials=self.credentials)
             return JsonObjectSchema(
                 title="Opening parameters for all supported CLMS products.",
                 properties={
                     key: ph(
-                        self._datasets_info, self.cache_store, self.credentials
+                        self._datasets_info, self.cache_store, api_token_handler
                     ).get_open_data_params_schema()
                     for (key, ph) in get_prod_handlers().items()
                 },
