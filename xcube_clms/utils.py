@@ -21,12 +21,14 @@
 
 import re
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Final, Literal, Optional, Union
 from urllib.parse import urlencode
 
 import fsspec
+import numpy as np
 import requests
 import xarray as xr
 from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
@@ -640,3 +642,104 @@ def detect_format(url):
         return "geotiff"
     else:
         return "unknown"
+
+
+def open_mfdataset_with_retry(
+    paths: list[str],
+    engine: str = "netcdf4",
+    batch_size: int = 20,
+    max_retries: int = 10,
+    base_delay: float = 1.0,
+    max_delay: float = 300.0,
+    backoff_factor: float = 2.5,
+    rate_limit_delay: float = 45.0,
+    **kwargs,
+) -> xr.Dataset | list[xr.Dataset]:
+    """
+    Open multiple files with xarray.open_mfdataset with robust error handling
+    for rate limiting and network issues.
+    """
+
+    def exponential_backoff(attempt: int) -> float:
+        delay = min(base_delay * (backoff_factor**attempt), max_delay)
+        jitter = delay * np.random.random()
+        return delay + jitter
+
+    def is_rate_limit_error(error) -> bool:
+        error_str = str(error).lower()
+        return (
+            "429" in error_str
+            or "too many requests" in error_str
+            or "rate limit" in error_str
+            or "throttled" in error_str
+        )
+
+    def open_batch_with_retry(batch_paths: list[str]) -> xr.Dataset | None:
+        for attempt in range(max_retries):
+            try:
+                LOG.info(
+                    f"Attempting to open batch of {len(batch_paths)} files (attempt {attempt + 1}/{max_retries})"
+                )
+
+                ds = xr.open_mfdataset(batch_paths, engine=engine, **kwargs)
+                LOG.info(f"Successfully opened batch of {len(batch_paths)} files")
+                return ds
+
+            except Exception as e:
+                LOG.warning(f"Attempt {attempt + 1} failed: {type(e).__name__}: {e}")
+
+                if attempt == max_retries - 1:
+                    LOG.error(f"All {max_retries} attempts failed for batch")
+                    raise e
+
+                if is_rate_limit_error(e):
+                    delay = rate_limit_delay + exponential_backoff(attempt)
+                    LOG.info(f"Rate limit detected, waiting {delay:.1f} seconds...")
+                else:
+                    delay = exponential_backoff(attempt)
+                    LOG.info(f"Network error, waiting {delay:.1f} seconds...")
+
+                time.sleep(delay)
+
+        return None
+
+    datasets = []
+    total_files = len(paths)
+
+    LOG.info(f"Processing {total_files} files in batches of {batch_size}")
+
+    for i in range(0, total_files, batch_size):
+        batch_end = min(i + batch_size, total_files)
+        batch_paths = paths[i:batch_end]
+        batch_num = (i // batch_size) + 1
+        total_batches = (total_files + batch_size - 1) // batch_size
+
+        LOG.info(
+            f"Processing batch {batch_num}/{total_batches} (files {i + 1}-{batch_end})"
+        )
+
+        try:
+            ds = open_batch_with_retry(batch_paths)
+            if ds is not None:
+                datasets.append(ds)
+
+            if i + batch_size < total_files:
+                time.sleep(1.5)
+
+        except Exception as e:
+            LOG.error(f"Failed to process batch {batch_num}: {str(e)}")
+            continue
+
+    if not datasets:
+        raise RuntimeError("No datasets could be opened successfully")
+
+    LOG.info(f"Successfully opened {len(datasets)} batches, combining...")
+
+    try:
+        combined_ds = xr.concat(datasets, dim="time")
+        LOG.info("Successfully combined all datasets")
+        return combined_ds
+    except Exception as e:
+        LOG.error(f"Failed to combine datasets: {str(e)}")
+        LOG.info("Returning list of datasets instead")
+        return datasets
