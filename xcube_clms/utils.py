@@ -652,7 +652,6 @@ def open_mfdataset_with_retry(
     base_delay: float = 1.0,
     max_delay: float = 300.0,
     backoff_factor: float = 2.5,
-    rate_limit_delay: float = 45.0,
     **kwargs,
 ) -> xr.Dataset | list[xr.Dataset]:
     """
@@ -664,15 +663,6 @@ def open_mfdataset_with_retry(
         delay = min(base_delay * (backoff_factor**attempt), max_delay)
         jitter = delay * np.random.random()
         return delay + jitter
-
-    def is_rate_limit_error(error) -> bool:
-        error_str = str(error).lower()
-        return (
-            "429" in error_str
-            or "too many requests" in error_str
-            or "rate limit" in error_str
-            or "throttled" in error_str
-        )
 
     def open_batch_with_retry(batch_paths: list[str]) -> xr.Dataset | None:
         for attempt in range(max_retries):
@@ -692,12 +682,8 @@ def open_mfdataset_with_retry(
                     LOG.error(f"All {max_retries} attempts failed for batch")
                     raise e
 
-                if is_rate_limit_error(e):
-                    delay = rate_limit_delay + exponential_backoff(attempt)
-                    LOG.info(f"Rate limit detected, waiting {delay:.1f} seconds...")
-                else:
-                    delay = exponential_backoff(attempt)
-                    LOG.info(f"Network error, waiting {delay:.1f} seconds...")
+                delay = exponential_backoff(attempt)
+                LOG.info(f"Waiting {delay:.1f} seconds...")
 
                 time.sleep(delay)
 

@@ -18,6 +18,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,14 +26,21 @@ from unittest.mock import MagicMock, Mock, patch
 
 import fsspec
 import pytest
+import numpy as np
 import xarray as xr
-from requests import (HTTPError, JSONDecodeError, RequestException, Response,
-                      Timeout)
+from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
 from xcube.core.store import DataStoreError
 
-from xcube_clms.utils import (build_api_url, cleanup_dir, download_zip_data,
-                              extract_and_filter_dates, get_response_of_type,
-                              get_spatial_dims, make_api_request)
+from xcube_clms.utils import (
+    build_api_url,
+    cleanup_dir,
+    download_zip_data,
+    extract_and_filter_dates,
+    get_response_of_type,
+    get_spatial_dims,
+    make_api_request,
+    open_mfdataset_with_retry,
+)
 
 url = "http://example.com/api"
 
@@ -61,6 +69,30 @@ def setup_requests_mock(
 
 
 class UtilsTest(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.test_files = []
+
+        for i in range(3):
+            filepath = os.path.join(self.temp_dir, f"test_{i}.nc")
+
+            time = np.arange(10) + i * 10
+            data = np.random.random((10, 5, 5))
+
+            ds = xr.Dataset(
+                {"temperature": (["time", "x", "y"], data)},
+                coords={"time": time, "x": np.arange(5), "y": np.arange(5)},
+            )
+
+            ds.to_netcdf(filepath)
+            self.test_files.append(filepath)
+
+    def tearDown(self):
+        for filepath in self.test_files:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        os.rmdir(self.temp_dir)
+
     @patch("requests.Session")
     def test_make_api_request_success(self, mock_session):
         setup_requests_mock(mock_session, json_data={"key": "value"})
@@ -409,3 +441,70 @@ class UtilsTest(unittest.TestCase):
         time_range = ("2022-01-01", "2022-12-31")
         result = extract_and_filter_dates(urls, time_range)
         assert result == []
+
+    def test_successful_opening_returns_combined_dataset(self):
+        result = open_mfdataset_with_retry(self.test_files, batch_size=2)
+
+        self.assertIsInstance(result, xr.Dataset)
+        self.assertIn("temperature", result.variables)
+        self.assertEqual(len(result.time), 30)
+
+    def test_empty_paths_list_raises_error(self):
+        with self.assertRaises(RuntimeError) as context:
+            open_mfdataset_with_retry([])
+
+        self.assertIn("No datasets could be opened", str(context.exception))
+
+    def test_nonexistent_files_raises_error_after_retries(self):
+        fake_paths = ["/nonexistent/file1.nc", "/nonexistent/file2.nc"]
+
+        with self.assertRaises(Exception):
+            open_mfdataset_with_retry(fake_paths, max_retries=2)
+
+    @patch("xcube_clms.utils.xr.open_mfdataset")
+    def test_rate_limit_error_triggers_longer_delay(self, mock_open_mfdataset):
+        mock_dataset = MagicMock()
+        mock_open_mfdataset.side_effect = [
+            Exception("429 Too Many Requests"),
+            ConnectionError("Network error"),
+            mock_dataset,
+        ]
+
+        with patch("xcube_clms.utils.time.sleep") as mock_sleep:
+            open_mfdataset_with_retry(["test.nc"], max_retries=3)
+
+            mock_sleep.assert_called()
+            sleep_delay = mock_sleep.call_args[0][0]
+            print(sleep_delay)
+            self.assertGreater(sleep_delay, 1.0)
+
+    @patch("xcube_clms.utils.xr.open_mfdataset")
+    def test_max_retries_parameter_is_respected(self, mock_open_mfdataset):
+        mock_dataset = MagicMock()
+        mock_open_mfdataset.side_effect = [
+            Exception("429 Too Many Requests"),
+            ConnectionError("Network error"),
+            mock_dataset,
+        ]
+
+        with self.assertRaises(Exception):
+            open_mfdataset_with_retry(["test.nc"], max_retries=2)
+
+        open_mfdataset_with_retry(["test.nc"], max_retries=3)
+
+    @patch("xcube_clms.utils.xr.concat")
+    @patch("xcube_clms.utils.xr.open_mfdataset")
+    def test_concat_failure_returns_list_of_datasets(
+        self, mock_open_mfdataset, mock_concat
+    ):
+        mock_dataset1 = MagicMock()
+        mock_dataset2 = MagicMock()
+        mock_open_mfdataset.side_effect = [mock_dataset1, mock_dataset2]
+        mock_concat.side_effect = Exception("Concat failed")
+
+        result = open_mfdataset_with_retry(["file1.nc", "file2.nc"], batch_size=1)
+
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0], mock_dataset1)
+        self.assertEqual(result[1], mock_dataset2)
