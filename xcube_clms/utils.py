@@ -31,28 +31,16 @@ import fsspec
 import numpy as np
 import requests
 import xarray as xr
-from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
-from xcube.core.store import (
-    DATASET_TYPE,
-    DataStoreError,
-    DataTypeLike,
-    PreloadedDataStore,
-)
+from requests import (HTTPError, JSONDecodeError, RequestException, Response,
+                      Timeout)
+from xcube.core.store import (DATASET_TYPE, DataStoreError, DataTypeLike,
+                              PreloadedDataStore)
 
-from .constants import (
-    ACCEPT_HEADER,
-    CLMS_API_URL,
-    CLMS_DATA_ID_KEY,
-    DATA_ID_SEPARATOR,
-    DATASET_DOWNLOAD_INFORMATION,
-    DOWNLOAD_FOLDER,
-    DOWNLOADABLE_FILES_KEY,
-    FULL_SOURCE,
-    ITEMS_KEY,
-    LOG,
-    SEARCH_ENDPOINT,
-    SUPPORTED_DATASET_SOURCES,
-)
+from .constants import (ACCEPT_HEADER, CLMS_API_URL, CLMS_DATA_ID_KEY,
+                        DATA_ID_SEPARATOR, DATASET_DOWNLOAD_INFORMATION,
+                        DOWNLOAD_FOLDER, DOWNLOADABLE_FILES_KEY, FULL_SOURCE,
+                        ITEMS_KEY, LOG, SEARCH_ENDPOINT,
+                        SUPPORTED_DATASET_SOURCES)
 
 _RESULTS = "Results/"
 _GEO_FILE_EXTS = (".tif", ".tiff")

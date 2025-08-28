@@ -1,29 +1,20 @@
 from datetime import datetime
 from typing import Any
 
-from xcube.core.store import DataTypeLike, DataStoreError
+from xcube.core.store import DataStoreError, DataTypeLike
 from xcube.util.jsonschema import JsonDateSchema, JsonObjectSchema
 
-from ..constants import (
-    ACCEPT_HEADER,
-    CLMS_API_URL,
-    CONTENT_TYPE_HEADER,
-    GET_DOWNLOAD_FILE_URLS_ENDPOINT,
-    ID_KEY,
-    UID_KEY,
-)
-from ..product_handler import ProductHandler
-from ..utils import (
-    build_api_url,
-    detect_format,
-    extract_and_filter_dates,
-    get_authorization_header,
-    get_extracted_component,
-    get_response_of_type,
-    is_valid_data_type,
-    make_api_request,
-    open_mfdataset_with_retry,
-)
+from xcube_clms.constants import (ACCEPT_HEADER, CLMS_API_URL,
+                                  CONTENT_TYPE_HEADER,
+                                  GET_DOWNLOAD_FILE_URLS_ENDPOINT, ID_KEY,
+                                  UID_KEY)
+from xcube_clms.product_handler import ProductHandler
+from xcube_clms.utils import (build_api_url, detect_format,
+                              extract_and_filter_dates,
+                              get_authorization_header,
+                              get_extracted_component, get_response_of_type,
+                              is_valid_data_type, make_api_request,
+                              open_mfdataset_with_retry)
 
 _CHARACTERISTICS_TEMPORAL_EXTENT = "characteristics_temporal_extent"
 
