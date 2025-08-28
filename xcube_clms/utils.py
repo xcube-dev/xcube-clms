@@ -667,12 +667,12 @@ def open_mfdataset_with_retry(
     def open_batch_with_retry(batch_paths: list[str]) -> xr.Dataset | None:
         for attempt in range(max_retries):
             try:
-                LOG.info(
+                LOG.debug(
                     f"Attempting to open batch of {len(batch_paths)} files (attempt {attempt + 1}/{max_retries})"
                 )
 
                 ds = xr.open_mfdataset(batch_paths, engine=engine, **kwargs)
-                LOG.info(f"Successfully opened batch of {len(batch_paths)} files")
+                LOG.debug(f"Successfully opened batch of {len(batch_paths)} files")
                 return ds
 
             except Exception as e:
@@ -683,7 +683,7 @@ def open_mfdataset_with_retry(
                     raise e
 
                 delay = exponential_backoff(attempt)
-                LOG.info(f"Waiting {delay:.1f} seconds...")
+                LOG.debug(f"Waiting {delay:.1f} seconds...")
 
                 time.sleep(delay)
 
@@ -692,7 +692,7 @@ def open_mfdataset_with_retry(
     datasets = []
     total_files = len(paths)
 
-    LOG.info(f"Processing {total_files} files in batches of {batch_size}")
+    LOG.debug(f"Processing {total_files} files in batches of {batch_size}")
 
     for i in range(0, total_files, batch_size):
         batch_end = min(i + batch_size, total_files)
@@ -700,7 +700,7 @@ def open_mfdataset_with_retry(
         batch_num = (i // batch_size) + 1
         total_batches = (total_files + batch_size - 1) // batch_size
 
-        LOG.info(
+        LOG.debug(
             f"Processing batch {batch_num}/{total_batches} (files {i + 1}-{batch_end})"
         )
 
@@ -709,9 +709,6 @@ def open_mfdataset_with_retry(
             if ds is not None:
                 datasets.append(ds)
 
-            if i + batch_size < total_files:
-                time.sleep(1.5)
-
         except Exception as e:
             LOG.error(f"Failed to process batch {batch_num}: {str(e)}")
             continue
@@ -719,13 +716,11 @@ def open_mfdataset_with_retry(
     if not datasets:
         raise RuntimeError("No datasets could be opened successfully")
 
-    LOG.info(f"Successfully opened {len(datasets)} batches, combining...")
+    LOG.debug(f"Successfully opened {len(datasets)} batches, combining...")
 
     try:
         combined_ds = xr.concat(datasets, dim="time")
-        LOG.info("Successfully combined all datasets")
+        LOG.debug("Successfully combined all datasets")
         return combined_ds
     except Exception as e:
-        LOG.error(f"Failed to combine datasets: {str(e)}")
-        LOG.info("Returning list of datasets instead")
-        return datasets
+        raise e

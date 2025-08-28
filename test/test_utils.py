@@ -475,7 +475,6 @@ class UtilsTest(unittest.TestCase):
 
             mock_sleep.assert_called()
             sleep_delay = mock_sleep.call_args[0][0]
-            print(sleep_delay)
             self.assertGreater(sleep_delay, 1.0)
 
     @patch("xcube_clms.utils.xr.open_mfdataset")
