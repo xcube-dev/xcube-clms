@@ -22,15 +22,25 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from xcube.core.store import (DataOpener, DataPreloader, DataTypeLike,
-                              PreloadedDataStore, PreloadHandle)
+from xcube.core.store import (
+    DataOpener,
+    DataPreloader,
+    DataTypeLike,
+    PreloadedDataStore,
+    PreloadHandle,
+)
 from xcube.core.store.preload import NullPreloadHandle
 from xcube.util.jsonschema import JsonObjectSchema
 
 from .api_token_handler import ClmsApiTokenHandler
-from .constants import (CLMS_DATA_ID_KEY, DATA_ID_SEPARATOR,
-                        DATASET_DOWNLOAD_INFORMATION, FULL_SOURCE, ITEMS_KEY,
-                        SUPPORTED_DATASET_SOURCES)
+from .constants import (
+    CLMS_DATA_ID_KEY,
+    DATA_ID_SEPARATOR,
+    DATASET_DOWNLOAD_INFORMATION,
+    FULL_SOURCE,
+    ITEMS_KEY,
+    SUPPORTED_DATASET_SOURCES,
+)
 from .product_handlers import get_prod_handlers
 
 

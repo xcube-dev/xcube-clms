@@ -22,23 +22,41 @@
 from typing import Any, Container, Iterator, Tuple
 
 import xarray as xr
-from xcube.core.store import (DATASET_TYPE, DataDescriptor, DatasetDescriptor,
-                              DataStore, DataStoreError, DataTypeLike,
-                              PreloadedDataStore, new_data_store)
-from xcube.util.jsonschema import (JsonArraySchema, JsonBooleanSchema,
-                                   JsonComplexSchema, JsonIntegerSchema,
-                                   JsonObjectSchema, JsonStringSchema)
+from xcube.core.store import (
+    DATASET_TYPE,
+    DataDescriptor,
+    DatasetDescriptor,
+    DataStore,
+    DataStoreError,
+    DataTypeLike,
+    PreloadedDataStore,
+    new_data_store,
+)
+from xcube.util.jsonschema import (
+    JsonArraySchema,
+    JsonBooleanSchema,
+    JsonComplexSchema,
+    JsonIntegerSchema,
+    JsonObjectSchema,
+    JsonStringSchema,
+)
 
 from .api_token_handler import ClmsApiTokenHandler
-from .constants import (CLMS_DATA_ID_KEY, DATA_ID_SEPARATOR,
-                        DATASET_DOWNLOAD_INFORMATION,
-                        DEFAULT_PRELOAD_CACHE_FOLDER, DOWNLOADABLE_FILES_KEY,
-                        FULL_SOURCE, ITEMS_KEY, LOG, SUPPORTED_DATASET_SOURCES)
+from .constants import (
+    CLMS_DATA_ID_KEY,
+    DATA_ID_SEPARATOR,
+    DATASET_DOWNLOAD_INFORMATION,
+    DEFAULT_PRELOAD_CACHE_FOLDER,
+    DOWNLOADABLE_FILES_KEY,
+    FULL_SOURCE,
+    ITEMS_KEY,
+    LOG,
+    SUPPORTED_DATASET_SOURCES,
+)
 from .product_handler import ProductHandler
 from .product_handlers import get_prod_handlers
 from .product_handlers.eea import EeaProductHandler
-from .utils import (assert_valid_data_type, fetch_all_datasets,
-                    get_extracted_component)
+from .utils import assert_valid_data_type, fetch_all_datasets, get_extracted_component
 
 _FILE_KEY = "file"
 _CRS_KEY = "coordinateReferenceSystemList"
