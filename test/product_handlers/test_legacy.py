@@ -141,7 +141,7 @@ class TestLegacyProductHandler(unittest.TestCase):
             )
 
     @patch.object(LegacyProductHandler, "filter_urls")
-    @patch("xcube_clms.product_handlers.legacy.xr.open_mfdataset")
+    @patch("xcube_clms.product_handlers.legacy.open_mfdataset_with_retry")
     def test_open_data_netcdf(self, mock_open_mfdataset, mock_filter_urls):
         mock_filter_urls.return_value = ["netcdf_url.nc"]
         self.legacy_handler.open_data("id123")
@@ -150,7 +150,7 @@ class TestLegacyProductHandler(unittest.TestCase):
         )
 
     @patch.object(LegacyProductHandler, "filter_urls")
-    @patch("xcube_clms.product_handlers.legacy.xr.open_mfdataset")
+    @patch("xcube_clms.product_handlers.legacy.open_mfdataset_with_retry")
     def test_open_data_geotiff(self, mock_open_mfdataset, mock_filter_urls):
         mock_filter_urls.return_value = ["geotiff_uri.tif"]
         self.legacy_handler.open_data("id123")

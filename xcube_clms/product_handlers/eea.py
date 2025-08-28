@@ -9,10 +9,10 @@ import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import DataTypeLike, PreloadHandle, PreloadState, DataStoreError
+from xcube.core.store import DataStoreError, DataTypeLike, PreloadHandle, PreloadState
 from xcube.util.jsonschema import JsonObjectSchema
 
-from ..constants import (
+from xcube_clms.constants import (
     ACCEPT_HEADER,
     CANCELLED,
     CLMS_API_URL,
@@ -31,9 +31,9 @@ from ..constants import (
     TIME_TO_EXPIRE,
     UID_KEY,
 )
-from ..preload import ClmsPreloadHandle
-from ..product_handler import ProductHandler
-from ..utils import (
+from xcube_clms.preload import ClmsPreloadHandle
+from xcube_clms.product_handler import ProductHandler
+from xcube_clms.utils import (
     build_api_url,
     cleanup_dir,
     download_zip_data,
@@ -296,9 +296,9 @@ class EeaProductHandler(ProductHandler):
         )
         response = get_response_of_type(response_data, "json")
         task_ids = response.get(_TASK_IDS_KEY)
-        assert (
-            len(task_ids) == 1
-        ), f"Expected API response with 1 task_id, got {len(task_ids)}"
+        assert len(task_ids) == 1, (
+            f"Expected API response with 1 task_id, got {len(task_ids)}"
+        )
         task_id = task_ids[0].get(_TASK_ID_KEY)
         LOG.debug(f"Download Requested with Task ID : {task_id}")
         return [task_id]

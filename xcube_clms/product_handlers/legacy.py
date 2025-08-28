@@ -1,11 +1,10 @@
 from datetime import datetime
 from typing import Any
 
-import xarray as xr
-from xcube.core.store import DataTypeLike, DataStoreError
+from xcube.core.store import DataStoreError, DataTypeLike
 from xcube.util.jsonschema import JsonDateSchema, JsonObjectSchema
 
-from ..constants import (
+from xcube_clms.constants import (
     ACCEPT_HEADER,
     CLMS_API_URL,
     CONTENT_TYPE_HEADER,
@@ -13,8 +12,8 @@ from ..constants import (
     ID_KEY,
     UID_KEY,
 )
-from ..product_handler import ProductHandler
-from ..utils import (
+from xcube_clms.product_handler import ProductHandler
+from xcube_clms.utils import (
     build_api_url,
     detect_format,
     extract_and_filter_dates,
@@ -23,6 +22,7 @@ from ..utils import (
     get_response_of_type,
     is_valid_data_type,
     make_api_request,
+    open_mfdataset_with_retry,
 )
 
 _CHARACTERISTICS_TEMPORAL_EXTENT = "characteristics_temporal_extent"
@@ -147,8 +147,8 @@ class LegacyProductHandler(ProductHandler):
         urls = self.filter_urls(data_id, **open_params)
         fmt = detect_format(urls[0])
         if fmt == "netcdf":
-            return xr.open_mfdataset(urls, engine="h5netcdf")
+            return open_mfdataset_with_retry(urls, engine="h5netcdf")
         elif fmt == "geotiff":
-            return xr.open_mfdataset(urls, engine="rasterio")
+            return open_mfdataset_with_retry(urls, engine="rasterio")
         else:
             raise DataStoreError("Unsupported format detected.")

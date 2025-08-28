@@ -1,3 +1,9 @@
+## Changes in 1.2.0 (in development)
+
+* Added exponential backoff strategy when using
+  `xarray.open_mfdataset()` which is called under the hood
+  when using `open_data()` for `LEGACY` datasets.
+
 ## Changes in 1.1.0
 
 ### Enhancements

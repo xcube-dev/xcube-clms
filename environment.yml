@@ -11,6 +11,7 @@ dependencies:
   - fsspec
   - xcube>=1.9.0
   - zappend
+  - h5netcdf
   # Testing
   - numpy
   - black

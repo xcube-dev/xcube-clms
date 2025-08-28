@@ -25,7 +25,8 @@ dependencies = [
     "cryptography",
     "requests",
     "fsspec",
-    "zappend"
+    "zappend",
+    "h5netcdf"
 ]
 
 [tool.setuptools.dynamic]
