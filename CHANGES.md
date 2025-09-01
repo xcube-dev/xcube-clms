@@ -1,4 +1,4 @@
-## Changes in 1.2.0 (in development)
+## Changes in 1.2.0
 
 * Added exponential backoff strategy when using
   `xarray.open_mfdataset()` which is called under the hood
