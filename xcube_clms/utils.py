@@ -340,15 +340,29 @@ def get_extracted_component(
                 clms_data_product_id, dataset_filename = data_id.split(
                     DATA_ID_SEPARATOR
                 )
-                return [
-                    item
-                    for product in datasets_info
-                    if product[CLMS_DATA_ID_KEY] == clms_data_product_id
-                    for item in product.get(DOWNLOADABLE_FILES_KEY, {}).get(
+                # return [
+                #     item
+                #     for product in datasets_info
+                #     if product[CLMS_DATA_ID_KEY] == clms_data_product_id
+                #     for item in product.get(DOWNLOADABLE_FILES_KEY, {}).get(
+                #         ITEMS_KEY, []
+                #     )
+                #     if item.get("file") == dataset_filename
+                # ]
+                matching_items = []
+
+                for product in datasets_info:
+                    if product[CLMS_DATA_ID_KEY] != clms_data_product_id:
+                        continue
+
+                    downloadable_files = product.get(DOWNLOADABLE_FILES_KEY, {}).get(
                         ITEMS_KEY, []
                     )
-                    if item.get("file") == dataset_filename
-                ]
+
+                    for item in downloadable_files:
+                        if item.get("file") == dataset_filename:
+                            matching_items.append(item)
+                return matching_items
 
             for product in datasets_info:
                 if product[CLMS_DATA_ID_KEY] == data_id:
@@ -506,7 +520,8 @@ def download_zip_data(
 
                 else:
                     raise FileNotFoundError(
-                        "No file found in the downloaded zip file to load"
+                        f"No {_GEO_FILE_EXTS} file found in the downloaded zip file to "
+                        f"load"
                     )
 
 
@@ -664,7 +679,9 @@ def open_mfdataset_with_retry(
         jitter = delay * np.random.random()
         return delay + jitter
 
-    def open_batch_with_retry(batch_paths: list[str]) -> xr.Dataset | None:
+    def open_batch_with_retry(
+        batch_paths: list[str], current_batch_size: int
+    ) -> xr.Dataset | None:
         for attempt in range(max_retries):
             try:
                 LOG.debug(
@@ -673,13 +690,15 @@ def open_mfdataset_with_retry(
 
                 ds = xr.open_mfdataset(batch_paths, engine=engine, **kwargs)
                 LOG.debug(f"Successfully opened batch of {len(batch_paths)} files")
-                return ds
+                new_batch_size = min(current_batch_size + 2, batch_size * 2)
+                return ds, new_batch_size
 
             except Exception as e:
                 LOG.warning(f"Attempt {attempt + 1} failed: {type(e).__name__}: {e}")
 
                 if attempt == max_retries - 1:
                     LOG.error(f"All {max_retries} attempts failed for batch")
+                    new_batch_size = max(current_batch_size // 2, 1)
                     raise e
 
                 delay = exponential_backoff(attempt)
@@ -687,30 +706,37 @@ def open_mfdataset_with_retry(
 
                 time.sleep(delay)
 
-        return None
+        return None, current_batch_size
 
     datasets = []
     total_files = len(paths)
+    batch_size = min(batch_size, total_files)
+    current_batch_size = batch_size
 
     LOG.debug(f"Processing {total_files} files in batches of {batch_size}")
 
-    for i in range(0, total_files, batch_size):
-        batch_end = min(i + batch_size, total_files)
+    i = 0
+    while i < total_files:
+        batch_end = min(i + current_batch_size, total_files)
         batch_paths = paths[i:batch_end]
-        batch_num = (i // batch_size) + 1
-        total_batches = (total_files + batch_size - 1) // batch_size
+        batch_num = len(datasets) + 1
 
         LOG.debug(
-            f"Processing batch {batch_num}/{total_batches} (files {i + 1}-{batch_end})"
+            f"Processing batch {batch_num} (files {i + 1}-{batch_end}) with batch size {current_batch_size}"
         )
 
         try:
-            ds = open_batch_with_retry(batch_paths)
+            ds, current_batch_size = open_batch_with_retry(
+                batch_paths, current_batch_size
+            )
             if ds is not None:
                 datasets.append(ds)
+                i = batch_end
 
         except Exception as e:
             LOG.error(f"Failed to process batch {batch_num}: {str(e)}")
+            current_batch_size = max(current_batch_size // 2, 1)
+            LOG.debug(f"Reducing batch size to {current_batch_size} and retrying")
             continue
 
     if not datasets:
@@ -724,3 +750,39 @@ def open_mfdataset_with_retry(
         return combined_ds
     except Exception as e:
         raise e
+
+
+def normalize_time_range(time_range):
+    """
+    Converts a tuple/list of two dates into a list of 'YYYY-MM-DD' strings.
+    """
+    normalized = []
+
+    for d in time_range:
+        if d is None:
+            normalized.append(None)
+            continue
+
+        try:
+            datetime.strptime(d, "%Y-%m-%d")
+            normalized.append(d)
+            continue
+        except ValueError:
+            pass
+
+        d = d.rstrip("Z")
+
+        try:
+            dt = datetime.strptime(d, "%Y-%m-%dT%H:%M:%S")
+            normalized.append(dt.strftime("%Y-%m-%d"))
+            continue
+        except ValueError:
+            pass
+
+        try:
+            dt = datetime.fromisoformat(d)
+            normalized.append(dt.strftime("%Y-%m-%d"))
+        except ValueError:
+            raise ValueError(f"Unrecognized date format: {d}")
+
+    return normalized

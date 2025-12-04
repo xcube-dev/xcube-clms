@@ -25,7 +25,6 @@ from typing import Any
 from xcube.core.store import (
     DataOpener,
     DataPreloader,
-    DataTypeLike,
     PreloadedDataStore,
     PreloadHandle,
 )
@@ -180,23 +179,6 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
 
     def get_preload_data_params_schema(self) -> JsonObjectSchema:
         return JsonObjectSchema(additional_properties=False)
-
-    @abstractmethod
-    def has_data(self, data_id, data_type: DataTypeLike = None):
-        """Check if the data resource given by *data_id* is
-        available in this store.
-
-        Args:
-            data_id: A data identifier
-            data_type: An optional data type. If given, it will also be
-                checked whether the data is available as the specified
-                type. May be given as type alias name, as a type, or as
-                a :class:`DataType` instance.
-
-        Returns:
-            True, if the data resource is available in this store, False
-            otherwise.
-        """
 
     @abstractmethod
     def request_download(self, data_id: str) -> list[str]:

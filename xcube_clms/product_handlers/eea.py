@@ -9,7 +9,7 @@ import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import DataStoreError, DataTypeLike, PreloadHandle, PreloadState
+from xcube.core.store import DataStoreError, PreloadHandle, PreloadState
 from xcube.util.jsonschema import JsonObjectSchema
 
 from xcube_clms.constants import (
@@ -43,7 +43,6 @@ from xcube_clms.utils import (
     get_extracted_component,
     get_response_of_type,
     get_tile_size,
-    is_valid_data_type,
     make_api_request,
 )
 
@@ -93,16 +92,6 @@ class EeaProductHandler(ProductHandler):
     @classmethod
     def product_type(cls):
         return "eea"
-
-    def has_data(self, data_id: str, data_type: DataTypeLike = None):
-        dataset = None
-        if is_valid_data_type(data_type):
-            if DATA_ID_SEPARATOR in data_id:
-                dataset = get_extracted_component(
-                    self.datasets_info, data_id, item_type="item"
-                )
-            return bool(dataset)
-        return False
 
     def get_open_data_params_schema(self, data_id: str = None) -> JsonObjectSchema:
         return self.cache_store.get_open_data_params_schema(data_id)
@@ -296,9 +285,9 @@ class EeaProductHandler(ProductHandler):
         )
         response = get_response_of_type(response_data, "json")
         task_ids = response.get(_TASK_IDS_KEY)
-        assert len(task_ids) == 1, (
-            f"Expected API response with 1 task_id, got {len(task_ids)}"
-        )
+        assert (
+            len(task_ids) == 1
+        ), f"Expected API response with 1 task_id, got {len(task_ids)}"
         task_id = task_ids[0].get(_TASK_ID_KEY)
         LOG.debug(f"Download Requested with Task ID : {task_id}")
         return [task_id]

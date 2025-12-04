@@ -56,13 +56,20 @@ from .constants import (
 from .product_handler import ProductHandler
 from .product_handlers import get_prod_handlers
 from .product_handlers.eea import EeaProductHandler
-from .utils import assert_valid_data_type, fetch_all_datasets, get_extracted_component
+from .utils import (
+    assert_valid_data_type,
+    fetch_all_datasets,
+    get_extracted_component,
+    normalize_time_range,
+)
 
 _FILE_KEY = "file"
 _CRS_KEY = "coordinateReferenceSystemList"
 _START_TIME_KEY = "temporalExtentStart"
 _END_TIME_KEY = "temporalExtentEnd"
 _DATASET_DOWNLOADABLE = "downloadable_full_dataset"
+_FORMAT_KEY = "format"
+_NAME = "name"
 
 
 class ClmsDataStore(DataStore):
@@ -155,24 +162,31 @@ class ClmsDataStore(DataStore):
                     ][0]
                     if dataset_download_info[FULL_SOURCE] == "EEA":
                         for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
-                            if _FILE_KEY in i and i[_FILE_KEY] != "":
-                                data_id = f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
-                                if not include_attrs:
-                                    yield data_id
-                                elif isinstance(include_attrs, bool) and include_attrs:
-                                    yield data_id, i
-                                elif isinstance(include_attrs, list):
-                                    filtered_attrs = {
-                                        attr: i[attr]
-                                        for attr in include_attrs
-                                        if attr in i
-                                    }
-                                    yield data_id, filtered_attrs
+                            if _FORMAT_KEY in i and i[_FORMAT_KEY] == "Geotiff":
+                                if _FILE_KEY in i and i[_FILE_KEY] != "":
+                                    data_id = f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
+                                    if not include_attrs:
+                                        yield data_id
+                                    elif (
+                                        isinstance(include_attrs, bool)
+                                        and include_attrs
+                                    ):
+                                        yield data_id, i
+                                    elif isinstance(include_attrs, list):
+                                        filtered_attrs = {
+                                            attr: i[attr]
+                                            for attr in include_attrs
+                                            if attr in i
+                                        }
+                                        yield data_id, filtered_attrs
                     elif (
                         dataset_download_info[FULL_SOURCE].lower()
                         in SUPPORTED_DATASET_SOURCES
                     ):
+                        if dataset_download_info[_NAME].lower() != "raster":
+                            continue
                         data_id = f"{item['id']}"
+
                         if not include_attrs:
                             yield data_id
                         elif isinstance(include_attrs, bool) and include_attrs:
@@ -186,16 +200,11 @@ class ClmsDataStore(DataStore):
                             yield data_id, filtered_attrs
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
-        try:
-            handler = ProductHandler.guess(
-                data_id,
-                self._datasets_info,
-                self.cache_store,
-                self.credentials,
-            )
-        except ValueError:
-            return False
-        return handler.has_data(data_id, data_type)
+        data_ids = self.list_data_ids()
+        for _data_id in data_ids:
+            if data_ids == _data_id:
+                return True
+        return False
 
     def describe_data(
         self, data_id: str, data_type: DataTypeLike = None
@@ -204,12 +213,12 @@ class ClmsDataStore(DataStore):
         item = get_extracted_component(self._datasets_info, data_id)
         crs = item.get(_CRS_KEY, [])
         time_range = (item.get(_START_TIME_KEY), item.get(_END_TIME_KEY))
-
+        normalized_time_range = normalize_time_range(time_range)
         if len(crs) > 1:
             LOG.warning(
                 f"Expected 1 crs, got {len(crs)}. Outputting the first element."
             )
-        metadata = dict(time_range=time_range, crs=crs[0] if crs else None)
+        metadata = dict(time_range=normalized_time_range, crs=crs[0] if crs else None)
         return DatasetDescriptor(data_id, **metadata)
 
     def get_data_opener_ids(

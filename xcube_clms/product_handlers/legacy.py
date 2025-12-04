@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from xcube.core.store import DataStoreError, DataTypeLike
+from xcube.core.store import DataStoreError
 from xcube.util.jsonschema import JsonDateSchema, JsonObjectSchema
 
 from xcube_clms.constants import (
@@ -20,7 +20,6 @@ from xcube_clms.utils import (
     get_authorization_header,
     get_extracted_component,
     get_response_of_type,
-    is_valid_data_type,
     make_api_request,
     open_mfdataset_with_retry,
 )
@@ -45,14 +44,6 @@ class LegacyProductHandler(ProductHandler):
     @classmethod
     def product_type(cls):
         return "legacy"
-
-    def has_data(self, data_id, data_type: DataTypeLike = None):
-        if is_valid_data_type(data_type):
-            dataset = get_extracted_component(
-                datasets_info=self.datasets_info, data_id=data_id, item_type="product"
-            )
-            return bool(dataset)
-        return False
 
     def get_open_data_params_schema(self, data_id: str = None) -> JsonObjectSchema:
         params = dict(time_range=JsonDateSchema.new_range())
@@ -145,9 +136,13 @@ class LegacyProductHandler(ProductHandler):
 
     def open_data(self, data_id: str, **open_params) -> Any:
         urls = self.filter_urls(data_id, **open_params)
+        print("urls::", urls)
         fmt = detect_format(urls[0])
         if fmt == "netcdf":
-            return open_mfdataset_with_retry(urls, engine="h5netcdf")
+            try:
+                return open_mfdataset_with_retry(urls, engine="h5netcdf")
+            except Exception:
+                return open_mfdataset_with_retry(urls)
         elif fmt == "geotiff":
             return open_mfdataset_with_retry(urls, engine="rasterio")
         else:
