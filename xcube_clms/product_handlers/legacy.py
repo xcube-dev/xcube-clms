@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Container, Iterator
 
-from xcube.core.store import DataStoreError
+from xcube.core.store import DataStoreError, DataTypeLike
 from xcube.util.jsonschema import JsonDateSchema, JsonObjectSchema
 
 from xcube_clms.constants import (
@@ -11,6 +11,9 @@ from xcube_clms.constants import (
     GET_DOWNLOAD_FILE_URLS_ENDPOINT,
     ID_KEY,
     UID_KEY,
+    DATASET_DOWNLOAD_INFORMATION,
+    ITEMS_KEY,
+    NAME,
 )
 from xcube_clms.product_handler import ProductHandler
 from xcube_clms.utils import (
@@ -147,3 +150,26 @@ class LegacyProductHandler(ProductHandler):
             return open_mfdataset_with_retry(urls, engine="rasterio")
         else:
             raise DataStoreError("Unsupported format detected.")
+
+    def get_data_ids(
+        self,
+        data_type: DataTypeLike = None,
+        include_attrs: Container[str] | bool = False,
+        item: dict = None,
+    ) -> Iterator[str | tuple[str, dict[str, Any]]]:
+        dataset_download_info = item[DATASET_DOWNLOAD_INFORMATION][ITEMS_KEY][0]
+        if dataset_download_info[NAME].lower() != "raster":
+            return
+        data_id = f"{item['id']}"
+
+        if not include_attrs:
+            yield data_id
+        elif isinstance(include_attrs, bool) and include_attrs:
+            yield data_id, dataset_download_info
+        elif isinstance(include_attrs, list):
+            filtered_attrs = {
+                attr: dataset_download_info[attr]
+                for attr in include_attrs
+                if attr in dataset_download_info
+            }
+            yield data_id, filtered_attrs

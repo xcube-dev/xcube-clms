@@ -31,7 +31,8 @@ import fsspec
 import numpy as np
 import requests
 import xarray as xr
-from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
+from requests import HTTPError, JSONDecodeError, RequestException, Response, \
+    Timeout
 from xcube.core.store import (
     DATASET_TYPE,
     DataStoreError,
@@ -52,12 +53,13 @@ from .constants import (
     LOG,
     SEARCH_ENDPOINT,
     SUPPORTED_DATASET_SOURCES,
+    UID_KEY,
+    ID_KEY,
 )
 
 _RESULTS = "Results/"
 _GEO_FILE_EXTS = (".tif", ".tiff")
 _PORTAL_TYPE = {"portal_type": "DataSet"}
-_FULL_SCHEMA = "fullobjects"
 _ORIGINAL_FILENAME_KEY = "orig_filename"
 _NAME_KEY = "name"
 _FILENAME_KEY = "filename"
@@ -206,11 +208,19 @@ def build_api_url(
     params = {}
     if datasets_request:
         params = _PORTAL_TYPE
-        params[_FULL_SCHEMA] = "1"
+        params["metadata_fields"] = [
+            UID_KEY,
+            "dataset_full_format",
+            "dataset_download_information",
+            "downloadable_files",
+            "downloadable_full_dataset",
+            ID_KEY,
+            CLMS_DATA_ID_KEY,
+        ]
     if extra_params:
         params.update(extra_params)
     if params:
-        query_params = urlencode(params)
+        query_params = urlencode(params, doseq=True)
         return f"{url}/{api_endpoint}/?{query_params}"
     return f"{url}/{api_endpoint}"
 
@@ -299,9 +309,9 @@ def fetch_all_datasets() -> list[dict[str, Any]]:
     """
     LOG.info(f"Fetching datasets metadata from {CLMS_API_URL}")
     datasets_info = []
-    response_data = make_api_request(
-        build_api_url(CLMS_API_URL, SEARCH_ENDPOINT, datasets_request=True)
-    )
+    url = build_api_url(CLMS_API_URL, SEARCH_ENDPOINT, datasets_request=True)
+    print("url:::", url)
+    response_data = make_api_request(url)
     while True:
         response = get_response_of_type(response_data, "json")
         datasets_info.extend(response.get(ITEMS_KEY, []))
@@ -310,6 +320,7 @@ def fetch_all_datasets() -> list[dict[str, Any]]:
             break
         response_data = make_api_request(next_page)
     LOG.info("Fetching complete.")
+    print(datasets_info[0])
     return datasets_info
 
 
@@ -319,7 +330,10 @@ def get_extracted_component(
     item_type: Literal["item", "product"] = "product",
 ) -> dict[str, Any] | None:
     """Extracts either an item or product from the list of datasets
-    available
+    available.
+
+    Product: The whole schema of the data product offering.
+    Item: Schema to download one specific file.
 
     Args:
         datasets_info: Complete list of metadata of all datasets from CLMS API.
@@ -786,3 +800,29 @@ def normalize_time_range(time_range):
             raise ValueError(f"Unrecognized date format: {d}")
 
     return normalized
+
+
+def generate_daily_ssm_paths(start_date: str, end_date: str) -> list:
+    current = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+
+    paths = []
+
+    while current <= end:
+        year = current.strftime("%Y")
+        month = current.strftime("%m")
+        day = current.strftime("%d")
+        timestamp = current.strftime("%Y%m%d0000")
+
+        filename = f"c_gls_SSM1km_{timestamp}_CEURO_S1CSAR_V1.1.1.nc"
+
+        path = (
+            f"s3://eodata/CLMS/bio-geophysical/surface_soil_moisture/"
+            f"ssm_europe_1km_daily_v1/{year}/{month}/{day}/"
+            f"{filename.replace('.nc','_nc')}/{filename}"
+        )
+
+        paths.append(path)
+        current += timedelta(days=1)
+
+    return paths

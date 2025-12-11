@@ -3,13 +3,14 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from math import ceil
-from typing import Any
+from typing import Any, Container, Iterator
 
 import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import DataStoreError, PreloadHandle, PreloadState
+from xcube.core.store import DataStoreError, PreloadHandle, PreloadState, \
+    DataTypeLike
 from xcube.util.jsonschema import JsonObjectSchema
 
 from xcube_clms.constants import (
@@ -30,6 +31,11 @@ from xcube_clms.constants import (
     TASK_STATUS_ENDPOINT,
     TIME_TO_EXPIRE,
     UID_KEY,
+    CLMS_DATA_ID_KEY,
+    DOWNLOADABLE_FILES_KEY,
+    ITEMS_KEY,
+    FORMAT_KEY,
+    FILE_KEY,
 )
 from xcube_clms.preload import ClmsPreloadHandle
 from xcube_clms.product_handler import ProductHandler
@@ -95,6 +101,28 @@ class EeaProductHandler(ProductHandler):
 
     def get_open_data_params_schema(self, data_id: str = None) -> JsonObjectSchema:
         return self.cache_store.get_open_data_params_schema(data_id)
+
+    def get_data_ids(
+        self,
+        data_type: DataTypeLike = None,
+        include_attrs: Container[str] | bool = False,
+        item: dict = None,
+    ) -> Iterator[str | tuple[str, dict[str, Any]]]:
+        for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
+            if FORMAT_KEY in i and i[FORMAT_KEY] == "Geotiff":
+                if FILE_KEY in i and i[FILE_KEY] != "":
+                    data_id = (
+                        f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[FILE_KEY]}"
+                    )
+                    if not include_attrs:
+                        yield data_id
+                    elif isinstance(include_attrs, bool) and include_attrs:
+                        yield data_id, i
+                    elif isinstance(include_attrs, list):
+                        filtered_attrs = {
+                            attr: i[attr] for attr in include_attrs if attr in i
+                        }
+                        yield data_id, filtered_attrs
 
     def open_data(
         self,

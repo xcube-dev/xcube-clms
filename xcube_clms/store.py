@@ -43,15 +43,14 @@ from xcube.util.jsonschema import (
 
 from .api_token_handler import ClmsApiTokenHandler
 from .constants import (
-    CLMS_DATA_ID_KEY,
-    DATA_ID_SEPARATOR,
     DATASET_DOWNLOAD_INFORMATION,
     DEFAULT_PRELOAD_CACHE_FOLDER,
-    DOWNLOADABLE_FILES_KEY,
     FULL_SOURCE,
     ITEMS_KEY,
     LOG,
-    SUPPORTED_DATASET_SOURCES,
+    EEA,
+    LEGACY,
+    CDSE,
 )
 from .product_handler import ProductHandler
 from .product_handlers import get_prod_handlers
@@ -63,13 +62,16 @@ from .utils import (
     normalize_time_range,
 )
 
-_FILE_KEY = "file"
 _CRS_KEY = "coordinateReferenceSystemList"
 _START_TIME_KEY = "temporalExtentStart"
 _END_TIME_KEY = "temporalExtentEnd"
 _DATASET_DOWNLOADABLE = "downloadable_full_dataset"
-_FORMAT_KEY = "format"
-_NAME = "name"
+
+_source_key_map = {
+    EEA.upper(): EEA,
+    LEGACY.upper(): LEGACY,
+    CDSE.upper(): CDSE,
+}
 
 
 class ClmsDataStore(DataStore):
@@ -154,50 +156,31 @@ class ClmsDataStore(DataStore):
         include_attrs: Container[str] | bool = False,
     ) -> Iterator[str | tuple[str, dict[str, Any]]]:
         assert_valid_data_type(data_type)
+        prod_handlers = get_prod_handlers()
         for item in self._datasets_info:
-            if item[_DATASET_DOWNLOADABLE]:
-                if len(item[DATASET_DOWNLOAD_INFORMATION]) > 0:
-                    dataset_download_info = item[DATASET_DOWNLOAD_INFORMATION][
-                        ITEMS_KEY
-                    ][0]
-                    if dataset_download_info[FULL_SOURCE] == "EEA":
-                        for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
-                            if _FORMAT_KEY in i and i[_FORMAT_KEY] == "Geotiff":
-                                if _FILE_KEY in i and i[_FILE_KEY] != "":
-                                    data_id = f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
-                                    if not include_attrs:
-                                        yield data_id
-                                    elif (
-                                        isinstance(include_attrs, bool)
-                                        and include_attrs
-                                    ):
-                                        yield data_id, i
-                                    elif isinstance(include_attrs, list):
-                                        filtered_attrs = {
-                                            attr: i[attr]
-                                            for attr in include_attrs
-                                            if attr in i
-                                        }
-                                        yield data_id, filtered_attrs
-                    elif (
-                        dataset_download_info[FULL_SOURCE].lower()
-                        in SUPPORTED_DATASET_SOURCES
-                    ):
-                        if dataset_download_info[_NAME].lower() != "raster":
-                            continue
-                        data_id = f"{item['id']}"
-
-                        if not include_attrs:
-                            yield data_id
-                        elif isinstance(include_attrs, bool) and include_attrs:
-                            yield data_id, dataset_download_info
-                        elif isinstance(include_attrs, list):
-                            filtered_attrs = {
-                                attr: dataset_download_info[attr]
-                                for attr in include_attrs
-                                if attr in dataset_download_info
-                            }
-                            yield data_id, filtered_attrs
+            if len(item[DATASET_DOWNLOAD_INFORMATION][ITEMS_KEY]) > 0:
+                dataset_download_info = item[DATASET_DOWNLOAD_INFORMATION][ITEMS_KEY][0]
+                source = dataset_download_info.get(FULL_SOURCE)
+                if not source:
+                    continue
+                handler_key = _source_key_map.get(source)
+                if handler_key is None:
+                    LOG.debug(f"source {source} is not supported.")
+                    continue
+                handler = prod_handlers.get(handler_key)
+                if handler is None:
+                    LOG.debug(f"handler {handler_key} is not supported.")
+                    continue
+                for data_ids_and_maybe_attrs in handler.get_data_ids(
+                    data_type, include_attrs, item=item
+                ):
+                    if include_attrs:
+                        yield (
+                            data_ids_and_maybe_attrs[0],
+                            data_ids_and_maybe_attrs[1],
+                        )
+                    else:
+                        yield data_ids_and_maybe_attrs
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
         data_ids = self.list_data_ids()

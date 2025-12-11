@@ -48,7 +48,10 @@ GET_DOWNLOAD_FILE_URLS_ENDPOINT = "@get-download-file-urls"
 # "WEKEO"
 # "EEA"
 
-SUPPORTED_DATASET_SOURCES = ["eea", "legacy"]
+EEA = "eea"
+LEGACY = "legacy"
+CDSE = "cdse"
+SUPPORTED_DATASET_SOURCES = [EEA, LEGACY, CDSE]
 
 # Headers
 ACCEPT_HEADER = {"Accept": "application/json"}
@@ -61,7 +64,10 @@ DATA_ID_SEPARATOR = "|"
 ID_KEY = "@id"
 UID_KEY = "UID"
 ITEM_KEY = "item"
+NAME = "name"
 ITEMS_KEY = "items"
+FILE_KEY = "file"
+FORMAT_KEY = "format"
 PRODUCT_KEY = "product"
 FULL_SOURCE = "full_source"
 CLMS_DATA_ID_KEY = "id"

@@ -20,13 +20,14 @@
 # SOFTWARE.
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Container, Iterator
 
 from xcube.core.store import (
     DataOpener,
     DataPreloader,
     PreloadedDataStore,
     PreloadHandle,
+    DataTypeLike,
 )
 from xcube.core.store.preload import NullPreloadHandle
 from xcube.util.jsonschema import JsonObjectSchema
@@ -102,6 +103,8 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
             return None
 
         handler_type = _determine_handler_type()
+        print("handler_type:::", handler_type)
+        exit()
         if handler_type is None:
             raise ValueError(
                 f"Unable to detect product handler for data_id {data_id!r}."
@@ -195,7 +198,7 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
 
     @abstractmethod
     def prepare_request(self, data_id: str) -> list[str]:
-        """Prepares the API request for for accessing the dataset requested.
+        """Prepares the API request for accessing the dataset requested.
 
         NOTE: Include authorization headers.
 
@@ -205,3 +208,12 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
         Returns:
             tuple[str, dict]: The URL and headers needed for the request.
         """
+
+    @abstractmethod
+    def get_data_ids(
+        self,
+        data_type: DataTypeLike = None,
+        include_attrs: Container[str] | bool = False,
+        item: dict = None,
+    ) -> Iterator[str | tuple[str, dict[str, Any]]]:
+        """"""
