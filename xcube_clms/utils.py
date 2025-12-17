@@ -23,13 +23,14 @@ import re
 import tempfile
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Final, Literal, Optional, Union
+from typing import Any, Final, Literal, Optional, Union, TypeAlias
 from urllib.parse import urlencode
 
 import fsspec
 import requests
 import xarray as xr
 from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
+from shapely import wkt
 from xcube.core.store import (
     DATASET_TYPE,
     DataStoreError,
@@ -64,6 +65,7 @@ _PREFERRED_CHUNK_SIZE: Final = 2000
 
 
 ResponseType = Literal["json", "text", "bytes"]
+DateLike: TypeAlias = datetime | date | str
 
 
 # Using the auxiliary functions below from xcube-stac
@@ -204,11 +206,6 @@ def build_api_url(
     _FULL_SCHEMA = "fullobjects"
     if datasets_request:
         params = _PORTAL_TYPE
-        # params["metadata_fields"] = [
-        #     UID_KEY,
-        #     ID_KEY,
-        #     CLMS_DATA_ID_KEY,
-        # ]
         params[_FULL_SCHEMA] = "1"
     if extra_params:
         params.update(extra_params)
@@ -613,7 +610,7 @@ def cleanup_dir(folder_path: Path | str, fs=None, keep_extension=None):
     LOG.debug("Cleaning up finished")
 
 
-def get_tile_size(tile_size):
+def get_tile_size(tile_size: tuple[int, int] | int | None):
     if tile_size is None:
         tile_size = (_PREFERRED_CHUNK_SIZE, _PREFERRED_CHUNK_SIZE)
     elif isinstance(tile_size, int):
@@ -624,30 +621,7 @@ def get_tile_size(tile_size):
     return tile_size
 
 
-def extract_and_filter_dates(urls, time_range):
-    date_pattern = re.compile(r"(\d{8})")
-
-    start_date = datetime.strptime(time_range[0], "%Y-%m-%d")
-    end_date = datetime.strptime(time_range[1], "%Y-%m-%d")
-
-    dated_urls = []
-    for url in urls:
-        match = date_pattern.search(url)
-        if match:
-            date_str = match.group(1)
-            date_obj = datetime.strptime(date_str, "%Y%m%d")
-            dated_urls.append((date_obj, url))
-
-    filtered_sorted = [
-        url
-        for date_obj, url in sorted(dated_urls)
-        if start_date <= date_obj <= end_date
-    ]
-
-    return filtered_sorted
-
-
-def detect_format(url):
+def detect_format(url: str):
     if url.endswith(".nc"):
         return "netcdf"
     elif url.endswith((".tif", ".tiff")):
@@ -656,7 +630,7 @@ def detect_format(url):
         return "unknown"
 
 
-def normalize_time_range(time_range):
+def normalize_time_range(time_range: tuple[DateLike, DateLike]):
     """
     Normalize date/datetime inputs (objects or strings) to 'YYYY-MM-DD'.
     Preserves None values.
@@ -692,3 +666,26 @@ def normalize_time_range(time_range):
         raise TypeError(f"Expected date, datetime, str, or None; got {type(value)}")
 
     return normalized
+
+
+def to_bbox(
+    geometry: tuple[float, float, float, float] | str,
+) -> tuple[float, float, float, float]:
+    if isinstance(geometry, tuple) and is_valid_bbox(geometry):
+        return geometry
+
+    if isinstance(geometry, str):
+        poly = wkt.loads(geometry)
+        return poly.bounds
+
+    raise ValueError(f"Unsupported geometry format: {geometry}, {type(geometry)}")
+
+
+def is_valid_bbox(bbox: tuple[float, float, float, float]) -> bool:
+    minx, miny, maxx, maxy = bbox
+    return (
+        -180 <= minx <= 180
+        and -180 <= maxx <= 180
+        and -90 <= miny <= 90
+        and -90 <= maxy <= 90
+    )

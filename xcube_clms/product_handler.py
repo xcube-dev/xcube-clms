@@ -29,6 +29,7 @@ from xcube.core.store import (
     PreloadHandle,
     DataTypeLike,
     DataDescriptor,
+    DataStore,
 )
 from xcube.core.store.preload import NullPreloadHandle
 from xcube.util.jsonschema import JsonObjectSchema
@@ -52,9 +53,9 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
 
     def __init__(
         self,
-        cache_store=None,
-        datasets_info=None,
-        api_token_handler=None,
+        cache_store: DataStore = None,
+        datasets_info: list[dict] = None,
+        api_token_handler: ClmsApiTokenHandler = None,
     ):
         self.cache_store = cache_store
         self.datasets_info = datasets_info

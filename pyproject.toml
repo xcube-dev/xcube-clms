@@ -28,6 +28,8 @@ dependencies = [
     "zappend",
     "h5netcdf",
     "python-dotenv",
+    "boto3==1.37.3",
+    "libgdal-netcdf",
 ]
 
 [tool.setuptools.dynamic]

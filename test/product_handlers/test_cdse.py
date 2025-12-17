@@ -166,6 +166,7 @@ class TestCdseProductHandler(unittest.TestCase):
             {
                 "content_date_start": ["2024-01-01", "2024-01-02"],
                 "s3_path": ["a", "b"],
+                "bbox": "POLYGON((-11 72,-11 35,50 35,50 72,-11 72))",
             }
         )
         mock_get_df.return_value = df
@@ -177,6 +178,7 @@ class TestCdseProductHandler(unittest.TestCase):
 
         self.assertEqual(descriptor.data_id, "daily-surface-soil-moisture-v1.0")
         self.assertEqual(descriptor.time_range, ("2024-01-01", "2024-01-02"))
+        self.assertEqual(descriptor.bbox, (-11.0, 35.0, 50.0, 72.0))
 
     def test_open_data_no_time_range(self):
         with self.assertRaises(DataStoreError):

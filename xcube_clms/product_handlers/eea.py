@@ -16,9 +16,11 @@ from xcube.core.store import (
     DataTypeLike,
     DataDescriptor,
     DatasetDescriptor,
+    DataStore,
 )
 from xcube.util.jsonschema import JsonObjectSchema
 
+from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
     ACCEPT_HEADER,
     CANCELLED,
@@ -90,9 +92,9 @@ class EeaProductHandler(ProductHandler):
 
     def __init__(
         self,
-        datasets_info=None,
-        cache_store=None,
-        api_token_handler=None,
+        cache_store: DataStore = None,
+        datasets_info: list[dict] = None,
+        api_token_handler: ClmsApiTokenHandler = None,
     ):
         super().__init__(cache_store, datasets_info, api_token_handler)
 

@@ -34,9 +34,11 @@ from xcube.core.store import (
     DataTypeLike,
     DataDescriptor,
     DatasetDescriptor,
+    DataStore,
 )
 from xcube.util.jsonschema import JsonDateSchema, JsonObjectSchema
 
+from build.lib.xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
     DATASET_DOWNLOAD_INFORMATION,
     ITEMS_KEY,
@@ -48,6 +50,7 @@ from xcube_clms.product_handler import ProductHandler
 from xcube_clms.utils import (
     detect_format,
     normalize_time_range,
+    to_bbox,
 )
 
 load_dotenv()
@@ -64,9 +67,9 @@ class CdseProductHandler(ProductHandler):
 
     def __init__(
         self,
-        datasets_info=None,
-        cache_store=None,
-        api_token_handler=None,
+        cache_store: DataStore = None,
+        datasets_info: list[dict] = None,
+        api_token_handler: ClmsApiTokenHandler = None,
     ):
         super().__init__(cache_store, datasets_info, api_token_handler)
         # This handler does not need cache_store.
@@ -126,10 +129,31 @@ class CdseProductHandler(ProductHandler):
         df = _get_df_from_data_id(data_id)
         min_date, max_date = _get_min_max_date(df)
 
+        bbox = None
+
+        if "bbox" in df.columns:
+            bboxes = df["bbox"]
+
+            if len(bboxes) > 1 and (bboxes[0] != bboxes[1]):
+                raise ValueError(
+                    f"Different bboxes {bboxes[0]}, {bboxes[1]} "
+                    f"found for this product {data_id}"
+                )
+
+            raw_bbox = bboxes[0]  # picking the first one as it is assumed that
+            # all the datasets in this csv have the same spatial dimensions and
+            # only differ temporally.
+
+            bbox = to_bbox(raw_bbox)
+
         crs = product.get(CRS_KEY, [])
         normalized_time_range = normalize_time_range((min_date, max_date))
 
         metadata = dict(time_range=normalized_time_range, crs=crs[0] if crs else None)
+
+        if bbox is not None:
+            metadata["bbox"] = bbox
+
         return DatasetDescriptor(data_id, **metadata)
 
     def request_download(self, data_id: str) -> list[str]:
@@ -199,7 +223,7 @@ def _get_min_max_date(df: pd.DataFrame) -> tuple[datetime, datetime]:
     return min_date, max_date
 
 
-def _append_nc_file(path):
+def _append_nc_file(path: str):
     filename_nc = os.path.basename(path)
     filename_dot_nc = filename_nc.replace("_nc", ".nc")
     return path + "/" + filename_dot_nc

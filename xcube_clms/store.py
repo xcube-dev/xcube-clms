@@ -174,7 +174,9 @@ class ClmsDataStore(DataStore):
                     LOG.debug(f"handler {handler_key} is not supported.")
                     continue
                 for data_id_and_maybe_attrs in handler(
-                    self._datasets_info, self.cache_store, _api_token_handler
+                    cache_store=self.cache_store,
+                    datasets_info=self._datasets_info,
+                    api_token_handler=_api_token_handler,
                 ).get_data_id(
                     data_type=data_type, include_attrs=include_attrs, item=item
                 ):
@@ -241,9 +243,9 @@ class ClmsDataStore(DataStore):
                     "except EEA.",
                     properties={
                         key: ph(
-                            self._datasets_info,
-                            self.cache_store,
-                            _api_token_handler,
+                            cache_store=self.cache_store,
+                            datasets_info=self._datasets_info,
+                            api_token_handler=_api_token_handler,
                         ).get_open_data_params_schema()
                         for (key, ph) in get_prod_handlers().items()
                         if key != EEA.lower()
@@ -255,7 +257,9 @@ class ClmsDataStore(DataStore):
                 title="Opening parameters for all supported CLMS products.",
                 properties={
                     key: ph(
-                        self._datasets_info, self.cache_store, _api_token_handler
+                        cache_store=self.cache_store,
+                        datasets_info=self._datasets_info,
+                        api_token_handler=_api_token_handler,
                     ).get_open_data_params_schema()
                     for (key, ph) in get_prod_handlers().items()
                 },

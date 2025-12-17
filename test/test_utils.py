@@ -35,10 +35,11 @@ from xcube_clms.utils import (
     build_api_url,
     cleanup_dir,
     download_zip_data,
-    extract_and_filter_dates,
     get_response_of_type,
     get_spatial_dims,
     make_api_request,
+    is_valid_bbox,
+    to_bbox,
 )
 
 url = "http://example.com/api"
@@ -407,107 +408,41 @@ class UtilsTest(unittest.TestCase):
         self.assertTrue(mock_inner_zip_fs.open.called)
         self.assertTrue(mock_dest_open.called)
 
-    def test_extract_and_filter_dates_basic(self):
-        urls = [
-            "https://example.com/20220101/data.tif",
-            "https://example.com/20220215/data.tif",
-            "https://example.com/20220301/data.tif",
-            "https://example.com/invalid/data.tif",  # No date
-        ]
-        time_range = ("2022-01-15", "2022-02-28")
-        expected = [
-            "https://example.com/20220215/data.tif",
-        ]
-        result = extract_and_filter_dates(urls, time_range)
-        assert result == expected
+    def test_is_valid_bbox_valid(self):
+        bbox = (-11.0, 35.0, 50.0, 72.0)
+        self.assertTrue(is_valid_bbox(bbox))
 
-    def test_extract_and_filter_dates_multiple_matches(self):
-        urls = [
-            "https://example.com/20220101/a.nc",
-            "https://example.com/20220115/b.nc",
-            "https://example.com/20220130/c.nc",
-        ]
-        time_range = ("2022-01-01", "2022-01-31")
-        expected = sorted(urls)
-        result = extract_and_filter_dates(urls, time_range)
-        assert result == expected
+    def test_is_valid_bbox_invalid_lat(self):
+        bbox = (-11.0, -95.0, 50.0, 72.0)
+        self.assertFalse(is_valid_bbox(bbox))
 
-    def test_extract_and_filter_dates_none_in_range(self):
-        urls = [
-            "https://example.com/20210101/a.tif",
-            "https://example.com/20210315/b.tif",
-        ]
-        time_range = ("2022-01-01", "2022-12-31")
-        result = extract_and_filter_dates(urls, time_range)
-        assert result == []
+    def test_is_valid_bbox_invalid_lon(self):
+        bbox = (-200.0, 35.0, 50.0, 72.0)
+        self.assertFalse(is_valid_bbox(bbox))
 
-    # def test_successful_opening_returns_combined_dataset(self):
-    #     result = open_mfdataset_with_retry(self.test_files, batch_size=2)
-    #
-    #     self.assertIsInstance(result, xr.Dataset)
-    #     self.assertIn("temperature", result.variables)
-    #     self.assertEqual(len(result.time), 30)
-    #
-    # def test_empty_paths_list_raises_error(self):
-    #     with self.assertRaises(RuntimeError) as context:
-    #         open_mfdataset_with_retry([])
-    #
-    #     self.assertIn("No datasets could be opened", str(context.exception))
-    #
-    # def test_nonexistent_files_raises_error_after_retries(self):
-    #     fake_paths = ["/nonexistent/file1.nc", "/nonexistent/file2.nc"]
-    #
-    #     with self.assertRaises(Exception):
-    #         open_mfdataset_with_retry(fake_paths, max_retries=2)
-    #
-    # @patch("xcube_clms.utils.xr.concat")
-    # @patch("xcube_clms.utils.xr.open_mfdataset")
-    # def test_rate_limit_error_triggers_longer_delay(
-    #     self, mock_open_mfdataset, mock_concat
-    # ):
-    #     mock_dataset = MagicMock()
-    #     mock_open_mfdataset.side_effect = [
-    #         Exception("429 Too Many Requests"),
-    #         ConnectionError("Network error"),
-    #         mock_dataset,
-    #     ]
-    #
-    #     with patch("xcube_clms.utils.time.sleep") as mock_sleep:
-    #         open_mfdataset_with_retry(["test.nc"], max_retries=3)
-    #
-    #         mock_sleep.assert_called()
-    #         sleep_delay = mock_sleep.call_args[0][0]
-    #         self.assertGreater(sleep_delay, 1.0)
-    #
-    # @patch("xcube_clms.utils.xr.concat")
-    # @patch("xcube_clms.utils.xr.open_mfdataset")
-    # def test_max_retries_parameter_is_respected(self, mock_open_mfdataset, mock_concat):
-    #     mock_dataset = MagicMock()
-    #     mock_open_mfdataset.side_effect = [
-    #         Exception("429 Too Many Requests"),
-    #         ConnectionError("Network error"),
-    #         mock_dataset,
-    #     ]
-    #
-    #     with self.assertRaises(Exception):
-    #         open_mfdataset_with_retry(["test.nc"], max_retries=2)
-    #
-    #     mock_dataset = MagicMock()
-    #     mock_open_mfdataset.side_effect = [
-    #         Exception("429 Too Many Requests"),
-    #         ConnectionError("Network error"),
-    #         mock_dataset,
-    #     ]
-    #
-    #     open_mfdataset_with_retry(["test.nc"], max_retries=3)
-    #
-    # @patch("xcube_clms.utils.xr.concat")
-    # @patch("xcube_clms.utils.xr.open_mfdataset")
-    # def test_concat_failure_raises(self, mock_open_mfdataset, mock_concat):
-    #     mock_dataset1 = MagicMock()
-    #     mock_dataset2 = MagicMock()
-    #     mock_open_mfdataset.side_effect = [mock_dataset1, mock_dataset2]
-    #     mock_concat.side_effect = Exception("Concat failed")
-    #
-    #     with self.assertRaises(Exception):
-    #         open_mfdataset_with_retry(["file1.nc", "file2.nc"], batch_size=1)
+    def test_is_valid_bbox_edge_values(self):
+        bbox = (-180.0, -90.0, 180.0, 90.0)
+        self.assertTrue(is_valid_bbox(bbox))
+
+    def test_to_bbox_with_valid_bbox_tuple(self):
+        bbox = (-11.0, 35.0, 50.0, 72.0)
+        result = to_bbox(bbox)
+        self.assertEqual(result, bbox)
+
+    def test_to_bbox_with_invalid_bbox_tuple_raises(self):
+        bbox = (-200.0, 35.0, 50.0, 72.0)
+        with self.assertRaises(ValueError):
+            to_bbox(bbox)
+
+    def test_to_bbox_with_wkt_polygon(self):
+        polygon = "POLYGON((-11 72,-11 35,50 35,50 72,-11 72))"
+        result = to_bbox(polygon)
+        self.assertEqual(result, (-11.0, 35.0, 50.0, 72.0))
+
+    def test_to_bbox_with_invalid_string_raises(self):
+        with self.assertRaises(Exception):
+            to_bbox("NOT_A_WKT")
+
+    def test_to_bbox_with_unsupported_type_raises(self):
+        with self.assertRaises(ValueError):
+            to_bbox([1, 2, 3, 4])
