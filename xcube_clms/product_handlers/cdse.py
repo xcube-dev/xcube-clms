@@ -50,10 +50,9 @@ from xcube_clms.utils import (
 )
 
 supported_clms_products_cdse = {
-    "daily-surface-soil-moisture-v1.0":
-        "https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/bio"
-                                        "-geophysical/surface_soil_moisture/ssm_europe_1km_daily_v1"
-                                        "/ssm_europe_1km_daily_v1_nc.csv"
+    "daily-surface-soil-moisture-v1.0": "https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/bio"
+    "-geophysical/surface_soil_moisture/ssm_europe_1km_daily_v1"
+    "/ssm_europe_1km_daily_v1_nc.csv"
 }
 
 
@@ -61,10 +60,10 @@ class CdseProductHandler(ProductHandler):
     """Product handler to open CLMS products lazily from CDSE S3 endpoint"""
 
     def __init__(
-            self,
-            datasets_info=None,
-            cache_store=None,
-            api_token_handler=None,
+        self,
+        datasets_info=None,
+        cache_store=None,
+        api_token_handler=None,
     ):
         super().__init__(cache_store, datasets_info, api_token_handler)
         # This handler does not need cache_store.
@@ -86,8 +85,7 @@ class CdseProductHandler(ProductHandler):
     def product_type(cls):
         return "cdse"
 
-    def get_open_data_params_schema(self,
-                                    data_id: str = None) -> JsonObjectSchema:
+    def get_open_data_params_schema(self, data_id: str = None) -> JsonObjectSchema:
         params = dict(time_range=JsonDateSchema.new_range())
         return JsonObjectSchema(
             properties=dict(**params),
@@ -95,10 +93,10 @@ class CdseProductHandler(ProductHandler):
         )
 
     def get_data_id(
-            self,
-            data_type: DataTypeLike = None,
-            include_attrs: Container[str] | bool = False,
-            item: dict = None,
+        self,
+        data_type: DataTypeLike = None,
+        include_attrs: Container[str] | bool = False,
+        item: dict = None,
     ) -> Iterator[str | tuple[str, dict[str, Any]]]:
         dataset_download_info = item[DATASET_DOWNLOAD_INFORMATION][ITEMS_KEY][0]
 
@@ -128,8 +126,7 @@ class CdseProductHandler(ProductHandler):
         crs = product.get(CRS_KEY, [])
         normalized_time_range = normalize_time_range((min_date, max_date))
 
-        metadata = dict(time_range=normalized_time_range,
-                        crs=crs[0] if crs else None)
+        metadata = dict(time_range=normalized_time_range, crs=crs[0] if crs else None)
         return DatasetDescriptor(data_id, **metadata)
 
     def request_download(self, data_id: str) -> list[str]:
@@ -144,8 +141,7 @@ class CdseProductHandler(ProductHandler):
         time_range = open_params.get("time_range")
         urls = []
         if time_range is not None:
-            urls = _generate_daily_ssm_paths(data_id, time_range[0],
-                                             time_range[1])
+            urls = _generate_daily_ssm_paths(data_id, time_range[0], time_range[1])
 
         if len(urls) == 0:
             raise DataStoreError("No data found for the time range provided.")
@@ -167,8 +163,7 @@ class CdseProductHandler(ProductHandler):
             raise DataStoreError("Unsupported format detected.")
 
 
-def _generate_daily_ssm_paths(data_id: str, start_date: str,
-                              end_date: str) -> list:
+def _generate_daily_ssm_paths(data_id: str, start_date: str, end_date: str) -> list:
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
 
@@ -181,7 +176,7 @@ def _generate_daily_ssm_paths(data_id: str, start_date: str,
         LOG.warn(f"No data available after {max_date}.")
 
     mask = (df["content_date_start"] >= start_date) & (
-            df["content_date_start"] <= end_date
+        df["content_date_start"] <= end_date
     )
     paths = df.loc[mask, "s3_path"].tolist()
     fixed_paths = [_append_nc_file(p) for p in paths]
