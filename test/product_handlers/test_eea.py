@@ -31,7 +31,7 @@ import numpy as np
 import rasterio
 import xarray as xr
 from rasterio.transform import from_origin
-from xcube.core.store import PreloadState, DataStoreError
+from xcube.core.store import DataStoreError, PreloadState
 
 from xcube_clms.constants import (
     CLMS_API_URL,

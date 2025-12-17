@@ -9,58 +9,29 @@ import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import (
-    DataStoreError,
-    PreloadHandle,
-    PreloadState,
-    DataTypeLike,
-    DataDescriptor,
-    DatasetDescriptor,
-    DataStore,
-)
+from xcube.core.store import (DataDescriptor, DatasetDescriptor, DataStore,
+                              DataStoreError, DataTypeLike, PreloadHandle,
+                              PreloadState)
 from xcube.util.jsonschema import JsonObjectSchema
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import (
-    ACCEPT_HEADER,
-    CANCELLED,
-    CLMS_API_URL,
-    COMPLETE,
-    CONTENT_TYPE_HEADER,
-    DATA_ID_SEPARATOR,
-    DOWNLOAD_ENDPOINT,
-    DOWNLOAD_FOLDER,
-    ID_KEY,
-    ITEM_KEY,
-    LOG,
-    PENDING,
-    PRODUCT_KEY,
-    RETRY_TIMEOUT,
-    TASK_STATUS_ENDPOINT,
-    TIME_TO_EXPIRE,
-    UID_KEY,
-    CLMS_DATA_ID_KEY,
-    DOWNLOADABLE_FILES_KEY,
-    ITEMS_KEY,
-    FORMAT_KEY,
-    FILE_KEY,
-    CRS_KEY,
-)
+from xcube_clms.constants import (ACCEPT_HEADER, CANCELLED, CLMS_API_URL,
+                                  CLMS_DATA_ID_KEY, COMPLETE,
+                                  CONTENT_TYPE_HEADER, CRS_KEY,
+                                  DATA_ID_SEPARATOR, DOWNLOAD_ENDPOINT,
+                                  DOWNLOAD_FOLDER, DOWNLOADABLE_FILES_KEY,
+                                  FILE_KEY, FORMAT_KEY, ID_KEY, ITEM_KEY,
+                                  ITEMS_KEY, LOG, PENDING, PRODUCT_KEY,
+                                  RETRY_TIMEOUT, TASK_STATUS_ENDPOINT,
+                                  TIME_TO_EXPIRE, UID_KEY)
 from xcube_clms.preload import ClmsPreloadHandle
 from xcube_clms.product_handler import ProductHandler
-from xcube_clms.utils import (
-    build_api_url,
-    cleanup_dir,
-    find_easting_northing,
-    get_authorization_header,
-    get_dataset_download_info,
-    get_extracted_component,
-    get_response_of_type,
-    get_tile_size,
-    make_api_request,
-    normalize_time_range,
-    download_zip_data,
-)
+from xcube_clms.utils import (build_api_url, cleanup_dir, download_zip_data,
+                              find_easting_northing, get_authorization_header,
+                              get_dataset_download_info,
+                              get_extracted_component, get_response_of_type,
+                              get_tile_size, make_api_request,
+                              normalize_time_range)
 
 _FILE_ID_KEY = "FileID"
 _DOWNLOAD_URL_KEY = "DownloadURL"
@@ -340,9 +311,9 @@ class EeaProductHandler(ProductHandler):
         )
         response = get_response_of_type(response_data, "json")
         task_ids = response.get(_TASK_IDS_KEY)
-        assert (
-            len(task_ids) == 1
-        ), f"Expected API response with 1 task_id, got {len(task_ids)}"
+        assert len(task_ids) == 1, (
+            f"Expected API response with 1 task_id, got {len(task_ids)}"
+        )
         task_id = task_ids[0].get(_TASK_ID_KEY)
         LOG.debug(f"Download Requested with Task ID : {task_id}")
         return [task_id]

@@ -21,8 +21,9 @@
 
 
 def get_prod_handlers() -> dict:
-    from ..product_handlers.eea import EeaProductHandler
     from xcube_clms.product_handlers.cdse import CdseProductHandler
+
+    from ..product_handlers.eea import EeaProductHandler
 
     return {
         EeaProductHandler.product_type(): EeaProductHandler,

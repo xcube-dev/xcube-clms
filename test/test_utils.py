@@ -37,8 +37,8 @@ from xcube_clms.utils import (
     download_zip_data,
     get_response_of_type,
     get_spatial_dims,
-    make_api_request,
     is_valid_bbox,
+    make_api_request,
     to_bbox,
 )
 

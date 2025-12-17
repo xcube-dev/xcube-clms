@@ -49,8 +49,7 @@ class ClmsDataStoreTest(unittest.TestCase):
 
         # Comment these lines when running pytest vcr in record mode and add
         # the actual credentials for recording the pytest
-        mock_jwt_encode_patcher = patch(
-            "xcube_clms.api_token_handler.jwt.encode")
+        mock_jwt_encode_patcher = patch("xcube_clms.api_token_handler.jwt.encode")
         self.mock_jwt_encode = mock_jwt_encode_patcher.start()
 
         self.store = new_data_store(
@@ -83,10 +82,8 @@ class ClmsDataStoreTest(unittest.TestCase):
     def test_get_data_ids(self):
         data_ids = list(self.store.get_data_ids())
         self.assertTrue(len(data_ids) > 0)
-        self.assertTrue(
-            len([i for i in data_ids if DATA_ID_SEPARATOR in i]) > 0)
-        self.assertTrue(
-            len([i for i in data_ids if DATA_ID_SEPARATOR not in i]) > 0)
+        self.assertTrue(len([i for i in data_ids if DATA_ID_SEPARATOR in i]) > 0)
+        self.assertTrue(len([i for i in data_ids if DATA_ID_SEPARATOR not in i]) > 0)
 
     @pytest.mark.vcr()
     def test_get_data_ids_with_all_attrs(self):
@@ -111,8 +108,7 @@ class ClmsDataStoreTest(unittest.TestCase):
         # EEA datasets
         result = list(store.get_data_ids(include_attrs=["area"]))
         data_ids_w_included_attrs = [
-            d_a_tuple[1] for d_a_tuple in result if
-            DATA_ID_SEPARATOR in d_a_tuple[0]
+            d_a_tuple[1] for d_a_tuple in result if DATA_ID_SEPARATOR in d_a_tuple[0]
         ]
         self.assertIsNotNone(data_ids_w_included_attrs)
 
@@ -178,8 +174,7 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_open_data_params_schema(self):
-        schema = self.store.get_open_data_params_schema(
-            self.eea_data_id + ".zarr")
+        schema = self.store.get_open_data_params_schema(self.eea_data_id + ".zarr")
         self.assertIsInstance(schema, JsonObjectSchema)
         self.assertIn("log_access", schema.properties)
         self.assertIn("cache_size", schema.properties)

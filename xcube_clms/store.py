@@ -22,42 +22,22 @@
 from typing import Any, Container, Iterator, Tuple
 
 import xarray as xr
-from xcube.core.store import (
-    DATASET_TYPE,
-    DataDescriptor,
-    DataStore,
-    DataStoreError,
-    DataTypeLike,
-    PreloadedDataStore,
-    new_data_store,
-)
-from xcube.util.jsonschema import (
-    JsonArraySchema,
-    JsonBooleanSchema,
-    JsonComplexSchema,
-    JsonIntegerSchema,
-    JsonObjectSchema,
-    JsonStringSchema,
-)
+from xcube.core.store import (DATASET_TYPE, DataDescriptor, DataStore,
+                              DataStoreError, DataTypeLike, PreloadedDataStore,
+                              new_data_store)
+from xcube.util.jsonschema import (JsonArraySchema, JsonBooleanSchema,
+                                   JsonComplexSchema, JsonIntegerSchema,
+                                   JsonObjectSchema, JsonStringSchema)
 
 from .api_token_handler import ClmsApiTokenHandler
-from .constants import (
-    DATASET_DOWNLOAD_INFORMATION,
-    DEFAULT_PRELOAD_CACHE_FOLDER,
-    FULL_SOURCE,
-    ITEMS_KEY,
-    LOG,
-    EEA,
-    CDSE,
-)
+from .constants import (CDSE, DATASET_DOWNLOAD_INFORMATION,
+                        DEFAULT_PRELOAD_CACHE_FOLDER, EEA, FULL_SOURCE,
+                        ITEMS_KEY, LOG)
 from .product_handler import ProductHandler
 from .product_handlers import get_prod_handlers
 from .product_handlers.eea import EeaProductHandler
-from .utils import (
-    assert_valid_data_type,
-    fetch_all_datasets,
-    get_extracted_component,
-)
+from .utils import (assert_valid_data_type, fetch_all_datasets,
+                    get_extracted_component)
 
 _CRS_KEY = "coordinateReferenceSystemList"
 _START_TIME_KEY = "temporalExtentStart"
