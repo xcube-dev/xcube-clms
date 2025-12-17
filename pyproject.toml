@@ -26,7 +26,8 @@ dependencies = [
     "requests",
     "fsspec",
     "zappend",
-    "h5netcdf"
+    "h5netcdf",
+    "python-dotenv",
 ]
 
 [tool.setuptools.dynamic]

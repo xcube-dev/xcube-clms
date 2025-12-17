@@ -28,6 +28,7 @@ import pandas as pd
 import rasterio
 import rioxarray
 import xarray as xr
+from dotenv import load_dotenv
 from xcube.core.store import (
     DataStoreError,
     DataTypeLike,
@@ -48,6 +49,8 @@ from xcube_clms.utils import (
     detect_format,
     normalize_time_range,
 )
+
+load_dotenv()
 
 supported_clms_products_cdse = {
     "daily-surface-soil-moisture-v1.0": "https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/bio"
@@ -73,8 +76,8 @@ class CdseProductHandler(ProductHandler):
         session = rasterio.session.AWSSession(
             aws_unsigned=False,
             endpoint_url="eodata.dataspace.copernicus.eu",
-            aws_access_key_id="",
-            aws_secret_access_key="",
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
         env = rasterio.env.Env(session=session, AWS_VIRTUAL_HOSTING=False)
         # keep the rasterio environment open so that the data can be accessed

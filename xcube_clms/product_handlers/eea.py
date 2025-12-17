@@ -57,6 +57,7 @@ from xcube_clms.utils import (
     get_tile_size,
     make_api_request,
     normalize_time_range,
+    download_zip_data,
 )
 
 _FILE_ID_KEY = "FileID"
@@ -88,10 +89,10 @@ class EeaProductHandler(ProductHandler):
     """
 
     def __init__(
-            self,
-            datasets_info=None,
-            cache_store=None,
-            api_token_handler=None,
+        self,
+        datasets_info=None,
+        cache_store=None,
+        api_token_handler=None,
     ):
         super().__init__(cache_store, datasets_info, api_token_handler)
 
@@ -108,23 +109,20 @@ class EeaProductHandler(ProductHandler):
     def product_type(cls):
         return "eea"
 
-    def get_open_data_params_schema(self,
-                                    data_id: str = None) -> JsonObjectSchema:
+    def get_open_data_params_schema(self, data_id: str = None) -> JsonObjectSchema:
         return self.cache_store.get_open_data_params_schema(data_id)
 
     def get_data_id(
-            self,
-            data_type: DataTypeLike = None,
-            include_attrs: Container[str] | bool = False,
-            item: dict = None,
+        self,
+        data_type: DataTypeLike = None,
+        include_attrs: Container[str] | bool = False,
+        item: dict = None,
     ) -> Iterator[str | tuple[str, dict[str, Any]]]:
         for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
             if FORMAT_KEY in i and i[FORMAT_KEY] == "Geotiff":
                 if FILE_KEY in i and i[FILE_KEY] != "":
                     data_id = (
-                        f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}"
-                        f""
-                        f"{i[FILE_KEY]}"
+                        f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[FILE_KEY]}"
                     )
                     if not include_attrs:
                         yield data_id
@@ -144,14 +142,13 @@ class EeaProductHandler(ProductHandler):
             LOG.warning(
                 f"Expected 1 crs, got {len(crs)}. Outputting the first element."
             )
-        metadata = dict(time_range=normalized_time_range,
-                        crs=crs[0] if crs else None)
+        metadata = dict(time_range=normalized_time_range, crs=crs[0] if crs else None)
         return DatasetDescriptor(data_id, **metadata)
 
     def open_data(
-            self,
-            data_id: str,
-            **open_params,
+        self,
+        data_id: str,
+        **open_params,
     ) -> Any:
         """Opens and returns data for a given data ID from the cache.
 
@@ -178,9 +175,9 @@ class EeaProductHandler(ProductHandler):
         )
 
     def preload_data(
-            self,
-            *data_ids: str,
-            **preload_params: Any,
+        self,
+        *data_ids: str,
+        **preload_params: Any,
     ) -> PreloadHandle:
         """Initiates the data preload process for one or more datasets.
 
@@ -199,8 +196,7 @@ class EeaProductHandler(ProductHandler):
                 ITEM_KEY: get_extracted_component(
                     self.datasets_info, data_id, item_type="item"
                 ),
-                PRODUCT_KEY: get_extracted_component(self.datasets_info,
-                                                     data_id),
+                PRODUCT_KEY: get_extracted_component(self.datasets_info, data_id),
             }
             for data_id in data_ids
         }
@@ -250,8 +246,8 @@ class EeaProductHandler(ProductHandler):
                             data_id=data_id,
                             progress=0.4,
                             message=f"Task ID {task_id}: Download link "
-                                    f"created. "
-                                    f"Downloading and extracting now...",
+                            f"created. "
+                            f"Downloading and extracting now...",
                         )
                     )
                     download_url, _ = self._get_download_url(task_id)
@@ -261,7 +257,7 @@ class EeaProductHandler(ProductHandler):
                             data_id=data_id,
                             progress=0.8,
                             message=f"Task ID {task_id}: Extraction complete. "
-                                    f"Processing now...",
+                            f"Processing now...",
                         )
                     )
                     self.preprocess_data(data_id)
@@ -279,8 +275,8 @@ class EeaProductHandler(ProductHandler):
                         PreloadState(
                             data_id=data_id,
                             message=f"Task ID {task_id}: Download request was "
-                                    f"cancelled by the user from "
-                                    "the Land Copernicus UI.",
+                            f"cancelled by the user from "
+                            "the Land Copernicus UI.",
                         )
                     )
                     handle.cancel()
@@ -307,8 +303,7 @@ class EeaProductHandler(ProductHandler):
         source = item.get(_SOURCE_KEY, "")
 
         if (path == "") and (source == ""):
-            LOG.info(
-                f"No prepackaged downloadable items available for {data_id}")
+            LOG.info(f"No prepackaged downloadable items available for {data_id}")
 
         status, task_id = self._get_current_requests_status(data_id=data_id)
 
@@ -344,14 +339,14 @@ class EeaProductHandler(ProductHandler):
         response = get_response_of_type(response_data, "json")
         task_ids = response.get(_TASK_IDS_KEY)
         assert (
-                len(task_ids) == 1
+            len(task_ids) == 1
         ), f"Expected API response with 1 task_id, got {len(task_ids)}"
         task_id = task_ids[0].get(_TASK_ID_KEY)
         LOG.debug(f"Download Requested with Task ID : {task_id}")
         return [task_id]
 
     def prepare_request(
-            self, data_id: str
+        self, data_id: str
     ) -> tuple[str, dict, dict] | tuple[str, dict]:
         LOG.debug(f"Preparing download request for {data_id}")
 
@@ -405,9 +400,9 @@ class EeaProductHandler(ProductHandler):
             )
 
     def _get_current_requests_status(
-            self,
-            data_id: str | None = None,
-            task_id: str | None = None,
+        self,
+        data_id: str | None = None,
+        task_id: str | None = None,
     ) -> tuple[str, str]:
         """Checks the status of existing download request task.
 
@@ -431,8 +426,7 @@ class EeaProductHandler(ProductHandler):
 
         if data_id and not task_id:
             item = get_extracted_component(
-                datasets_info=self.datasets_info, data_id=data_id,
-                item_type="item"
+                datasets_info=self.datasets_info, data_id=data_id, item_type="item"
             )
             product = get_extracted_component(
                 datasets_info=self.datasets_info, data_id=data_id
@@ -472,7 +466,7 @@ class EeaProductHandler(ProductHandler):
                 condition = key == task_id
             else:
                 condition = (dataset_id == requested_data_id) and (
-                        file_id == requested_file_id
+                    file_id == requested_file_id
                 )
 
             if condition:
@@ -485,20 +479,18 @@ class EeaProductHandler(ProductHandler):
                 if status in latest_entries:
                     existing_entry = latest_entries[status]
                     if not existing_entry or (
-                            timestamp and (
-                            timestamp > existing_entry.get("timestamp", ""))
+                        timestamp and (timestamp > existing_entry.get("timestamp", ""))
                     ):
                         latest_entries[status] = current_entry
         for status in sorted(
-                status_priority, key=lambda s: status_priority[s], reverse=False
+            status_priority, key=lambda s: status_priority[s], reverse=False
         ):
             latest_entry = latest_entries[status]
             if latest_entry:
                 key = latest_entry["key"]
                 entry_response = latest_entry["response"]
                 if status in _STATUS_COMPLETE:
-                    if not has_expired(
-                            entry_response[_DOWNLOAD_AVAILABLE_TIME_KEY]):
+                    if not has_expired(entry_response[_DOWNLOAD_AVAILABLE_TIME_KEY]):
                         return COMPLETE, key
                 elif status in _STATUS_PENDING:
                     return PENDING, key
@@ -527,10 +519,8 @@ class EeaProductHandler(ProductHandler):
         files = [entry.split("/")[-1] for entry in self.fs.ls(target_folder)]
         if len(files) == 1:
             LOG.debug("Converting the file to zarr format.")
-            cache_data_id = self.fs.sep.join(
-                [DOWNLOAD_FOLDER, data_id, files[0]])
-            data = self.cache_store.open_data(cache_data_id,
-                                              data_type="dataset")
+            cache_data_id = self.fs.sep.join([DOWNLOAD_FOLDER, data_id, files[0]])
+            data = self.cache_store.open_data(cache_data_id, data_type="dataset")
             new_cache_data_id = data_id + _ZARR_FORMAT
             data = chunk_dataset(
                 data,
@@ -545,8 +535,7 @@ class EeaProductHandler(ProductHandler):
                 if "grid_mapping" in final_cube[var].encoding:
                     del final_cube[var].encoding["grid_mapping"]
 
-            self.cache_store.write_data(final_cube, new_cache_data_id,
-                                        replace=True)
+            self.cache_store.write_data(final_cube, new_cache_data_id, replace=True)
         elif len(files) == 0:
             LOG.warn("No files to preprocess!")
         else:
@@ -565,7 +554,7 @@ class EeaProductHandler(ProductHandler):
             )
 
     def _prepare_merge(
-            self, files: list[str], data_id: str
+        self, files: list[str], data_id: str
     ) -> defaultdict[str, list[str]]:
         """Prepares files for merging by grouping them based on their Easting
         and Northing coordinates.
@@ -586,7 +575,7 @@ class EeaProductHandler(ProductHandler):
         return en_map
 
     def _merge_and_save(
-            self, en_map: defaultdict[str, list[str]], data_id: str
+        self, en_map: defaultdict[str, list[str]], data_id: str
     ) -> None:
         """Merges files along Easting and Northing axes and saves the final
         dataset using the data store.
@@ -641,8 +630,7 @@ class EeaProductHandler(ProductHandler):
             chunk_sizes={"x": self.tile_size[0], "y": self.tile_size[1]},
             format_name=_ZARR_FORMAT,
         )
-        self.cache_store.write_data(final_chunked_cube, new_filename,
-                                    replace=True)
+        self.cache_store.write_data(final_chunked_cube, new_filename, replace=True)
 
     def _get_chunk_size(self, size_x: int, size_y: int) -> dict[str, int]:
         return {

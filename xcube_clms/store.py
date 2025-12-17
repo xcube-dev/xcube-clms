@@ -121,9 +121,7 @@ class ClmsDataStore(DataStore):
             cache_store_id=JsonStringSchema(
                 title="Store ID of cache data store.",
                 description=(
-                    "Store ID of a filesystem-based data store implemented in "
-                    ""
-                    "xcube."
+                    "Store ID of a filesystem-based data store implemented in xcube."
                 ),
                 default="file",
             ),
@@ -232,7 +230,7 @@ class ClmsDataStore(DataStore):
             )
             return handler.get_open_data_params_schema(data_id)
         elif opener_id is not None:
-            if opener_id == "dataset:zarr:file":
+            if opener_id == f"dataset:zarr:{self.cache_store.protocol}":
                 return get_prod_handlers()["eea"](
                     self._datasets_info, self.cache_store, self.credentials
                 ).get_open_data_params_schema()
@@ -335,8 +333,7 @@ class ClmsDataStore(DataStore):
     def get_preload_data_params_schema(self) -> JsonObjectSchema:
         params = dict(
             blocking=JsonBooleanSchema(
-                title="Option to make the preload_data method blocking or "
-                "non-blocking",
+                title="Option to make the preload_data method blocking or non-blocking",
                 description=(
                     "If True, (the default) if the constructor should wait for"
                     "all preload task to finish before the calling thread"
