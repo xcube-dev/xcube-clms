@@ -2,10 +2,11 @@
 
 * Removed `LEGACY` product handler as the CLMS API has now moved the data
   to CDSE and does not have any `LEGACY` products.
-* Added `CDSE` product handler
+* Added `CDSE` product handler to lazy load products from CDSE S3 csv lists.
+  Currently supports:
+    * Daily Surface Soil Moisture
 * Improved the store instantiation to be done instantly instead of requesting
-  all
-  the metadata of dataset catalogue during init.
+  all the metadata of dataset catalogue during init.
 
 ## Changes in 1.2.0
 
