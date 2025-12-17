@@ -1,3 +1,24 @@
+# The MIT License (MIT)
+# Copyright (c) 2025 by the xcube development team and contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NON INFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import logging
 import os
 import unittest
@@ -12,13 +33,19 @@ import xarray as xr
 from rasterio.transform import from_origin
 from xcube.core.store import PreloadState, DataStoreError
 
-from xcube_clms.constants import (CLMS_API_URL, DATA_ID_SEPARATOR,
-                                  DOWNLOAD_ENDPOINT, TASK_STATUS_ENDPOINT,
-                                  TIME_TO_EXPIRE)
-from xcube_clms.product_handlers.eea import (_UNDEFINED, EeaProductHandler,
-                                             has_expired)
-from xcube_clms.utils import (find_geo_in_dir, get_authorization_header,
-                              get_dataset_download_info)
+from xcube_clms.constants import (
+    CLMS_API_URL,
+    DATA_ID_SEPARATOR,
+    DOWNLOAD_ENDPOINT,
+    TASK_STATUS_ENDPOINT,
+    TIME_TO_EXPIRE,
+)
+from xcube_clms.product_handlers.eea import _UNDEFINED, EeaProductHandler, has_expired
+from xcube_clms.utils import (
+    find_geo_in_dir,
+    get_authorization_header,
+    get_dataset_download_info,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -253,13 +280,6 @@ class TestEeaProductHandler(unittest.TestCase):
         self.mock_make_api_request.assert_called_once()
         self.mock_get_response_of_type.assert_called_once()
 
-    def test_has_data(self):
-        self.assertTrue(self.eea_handler.has_data("dataset_id|file_id"))
-        self.assertFalse(self.eea_handler.has_data("dataset_id|unknown_id"))
-        self.assertFalse(
-            self.eea_handler.has_data("dataset_id|unknown_id", data_type="dataset")
-        )
-
     def test_open_data(self):
         self.eea_handler.cache_store.open_data.return_value = self.mock_dataset
         opened_data = self.eea_handler.open_data("product_id|file_id")
@@ -339,14 +359,16 @@ class TestEeaProductHandler(unittest.TestCase):
                     PreloadState(
                         data_id="dataset|item",
                         progress=0.4,
-                        message="Task ID task_123: Download link created. Downloading and extracting now...",
+                        message="Task ID task_123: Download link created. "
+                        "Downloading and extracting now...",
                     )
                 ),
                 call(
                     PreloadState(
                         data_id="dataset|item",
                         progress=0.8,
-                        message="Task ID task_123: Extraction complete. Processing now...",
+                        message="Task ID task_123: Extraction complete. "
+                        "Processing now...",
                     )
                 ),
                 call(
@@ -472,7 +494,8 @@ class TestEeaProductHandler(unittest.TestCase):
             ],
         ]
         mock_zip_fs.isdir.side_effect = [True, False, False]
-        geo_files = find_geo_in_dir("/", mock_zip_fs)  # Still a static method or helper
+        geo_files = find_geo_in_dir("/", mock_zip_fs)  # Still a static method or
+        # helper
         self.assertEqual(geo_files, ["file2.tif"])
 
     def test_find_geo_in_dir_no_valid_file(self):

@@ -25,8 +25,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import fsspec
-import pytest
 import numpy as np
+import pytest
 import xarray as xr
 from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
 from xcube.core.store import DataStoreError
@@ -39,7 +39,6 @@ from xcube_clms.utils import (
     get_response_of_type,
     get_spatial_dims,
     make_api_request,
-    open_mfdataset_with_retry,
 )
 
 url = "http://example.com/api"
@@ -442,73 +441,73 @@ class UtilsTest(unittest.TestCase):
         result = extract_and_filter_dates(urls, time_range)
         assert result == []
 
-    def test_successful_opening_returns_combined_dataset(self):
-        result = open_mfdataset_with_retry(self.test_files, batch_size=2)
-
-        self.assertIsInstance(result, xr.Dataset)
-        self.assertIn("temperature", result.variables)
-        self.assertEqual(len(result.time), 30)
-
-    def test_empty_paths_list_raises_error(self):
-        with self.assertRaises(RuntimeError) as context:
-            open_mfdataset_with_retry([])
-
-        self.assertIn("No datasets could be opened", str(context.exception))
-
-    def test_nonexistent_files_raises_error_after_retries(self):
-        fake_paths = ["/nonexistent/file1.nc", "/nonexistent/file2.nc"]
-
-        with self.assertRaises(Exception):
-            open_mfdataset_with_retry(fake_paths, max_retries=2)
-
-    @patch("xcube_clms.utils.xr.concat")
-    @patch("xcube_clms.utils.xr.open_mfdataset")
-    def test_rate_limit_error_triggers_longer_delay(
-        self, mock_open_mfdataset, mock_concat
-    ):
-        mock_dataset = MagicMock()
-        mock_open_mfdataset.side_effect = [
-            Exception("429 Too Many Requests"),
-            ConnectionError("Network error"),
-            mock_dataset,
-        ]
-
-        with patch("xcube_clms.utils.time.sleep") as mock_sleep:
-            open_mfdataset_with_retry(["test.nc"], max_retries=3)
-
-            mock_sleep.assert_called()
-            sleep_delay = mock_sleep.call_args[0][0]
-            self.assertGreater(sleep_delay, 1.0)
-
-    @patch("xcube_clms.utils.xr.concat")
-    @patch("xcube_clms.utils.xr.open_mfdataset")
-    def test_max_retries_parameter_is_respected(self, mock_open_mfdataset, mock_concat):
-        mock_dataset = MagicMock()
-        mock_open_mfdataset.side_effect = [
-            Exception("429 Too Many Requests"),
-            ConnectionError("Network error"),
-            mock_dataset,
-        ]
-
-        with self.assertRaises(Exception):
-            open_mfdataset_with_retry(["test.nc"], max_retries=2)
-
-        mock_dataset = MagicMock()
-        mock_open_mfdataset.side_effect = [
-            Exception("429 Too Many Requests"),
-            ConnectionError("Network error"),
-            mock_dataset,
-        ]
-
-        open_mfdataset_with_retry(["test.nc"], max_retries=3)
-
-    @patch("xcube_clms.utils.xr.concat")
-    @patch("xcube_clms.utils.xr.open_mfdataset")
-    def test_concat_failure_raises(self, mock_open_mfdataset, mock_concat):
-        mock_dataset1 = MagicMock()
-        mock_dataset2 = MagicMock()
-        mock_open_mfdataset.side_effect = [mock_dataset1, mock_dataset2]
-        mock_concat.side_effect = Exception("Concat failed")
-
-        with self.assertRaises(Exception):
-            open_mfdataset_with_retry(["file1.nc", "file2.nc"], batch_size=1)
+    # def test_successful_opening_returns_combined_dataset(self):
+    #     result = open_mfdataset_with_retry(self.test_files, batch_size=2)
+    #
+    #     self.assertIsInstance(result, xr.Dataset)
+    #     self.assertIn("temperature", result.variables)
+    #     self.assertEqual(len(result.time), 30)
+    #
+    # def test_empty_paths_list_raises_error(self):
+    #     with self.assertRaises(RuntimeError) as context:
+    #         open_mfdataset_with_retry([])
+    #
+    #     self.assertIn("No datasets could be opened", str(context.exception))
+    #
+    # def test_nonexistent_files_raises_error_after_retries(self):
+    #     fake_paths = ["/nonexistent/file1.nc", "/nonexistent/file2.nc"]
+    #
+    #     with self.assertRaises(Exception):
+    #         open_mfdataset_with_retry(fake_paths, max_retries=2)
+    #
+    # @patch("xcube_clms.utils.xr.concat")
+    # @patch("xcube_clms.utils.xr.open_mfdataset")
+    # def test_rate_limit_error_triggers_longer_delay(
+    #     self, mock_open_mfdataset, mock_concat
+    # ):
+    #     mock_dataset = MagicMock()
+    #     mock_open_mfdataset.side_effect = [
+    #         Exception("429 Too Many Requests"),
+    #         ConnectionError("Network error"),
+    #         mock_dataset,
+    #     ]
+    #
+    #     with patch("xcube_clms.utils.time.sleep") as mock_sleep:
+    #         open_mfdataset_with_retry(["test.nc"], max_retries=3)
+    #
+    #         mock_sleep.assert_called()
+    #         sleep_delay = mock_sleep.call_args[0][0]
+    #         self.assertGreater(sleep_delay, 1.0)
+    #
+    # @patch("xcube_clms.utils.xr.concat")
+    # @patch("xcube_clms.utils.xr.open_mfdataset")
+    # def test_max_retries_parameter_is_respected(self, mock_open_mfdataset, mock_concat):
+    #     mock_dataset = MagicMock()
+    #     mock_open_mfdataset.side_effect = [
+    #         Exception("429 Too Many Requests"),
+    #         ConnectionError("Network error"),
+    #         mock_dataset,
+    #     ]
+    #
+    #     with self.assertRaises(Exception):
+    #         open_mfdataset_with_retry(["test.nc"], max_retries=2)
+    #
+    #     mock_dataset = MagicMock()
+    #     mock_open_mfdataset.side_effect = [
+    #         Exception("429 Too Many Requests"),
+    #         ConnectionError("Network error"),
+    #         mock_dataset,
+    #     ]
+    #
+    #     open_mfdataset_with_retry(["test.nc"], max_retries=3)
+    #
+    # @patch("xcube_clms.utils.xr.concat")
+    # @patch("xcube_clms.utils.xr.open_mfdataset")
+    # def test_concat_failure_raises(self, mock_open_mfdataset, mock_concat):
+    #     mock_dataset1 = MagicMock()
+    #     mock_dataset2 = MagicMock()
+    #     mock_open_mfdataset.side_effect = [mock_dataset1, mock_dataset2]
+    #     mock_concat.side_effect = Exception("Concat failed")
+    #
+    #     with self.assertRaises(Exception):
+    #         open_mfdataset_with_retry(["file1.nc", "file2.nc"], batch_size=1)

@@ -1,3 +1,12 @@
+## Changes in 1.3.0
+
+* Removed `LEGACY` product handler as the CLMS API has now moved the data
+  to CDSE and does not have any `LEGACY` products.
+* Added `CDSE` product handler
+* Improved the store instantiation to be done instantly instead of requesting
+  all
+  the metadata of dataset catalogue during init.
+
 ## Changes in 1.2.0
 
 * Added exponential backoff strategy when using

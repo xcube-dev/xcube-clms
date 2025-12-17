@@ -29,11 +29,11 @@ from xcube.core.store import DatasetDescriptor, new_data_store
 from xcube.util.jsonschema import JsonObjectSchema
 
 from xcube_clms.constants import DATA_ID_SEPARATOR, DATA_STORE_ID
+from xcube_clms.product_handlers.eea import EeaProductHandler
 
 
 class ClmsDataStoreTest(unittest.TestCase):
     def setUp(self):
-        self.url = "https://land.copernicus.eu/api"
         self.mock_credentials = {
             "client_id": "",
             "ip_range": None,
@@ -45,20 +45,23 @@ class ClmsDataStoreTest(unittest.TestCase):
             "user_id": "",
         }
         self.eea_data_id = "clc-backbone-2021|CLMS_CLCplus_RASTER_2021"
-        self.legacy_data_id = "daily-surface-soil-moisture-v1.0"
+        self.cdse_data_id = "daily-surface-soil-moisture-v1.0"
+
+        # Comment these lines when running pytest vcr in record mode and add
+        # the actual credentials for recording the pytest
+        mock_jwt_encode_patcher = patch(
+            "xcube_clms.api_token_handler.jwt.encode")
+        self.mock_jwt_encode = mock_jwt_encode_patcher.start()
+
         self.store = new_data_store(
             DATA_STORE_ID,
             credentials=self.mock_credentials,
             cache_store_params={"root": "preload_clms_cache"},
         )
 
-        # Comment these lines when running pytest vcr in record mode
-        mock_jwt_encode_patcher = patch("xcube_clms.api_token_handler.jwt.encode")
-        self.mock_jwt_encode = mock_jwt_encode_patcher.start()
-
     def tearDown(self):
         patch.stopall()
-        self.store = None
+        # self.store = None
 
     @pytest.mark.vcr
     def test_get_data_types(self):
@@ -80,8 +83,10 @@ class ClmsDataStoreTest(unittest.TestCase):
     def test_get_data_ids(self):
         data_ids = list(self.store.get_data_ids())
         self.assertTrue(len(data_ids) > 0)
-        self.assertTrue(len([i for i in data_ids if DATA_ID_SEPARATOR in i]) > 0)
-        self.assertTrue(len([i for i in data_ids if DATA_ID_SEPARATOR not in i]) > 0)
+        self.assertTrue(
+            len([i for i in data_ids if DATA_ID_SEPARATOR in i]) > 0)
+        self.assertTrue(
+            len([i for i in data_ids if DATA_ID_SEPARATOR not in i]) > 0)
 
     @pytest.mark.vcr()
     def test_get_data_ids_with_all_attrs(self):
@@ -106,7 +111,8 @@ class ClmsDataStoreTest(unittest.TestCase):
         # EEA datasets
         result = list(store.get_data_ids(include_attrs=["area"]))
         data_ids_w_included_attrs = [
-            d_a_tuple[1] for d_a_tuple in result if DATA_ID_SEPARATOR in d_a_tuple[0]
+            d_a_tuple[1] for d_a_tuple in result if
+            DATA_ID_SEPARATOR in d_a_tuple[0]
         ]
         self.assertIsNotNone(data_ids_w_included_attrs)
 
@@ -164,7 +170,7 @@ class ClmsDataStoreTest(unittest.TestCase):
         has_data = self.store.has_data(self.eea_data_id)
         self.assertTrue(has_data)
 
-        has_data = self.store.has_data(self.legacy_data_id)
+        has_data = self.store.has_data(self.cdse_data_id)
         self.assertTrue(has_data)
 
         not_has_data = self.store.has_data("invalid_data")
@@ -172,7 +178,8 @@ class ClmsDataStoreTest(unittest.TestCase):
 
     @pytest.mark.vcr()
     def test_get_open_data_params_schema(self):
-        schema = self.store.get_open_data_params_schema(self.eea_data_id + ".zarr")
+        schema = self.store.get_open_data_params_schema(
+            self.eea_data_id + ".zarr")
         self.assertIsInstance(schema, JsonObjectSchema)
         self.assertIn("log_access", schema.properties)
         self.assertIn("cache_size", schema.properties)
@@ -185,7 +192,7 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertIn("drop_variables", schema.properties)
         self.assertIn("consolidated", schema.properties)
 
-        schema = self.store.get_open_data_params_schema(self.legacy_data_id)
+        schema = self.store.get_open_data_params_schema(self.cdse_data_id)
         self.assertIsInstance(schema, JsonObjectSchema)
         self.assertIn("time_range", schema.properties)
 
@@ -208,60 +215,67 @@ class ClmsDataStoreTest(unittest.TestCase):
         self.assertIn("tile_size", schema.properties)
 
     @pytest.mark.vcr()
-    @patch("xcube_clms.store.new_data_store")
-    def test_open_data(self, mock_new_data_store):
-        mock_data_store = MagicMock()
-        mock_data_store.has_data.return_value = True
+    @patch("xcube_clms.store.ProductHandler.guess")
+    def test_open_data(self, mock_guess):
+        mock_handler = MagicMock()
+
         mock_dataset = xr.Dataset(
             {
                 "temperature": (("time", "x", "y"), np.random.rand(5, 5, 5)),
                 "precipitation": (("time", "x", "y"), np.random.rand(5, 5, 5)),
             }
         )
-        mock_data_store.open_data.return_value = mock_dataset
-        mock_new_data_store.return_value = mock_data_store
-        store = new_data_store(
-            DATA_STORE_ID,
-            credentials=self.mock_credentials,
-            cache_store_params={"root": "preload_clms_cache"},
-        )
-        dataset = store.open_data(
-            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010"
+
+        mock_handler.open_data.return_value = mock_dataset
+        mock_guess.return_value = mock_handler
+
+        self.store.has_data = MagicMock(return_value=True)
+
+        dataset = self.store.open_data(
+            "daily-surface-soil-moisture-v1.0",
+            time_range=("2024-01-01", "2024-01-02"),
         )
 
-        self.assertIsInstance(dataset, xr.Dataset)
-        self.assertCountEqual(["temperature", "precipitation"], list(dataset.data_vars))
-        self.assertEqual(dataset["temperature"].shape, (5, 5, 5))
-        self.assertEqual(dataset["precipitation"].shape, (5, 5, 5))
-        mock_new_data_store.assert_called_once_with(
-            "file", root="preload_clms_cache", max_depth=2
+        assert isinstance(dataset, xr.Dataset)
+        assert set(dataset.data_vars) == {"temperature", "precipitation"}
+        assert dataset["temperature"].shape == (5, 5, 5)
+        assert dataset["precipitation"].shape == (5, 5, 5)
+
+        mock_guess.assert_called_with(
+            "daily-surface-soil-moisture-v1.0",
+            self.store._datasets_info,
+            self.store.cache_store,
+            self.store.credentials,
         )
-        mock_data_store.open_data.assert_called_once_with(
-            data_id="imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010",
-            opener_id=None,
+
+        mock_handler.open_data.assert_called_with(
+            "daily-surface-soil-moisture-v1.0",
+            time_range=("2024-01-01", "2024-01-02"),
         )
 
     @pytest.mark.vcr()
-    @patch("xcube_clms.product_handlers.eea.get_extracted_component")
-    @patch("xcube_clms.product_handler.ClmsApiTokenHandler")
-    def test_preload_data(self, mock_token_handler, mock_get_extracted_component):
-        mock_token_handler.api_token = "mock_token"
+    @patch("xcube_clms.store.ProductHandler.guess")
+    def test_preload_data(self, mock_guess):
+        data_id = "tree-cover-density-2015|TCD_2015_100m_eu_03035_d04_Full"
 
-        mock_get_extracted_component.side_effect = [
-            {"id": "dummy"},  # has_data() call
-            {"id": "data_id"},
-            {"id": "product_id"},
-        ]
+        self.store.has_data = MagicMock(return_value=True)
 
-        cache_data_store = self.store.preload_data(
-            "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010",
+        mock_handler = MagicMock(spec=EeaProductHandler)
+
+        mock_preloaded_store = MagicMock()
+        mock_handler.preload_data.return_value = mock_preloaded_store
+
+        mock_guess.return_value = mock_handler
+
+        result = self.store.preload_data(data_id)
+
+        assert result is mock_preloaded_store
+
+        mock_guess.assert_called_once_with(
+            data_id,
+            self.store._datasets_info,
+            self.store.cache_store,
+            self.store.credentials,
         )
-        self.assertEqual(
-            {
-                "imperviousness-classified-change-2015-2018|IMCC_1518_020m_is_03035_v010": {
-                    "item": {"id": "data_id"},
-                    "product": {"id": "product_id"},
-                }
-            },
-            cache_data_store.preload_handle.data_id_maps,
-        )
+
+        mock_handler.preload_data.assert_called_once_with(data_id)

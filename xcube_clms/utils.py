@@ -21,14 +21,12 @@
 
 import re
 import tempfile
-import time
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Final, Literal, Optional, Union
 from urllib.parse import urlencode
 
 import fsspec
-import numpy as np
 import requests
 import xarray as xr
 from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
@@ -57,7 +55,6 @@ from .constants import (
 _RESULTS = "Results/"
 _GEO_FILE_EXTS = (".tif", ".tiff")
 _PORTAL_TYPE = {"portal_type": "DataSet"}
-_FULL_SCHEMA = "fullobjects"
 _ORIGINAL_FILENAME_KEY = "orig_filename"
 _NAME_KEY = "name"
 _FILENAME_KEY = "filename"
@@ -204,13 +201,19 @@ def build_api_url(
         A complete API URL string.
     """
     params = {}
+    _FULL_SCHEMA = "fullobjects"
     if datasets_request:
         params = _PORTAL_TYPE
+        # params["metadata_fields"] = [
+        #     UID_KEY,
+        #     ID_KEY,
+        #     CLMS_DATA_ID_KEY,
+        # ]
         params[_FULL_SCHEMA] = "1"
     if extra_params:
         params.update(extra_params)
     if params:
-        query_params = urlencode(params)
+        query_params = urlencode(params, doseq=True)
         return f"{url}/{api_endpoint}/?{query_params}"
     return f"{url}/{api_endpoint}"
 
@@ -299,9 +302,8 @@ def fetch_all_datasets() -> list[dict[str, Any]]:
     """
     LOG.info(f"Fetching datasets metadata from {CLMS_API_URL}")
     datasets_info = []
-    response_data = make_api_request(
-        build_api_url(CLMS_API_URL, SEARCH_ENDPOINT, datasets_request=True)
-    )
+    url = build_api_url(CLMS_API_URL, SEARCH_ENDPOINT, datasets_request=True)
+    response_data = make_api_request(url)
     while True:
         response = get_response_of_type(response_data, "json")
         datasets_info.extend(response.get(ITEMS_KEY, []))
@@ -319,7 +321,10 @@ def get_extracted_component(
     item_type: Literal["item", "product"] = "product",
 ) -> dict[str, Any] | None:
     """Extracts either an item or product from the list of datasets
-    available
+    available.
+
+    Product: The whole schema of the data product offering.
+    Item: Schema to download one specific file.
 
     Args:
         datasets_info: Complete list of metadata of all datasets from CLMS API.
@@ -340,15 +345,7 @@ def get_extracted_component(
                 clms_data_product_id, dataset_filename = data_id.split(
                     DATA_ID_SEPARATOR
                 )
-                # return [
-                #     item
-                #     for product in datasets_info
-                #     if product[CLMS_DATA_ID_KEY] == clms_data_product_id
-                #     for item in product.get(DOWNLOADABLE_FILES_KEY, {}).get(
-                #         ITEMS_KEY, []
-                #     )
-                #     if item.get("file") == dataset_filename
-                # ]
+
                 matching_items = []
 
                 for product in datasets_info:
@@ -659,130 +656,39 @@ def detect_format(url):
         return "unknown"
 
 
-def open_mfdataset_with_retry(
-    paths: list[str],
-    engine: str = "netcdf4",
-    batch_size: int = 20,
-    max_retries: int = 10,
-    base_delay: float = 1.0,
-    max_delay: float = 300.0,
-    backoff_factor: float = 2.5,
-    **kwargs,
-) -> xr.Dataset | list[xr.Dataset]:
-    """
-    Open multiple files with xarray.open_mfdataset with robust error handling
-    for rate limiting and network issues.
-    """
-
-    def exponential_backoff(attempt: int) -> float:
-        delay = min(base_delay * (backoff_factor**attempt), max_delay)
-        jitter = delay * np.random.random()
-        return delay + jitter
-
-    def open_batch_with_retry(
-        batch_paths: list[str], current_batch_size: int
-    ) -> xr.Dataset | None:
-        for attempt in range(max_retries):
-            try:
-                LOG.debug(
-                    f"Attempting to open batch of {len(batch_paths)} files (attempt {attempt + 1}/{max_retries})"
-                )
-
-                ds = xr.open_mfdataset(batch_paths, engine=engine, **kwargs)
-                LOG.debug(f"Successfully opened batch of {len(batch_paths)} files")
-                new_batch_size = min(current_batch_size + 2, batch_size * 2)
-                return ds, new_batch_size
-
-            except Exception as e:
-                LOG.warning(f"Attempt {attempt + 1} failed: {type(e).__name__}: {e}")
-
-                if attempt == max_retries - 1:
-                    LOG.error(f"All {max_retries} attempts failed for batch")
-                    new_batch_size = max(current_batch_size // 2, 1)
-                    raise e
-
-                delay = exponential_backoff(attempt)
-                LOG.debug(f"Waiting {delay:.1f} seconds...")
-
-                time.sleep(delay)
-
-        return None, current_batch_size
-
-    datasets = []
-    total_files = len(paths)
-    batch_size = min(batch_size, total_files)
-    current_batch_size = batch_size
-
-    LOG.debug(f"Processing {total_files} files in batches of {batch_size}")
-
-    i = 0
-    while i < total_files:
-        batch_end = min(i + current_batch_size, total_files)
-        batch_paths = paths[i:batch_end]
-        batch_num = len(datasets) + 1
-
-        LOG.debug(
-            f"Processing batch {batch_num} (files {i + 1}-{batch_end}) with batch size {current_batch_size}"
-        )
-
-        try:
-            ds, current_batch_size = open_batch_with_retry(
-                batch_paths, current_batch_size
-            )
-            if ds is not None:
-                datasets.append(ds)
-                i = batch_end
-
-        except Exception as e:
-            LOG.error(f"Failed to process batch {batch_num}: {str(e)}")
-            current_batch_size = max(current_batch_size // 2, 1)
-            LOG.debug(f"Reducing batch size to {current_batch_size} and retrying")
-            continue
-
-    if not datasets:
-        raise RuntimeError("No datasets could be opened successfully")
-
-    LOG.debug(f"Successfully opened {len(datasets)} batches, combining...")
-
-    try:
-        combined_ds = xr.concat(datasets, dim="time")
-        LOG.debug("Successfully combined all datasets")
-        return combined_ds
-    except Exception as e:
-        raise e
-
-
 def normalize_time_range(time_range):
     """
-    Converts a tuple/list of two dates into a list of 'YYYY-MM-DD' strings.
+    Normalize date/datetime inputs (objects or strings) to 'YYYY-MM-DD'.
+    Preserves None values.
     """
     normalized = []
 
-    for d in time_range:
-        if d is None:
+    for value in time_range:
+        if value is None:
             normalized.append(None)
             continue
 
-        try:
-            datetime.strptime(d, "%Y-%m-%d")
-            normalized.append(d)
+        if isinstance(value, datetime):
+            normalized.append(value.date().isoformat())
             continue
-        except ValueError:
-            pass
 
-        d = d.rstrip("Z")
-
-        try:
-            dt = datetime.strptime(d, "%Y-%m-%dT%H:%M:%S")
-            normalized.append(dt.strftime("%Y-%m-%d"))
+        if isinstance(value, date):
+            normalized.append(value.isoformat())
             continue
-        except ValueError:
-            pass
 
-        try:
-            dt = datetime.fromisoformat(d)
-            normalized.append(dt.strftime("%Y-%m-%d"))
-        except ValueError:
-            raise ValueError(f"Unrecognized date format: {d}")
+        if isinstance(value, str):
+            v = value
+
+            if v.endswith("Z"):
+                v = v[:-1]
+
+            try:
+                dt = datetime.fromisoformat(v)
+                normalized.append(dt.date().isoformat())
+                continue
+            except ValueError:
+                raise ValueError(f"Invalid date string: {value}")
+
+        raise TypeError(f"Expected date, datetime, str, or None; got {type(value)}")
 
     return normalized

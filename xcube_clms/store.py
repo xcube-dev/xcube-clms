@@ -25,7 +25,6 @@ import xarray as xr
 from xcube.core.store import (
     DATASET_TYPE,
     DataDescriptor,
-    DatasetDescriptor,
     DataStore,
     DataStoreError,
     DataTypeLike,
@@ -43,15 +42,13 @@ from xcube.util.jsonschema import (
 
 from .api_token_handler import ClmsApiTokenHandler
 from .constants import (
-    CLMS_DATA_ID_KEY,
-    DATA_ID_SEPARATOR,
     DATASET_DOWNLOAD_INFORMATION,
     DEFAULT_PRELOAD_CACHE_FOLDER,
-    DOWNLOADABLE_FILES_KEY,
     FULL_SOURCE,
     ITEMS_KEY,
     LOG,
-    SUPPORTED_DATASET_SOURCES,
+    EEA,
+    CDSE,
 )
 from .product_handler import ProductHandler
 from .product_handlers import get_prod_handlers
@@ -60,16 +57,17 @@ from .utils import (
     assert_valid_data_type,
     fetch_all_datasets,
     get_extracted_component,
-    normalize_time_range,
 )
 
-_FILE_KEY = "file"
 _CRS_KEY = "coordinateReferenceSystemList"
 _START_TIME_KEY = "temporalExtentStart"
 _END_TIME_KEY = "temporalExtentEnd"
 _DATASET_DOWNLOADABLE = "downloadable_full_dataset"
-_FORMAT_KEY = "format"
-_NAME = "name"
+
+_source_key_map = {
+    EEA.upper(): EEA,
+    CDSE.upper(): CDSE,
+}
 
 
 class ClmsDataStore(DataStore):
@@ -98,7 +96,7 @@ class ClmsDataStore(DataStore):
             f"dataset:zarr:{self.cache_store.protocol}",
             "dataset:netcdf:https",
         )
-        self._datasets_info: list[dict[str, Any]] = fetch_all_datasets()
+        self._datasets_info: list[dict[str, Any]] = []
 
     @classmethod
     def get_data_store_params_schema(cls) -> JsonObjectSchema:
@@ -116,21 +114,26 @@ class ClmsDataStore(DataStore):
             credentials=JsonObjectSchema(
                 dict(**credentials_params),
                 title="CLMS API credentials that can be obtained following "
-                "the steps outlined here. https://eea.github.io/clms-api-docs/authentication.html",
+                "the steps outlined here. "
+                "https://eea.github.io/clms-api-docs/authentication.html",
                 required=("client_id", "user_id", "token_uri", "private_key"),
             ),
             cache_store_id=JsonStringSchema(
                 title="Store ID of cache data store.",
                 description=(
-                    "Store ID of a filesystem-based data store implemented in xcube."
+                    "Store ID of a filesystem-based data store implemented in "
+                    ""
+                    "xcube."
                 ),
                 default="file",
             ),
             cache_store_params=JsonObjectSchema(
                 title="Store parameters of cache data store.",
                 description=(
-                    "Parameters of a filesystem-based data store implemented in xcube. "
-                    "Provide parameters for a file data store if `cache_store_id` is not provided."
+                    "Parameters of a filesystem-based data store implemented "
+                    "in xcube. "
+                    "Provide parameters for a file data store if "
+                    "`cache_store_id` is not provided."
                 ),
                 default=dict(root=DEFAULT_PRELOAD_CACHE_FOLDER),
             ),
@@ -153,73 +156,60 @@ class ClmsDataStore(DataStore):
         data_type: DataTypeLike = None,
         include_attrs: Container[str] | bool = False,
     ) -> Iterator[str | tuple[str, dict[str, Any]]]:
+        if len(self._datasets_info) == 0:
+            self._datasets_info = fetch_all_datasets()
         assert_valid_data_type(data_type)
+        prod_handlers = get_prod_handlers()
+        _api_token_handler = ClmsApiTokenHandler(credentials=self.credentials)
         for item in self._datasets_info:
-            if item[_DATASET_DOWNLOADABLE]:
-                if len(item[DATASET_DOWNLOAD_INFORMATION]) > 0:
-                    dataset_download_info = item[DATASET_DOWNLOAD_INFORMATION][
-                        ITEMS_KEY
-                    ][0]
-                    if dataset_download_info[FULL_SOURCE] == "EEA":
-                        for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
-                            if _FORMAT_KEY in i and i[_FORMAT_KEY] == "Geotiff":
-                                if _FILE_KEY in i and i[_FILE_KEY] != "":
-                                    data_id = f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[_FILE_KEY]}"
-                                    if not include_attrs:
-                                        yield data_id
-                                    elif (
-                                        isinstance(include_attrs, bool)
-                                        and include_attrs
-                                    ):
-                                        yield data_id, i
-                                    elif isinstance(include_attrs, list):
-                                        filtered_attrs = {
-                                            attr: i[attr]
-                                            for attr in include_attrs
-                                            if attr in i
-                                        }
-                                        yield data_id, filtered_attrs
-                    elif (
-                        dataset_download_info[FULL_SOURCE].lower()
-                        in SUPPORTED_DATASET_SOURCES
-                    ):
-                        if dataset_download_info[_NAME].lower() != "raster":
-                            continue
-                        data_id = f"{item['id']}"
-
-                        if not include_attrs:
-                            yield data_id
-                        elif isinstance(include_attrs, bool) and include_attrs:
-                            yield data_id, dataset_download_info
-                        elif isinstance(include_attrs, list):
-                            filtered_attrs = {
-                                attr: dataset_download_info[attr]
-                                for attr in include_attrs
-                                if attr in dataset_download_info
-                            }
-                            yield data_id, filtered_attrs
+            if len(item[DATASET_DOWNLOAD_INFORMATION][ITEMS_KEY]) > 0:
+                dataset_download_info = item[DATASET_DOWNLOAD_INFORMATION][ITEMS_KEY][0]
+                source = dataset_download_info.get(FULL_SOURCE)
+                if not source:
+                    continue
+                handler_key = _source_key_map.get(source)
+                if handler_key is None:
+                    LOG.debug(f"source {source} is not supported.")
+                    continue
+                handler = prod_handlers.get(handler_key)
+                if handler is None:
+                    LOG.debug(f"handler {handler_key} is not supported.")
+                    continue
+                for data_id_and_maybe_attrs in handler(
+                    self._datasets_info, self.cache_store, _api_token_handler
+                ).get_data_id(
+                    data_type=data_type, include_attrs=include_attrs, item=item
+                ):
+                    if include_attrs:
+                        yield (
+                            data_id_and_maybe_attrs[0],
+                            data_id_and_maybe_attrs[1],
+                        )
+                    else:
+                        yield data_id_and_maybe_attrs
 
     def has_data(self, data_id: str, data_type: DataTypeLike = None) -> bool:
-        data_ids = self.list_data_ids()
-        for _data_id in data_ids:
-            if data_ids == _data_id:
-                return True
-        return False
+        if len(self._datasets_info) == 0:
+            self._datasets_info = fetch_all_datasets()
+        return data_id in self.list_data_ids()
 
     def describe_data(
         self, data_id: str, data_type: DataTypeLike = None
     ) -> DataDescriptor:
         assert_valid_data_type(data_type)
-        item = get_extracted_component(self._datasets_info, data_id)
-        crs = item.get(_CRS_KEY, [])
-        time_range = (item.get(_START_TIME_KEY), item.get(_END_TIME_KEY))
-        normalized_time_range = normalize_time_range(time_range)
-        if len(crs) > 1:
-            LOG.warning(
-                f"Expected 1 crs, got {len(crs)}. Outputting the first element."
-            )
-        metadata = dict(time_range=normalized_time_range, crs=crs[0] if crs else None)
-        return DatasetDescriptor(data_id, **metadata)
+        if data_id is None:
+            raise ValueError("Please provide a valid data ID.")
+        if len(self._datasets_info) == 0:
+            self._datasets_info = fetch_all_datasets()
+
+        handler = ProductHandler.guess(
+            data_id,
+            self._datasets_info,
+            self.cache_store,
+            self.credentials,
+        )
+        product = get_extracted_component(self._datasets_info, data_id)
+        return handler.describe_data(data_id=data_id, product=product)
 
     def get_data_opener_ids(
         self, data_id: str = None, data_type: DataTypeLike = None
@@ -231,6 +221,8 @@ class ClmsDataStore(DataStore):
     ) -> JsonObjectSchema:
         if opener_id:
             self._assert_valid_opener_id(opener_id)
+        if len(self._datasets_info) == 0:
+            self._datasets_info = fetch_all_datasets()
         if data_id is not None:
             handler = ProductHandler.guess(
                 data_id,
@@ -245,16 +237,27 @@ class ClmsDataStore(DataStore):
                     self._datasets_info, self.cache_store, self.credentials
                 ).get_open_data_params_schema()
             else:
-                return get_prod_handlers()["legacy"](
-                    self._datasets_info, self.cache_store, self.credentials
-                ).get_open_data_params_schema()
+                _api_token_handler = ClmsApiTokenHandler(credentials=self.credentials)
+                return JsonObjectSchema(
+                    title="Opening parameters for all supported CLMS products "
+                    "except EEA.",
+                    properties={
+                        key: ph(
+                            self._datasets_info,
+                            self.cache_store,
+                            _api_token_handler,
+                        ).get_open_data_params_schema()
+                        for (key, ph) in get_prod_handlers().items()
+                        if key != EEA.lower()
+                    },
+                )
         else:
-            api_token_handler = ClmsApiTokenHandler(credentials=self.credentials)
+            _api_token_handler = ClmsApiTokenHandler(credentials=self.credentials)
             return JsonObjectSchema(
                 title="Opening parameters for all supported CLMS products.",
                 properties={
                     key: ph(
-                        self._datasets_info, self.cache_store, api_token_handler
+                        self._datasets_info, self.cache_store, _api_token_handler
                     ).get_open_data_params_schema()
                     for (key, ph) in get_prod_handlers().items()
                 },
@@ -275,12 +278,19 @@ class ClmsDataStore(DataStore):
     ) -> xr.Dataset:
         schema = self.get_open_data_params_schema(data_id)
         schema.validate_instance(open_params)
+        if not self.has_data(data_id):
+            raise ValueError(f"The requested data_id {data_id} is invalid.")
         handler = ProductHandler.guess(
             data_id,
             self._datasets_info,
             self.cache_store,
             self.credentials,
         )
+        if isinstance(handler, EeaProductHandler):
+            raise ValueError(
+                f"The requested data_id {data_id} cannot be "
+                f"opened. Try using preload_data()"
+            )
         return handler.open_data(data_id, **open_params)
 
     def search_data(
@@ -305,18 +315,18 @@ class ClmsDataStore(DataStore):
         for data_id in data_ids:
             if not self.has_data(data_id):
                 raise ValueError(f"The requested data_id {data_id} is invalid.")
-            handle = ProductHandler.guess(
+            handler = ProductHandler.guess(
                 data_id,
                 self._datasets_info,
                 self.cache_store,
                 self.credentials,
             )
-            if not isinstance(handle, EeaProductHandler):
+            if not isinstance(handler, EeaProductHandler):
                 raise ValueError(
                     f"The requested data_id {data_id} cannot be "
                     f"preloaded. Try using open_data()"
                 )
-            handlers.append(handle)
+            handlers.append(handler)
 
         # Using the first one, because they are all the same if they are all
         # are valid and need to be preloaded.
@@ -325,7 +335,8 @@ class ClmsDataStore(DataStore):
     def get_preload_data_params_schema(self) -> JsonObjectSchema:
         params = dict(
             blocking=JsonBooleanSchema(
-                title="Option to make the preload_data method blocking or non-blocking",
+                title="Option to make the preload_data method blocking or "
+                "non-blocking",
                 description=(
                     "If True, (the default) if the constructor should wait for"
                     "all preload task to finish before the calling thread"

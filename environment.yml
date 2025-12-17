@@ -12,6 +12,8 @@ dependencies:
   - xcube>=1.9.0
   - zappend
   - h5netcdf
+  - boto3==1.37.3
+  - libgdal-netcdf
   # Testing
   - numpy
   - black
