@@ -145,7 +145,6 @@ class EeaProductHandler(ProductHandler):
                 f"Expected 1 crs, got {len(crs)}. Outputting the first element."
             )
         bboxes = product.get("geographicBoundingBox").get("items")
-        print("bboxes::", bboxes)
 
         xmin = min(float(b["west"]) for b in bboxes)
         ymin = min(float(b["south"]) for b in bboxes)
