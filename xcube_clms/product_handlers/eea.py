@@ -3,26 +3,41 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from math import ceil
-from typing import Any
+from typing import Any, Container, Iterator
 
 import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import DataStoreError, DataTypeLike, PreloadHandle, PreloadState
+from xcube.core.store import (
+    DataDescriptor,
+    DatasetDescriptor,
+    DataStore,
+    DataStoreError,
+    DataTypeLike,
+    PreloadHandle,
+    PreloadState,
+)
 from xcube.util.jsonschema import JsonObjectSchema
 
+from xcube_clms.api_token_handler import ClmsApiTokenHandler
 from xcube_clms.constants import (
     ACCEPT_HEADER,
     CANCELLED,
     CLMS_API_URL,
+    CLMS_DATA_ID_KEY,
     COMPLETE,
     CONTENT_TYPE_HEADER,
+    CRS_KEY,
     DATA_ID_SEPARATOR,
     DOWNLOAD_ENDPOINT,
     DOWNLOAD_FOLDER,
+    DOWNLOADABLE_FILES_KEY,
+    FILE_KEY,
+    FORMAT_KEY,
     ID_KEY,
     ITEM_KEY,
+    ITEMS_KEY,
     LOG,
     PENDING,
     PRODUCT_KEY,
@@ -43,8 +58,8 @@ from xcube_clms.utils import (
     get_extracted_component,
     get_response_of_type,
     get_tile_size,
-    is_valid_data_type,
     make_api_request,
+    normalize_time_range,
 )
 
 _FILE_ID_KEY = "FileID"
@@ -62,6 +77,8 @@ _STATUS_COMPLETE = ["Finished_ok"]
 _STATUS_CANCELLED = ["Cancelled"]
 _UNDEFINED = "UNDEFINED"
 _ZARR_FORMAT = ".zarr"
+_START_TIME_KEY = "temporalExtentStart"
+_END_TIME_KEY = "temporalExtentEnd"
 
 
 class EeaProductHandler(ProductHandler):
@@ -75,9 +92,9 @@ class EeaProductHandler(ProductHandler):
 
     def __init__(
         self,
-        datasets_info=None,
-        cache_store=None,
-        api_token_handler=None,
+        cache_store: DataStore = None,
+        datasets_info: list[dict] = None,
+        api_token_handler: ClmsApiTokenHandler = None,
     ):
         super().__init__(cache_store, datasets_info, api_token_handler)
 
@@ -94,18 +111,52 @@ class EeaProductHandler(ProductHandler):
     def product_type(cls):
         return "eea"
 
-    def has_data(self, data_id: str, data_type: DataTypeLike = None):
-        dataset = None
-        if is_valid_data_type(data_type):
-            if DATA_ID_SEPARATOR in data_id:
-                dataset = get_extracted_component(
-                    self.datasets_info, data_id, item_type="item"
-                )
-            return bool(dataset)
-        return False
-
     def get_open_data_params_schema(self, data_id: str = None) -> JsonObjectSchema:
         return self.cache_store.get_open_data_params_schema(data_id)
+
+    def get_data_id(
+        self,
+        data_type: DataTypeLike = None,
+        include_attrs: Container[str] | bool = False,
+        item: dict = None,
+    ) -> Iterator[str | tuple[str, dict[str, Any]]]:
+        for i in item[DOWNLOADABLE_FILES_KEY][ITEMS_KEY]:
+            if FORMAT_KEY in i and i[FORMAT_KEY] == "Geotiff":
+                if FILE_KEY in i and i[FILE_KEY] != "":
+                    data_id = (
+                        f"{item[CLMS_DATA_ID_KEY]}{DATA_ID_SEPARATOR}{i[FILE_KEY]}"
+                    )
+                    if not include_attrs:
+                        yield data_id
+                    elif isinstance(include_attrs, bool) and include_attrs:
+                        yield data_id, i
+                    elif isinstance(include_attrs, list):
+                        filtered_attrs = {
+                            attr: i[attr] for attr in include_attrs if attr in i
+                        }
+                        yield data_id, filtered_attrs
+
+    def describe_data(self, data_id: str, product: dict) -> DataDescriptor:
+        crs = product.get(CRS_KEY, [])
+        time_range = (product.get(_START_TIME_KEY), product.get(_END_TIME_KEY))
+        normalized_time_range = normalize_time_range(time_range)
+        if len(crs) > 1:
+            LOG.warning(
+                f"Expected 1 crs, got {len(crs)}. Outputting the first element."
+            )
+        bboxes = product.get("geographicBoundingBox").get("items")
+
+        xmin = min(float(b["west"]) for b in bboxes)
+        ymin = min(float(b["south"]) for b in bboxes)
+        xmax = max(float(b["east"]) for b in bboxes)
+        ymax = max(float(b["north"]) for b in bboxes)
+
+        bbox = (xmin, ymin, xmax, ymax)
+
+        metadata = dict(
+            time_range=normalized_time_range, crs=crs[0] if crs else None, bbox=bbox
+        )
+        return DatasetDescriptor(data_id, **metadata)
 
     def open_data(
         self,
@@ -122,7 +173,8 @@ class EeaProductHandler(ProductHandler):
             Any: The opened dataset.
 
         Raises:
-            DataStoreError: If the data is not cached and needs to be preloaded first.
+            DataStoreError: If the data is not cached and needs to be
+            preloaded first.
         """
         if not self.cache_store.has_data(data_id):
             raise DataStoreError(
@@ -149,7 +201,6 @@ class EeaProductHandler(ProductHandler):
         Returns:
             PreloadHandle: The preload handle to track and control the process.
         """
-
         self.cleanup = preload_params.get("cleanup", True)
         tile_size = preload_params.get("tile_size", None)
         self.tile_size = get_tile_size(tile_size)
@@ -172,15 +223,16 @@ class EeaProductHandler(ProductHandler):
         )
         return self.cache_store
 
-    def _preload_data(self, handle, data_id):
+    def _preload_data(self, handle: PreloadHandle, data_id: str):
         """Handles the full lifecycle of preloading a single dataset.
 
         This includes initiating the download request, monitoring task status,
         downloading and extracting data, and preprocessing it.
 
         Args:
-            handle (PreloadHandle): The preload handle for managing updates and status.
-            data_id (str): The identifier for the dataset to preload.
+            handle: The preload handle for managing updates
+            and status.
+            data_id: The identifier for the dataset to preload.
         """
         status_event = threading.Event()
 
@@ -206,7 +258,8 @@ class EeaProductHandler(ProductHandler):
                         PreloadState(
                             data_id=data_id,
                             progress=0.4,
-                            message=f"Task ID {task_id}: Download link created. "
+                            message=f"Task ID {task_id}: Download link "
+                            f"created. "
                             f"Downloading and extracting now...",
                         )
                     )
@@ -234,7 +287,8 @@ class EeaProductHandler(ProductHandler):
                     handle.notify(
                         PreloadState(
                             data_id=data_id,
-                            message=f"Task ID {task_id}: Download request was cancelled by the user from "
+                            message=f"Task ID {task_id}: Download request was "
+                            f"cancelled by the user from "
                             "the Land Copernicus UI.",
                         )
                     )
@@ -255,7 +309,8 @@ class EeaProductHandler(ProductHandler):
         # download. Without this, the API throws the following error: Error,
         # the FileID is not valid.
         # We check for path and source based on the API code here:
-        # https://github.com/eea/clms.downloadtool/blob/master/clms/downloadtool/api/services/datarequest_post/post.py#L177-L196
+        # https://github.com/eea/clms.downloadtool/blob/master/clms
+        # /downloadtool/api/services/datarequest_post/post.py#L177-L196
 
         path = item.get(_PATH_KEY, "")
         source = item.get(_SOURCE_KEY, "")
@@ -296,9 +351,9 @@ class EeaProductHandler(ProductHandler):
         )
         response = get_response_of_type(response_data, "json")
         task_ids = response.get(_TASK_IDS_KEY)
-        assert len(task_ids) == 1, (
-            f"Expected API response with 1 task_id, got {len(task_ids)}"
-        )
+        assert (
+            len(task_ids) == 1
+        ), f"Expected API response with 1 task_id, got {len(task_ids)}"
         task_id = task_ids[0].get(_TASK_ID_KEY)
         LOG.debug(f"Download Requested with Task ID : {task_id}")
         return [task_id]
@@ -478,7 +533,7 @@ class EeaProductHandler(ProductHandler):
         if len(files) == 1:
             LOG.debug("Converting the file to zarr format.")
             cache_data_id = self.fs.sep.join([DOWNLOAD_FOLDER, data_id, files[0]])
-            data = self.cache_store.open_data(cache_data_id)
+            data = self.cache_store.open_data(cache_data_id, data_type="dataset")
             new_cache_data_id = data_id + _ZARR_FORMAT
             data = chunk_dataset(
                 data,
@@ -488,18 +543,22 @@ class EeaProductHandler(ProductHandler):
             final_cube = data.rename(
                 dict(band_1=f"{data_id.split(DATA_ID_SEPARATOR)[-1]}")
             )
+
+            for var in final_cube.data_vars:
+                if "grid_mapping" in final_cube[var].encoding:
+                    del final_cube[var].encoding["grid_mapping"]
+
             self.cache_store.write_data(final_cube, new_cache_data_id, replace=True)
         elif len(files) == 0:
             LOG.warn("No files to preprocess!")
         else:
             en_map = self._prepare_merge(files, data_id)
             if not en_map:
-                LOG.error(
+                raise ValueError(
                     "This naming format is not supported. Currently "
                     "only filenames with Eastings and Northings are "
                     "supported."
                 )
-                return
             self._merge_and_save(en_map, data_id)
         if self.cleanup:
             cleanup_dir(
@@ -607,7 +666,7 @@ def has_expired(download_available_time: str) -> bool:
         True if the download window has expired, otherwise False.
     """
     given_time = datetime.fromisoformat(download_available_time)
-    current_time = datetime.now()
+    current_time = datetime.now(tz=given_time.tzinfo)
     if (current_time - given_time) > timedelta(hours=TIME_TO_EXPIRE):
         return True
     else:

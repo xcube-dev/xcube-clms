@@ -20,11 +20,13 @@
 # SOFTWARE.
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Container, Iterator
 
 from xcube.core.store import (
+    DataDescriptor,
     DataOpener,
     DataPreloader,
+    DataStore,
     DataTypeLike,
     PreloadedDataStore,
     PreloadHandle,
@@ -51,9 +53,9 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
 
     def __init__(
         self,
-        cache_store=None,
-        datasets_info=None,
-        api_token_handler=None,
+        cache_store: DataStore = None,
+        datasets_info: list[dict] = None,
+        api_token_handler: ClmsApiTokenHandler = None,
     ):
         self.cache_store = cache_store
         self.datasets_info = datasets_info
@@ -182,23 +184,6 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
         return JsonObjectSchema(additional_properties=False)
 
     @abstractmethod
-    def has_data(self, data_id, data_type: DataTypeLike = None):
-        """Check if the data resource given by *data_id* is
-        available in this store.
-
-        Args:
-            data_id: A data identifier
-            data_type: An optional data type. If given, it will also be
-                checked whether the data is available as the specified
-                type. May be given as type alias name, as a type, or as
-                a :class:`DataType` instance.
-
-        Returns:
-            True, if the data resource is available in this store, False
-            otherwise.
-        """
-
-    @abstractmethod
     def request_download(self, data_id: str) -> list[str]:
         """Requests a download for a given dataset through the CLMS API.
 
@@ -213,7 +198,7 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
 
     @abstractmethod
     def prepare_request(self, data_id: str) -> list[str]:
-        """Prepares the API request for for accessing the dataset requested.
+        """Prepares the API request for accessing the dataset requested.
 
         NOTE: Include authorization headers.
 
@@ -223,3 +208,16 @@ class ProductHandler(DataOpener, DataPreloader, ABC):
         Returns:
             tuple[str, dict]: The URL and headers needed for the request.
         """
+
+    @abstractmethod
+    def get_data_id(
+        self,
+        data_type: DataTypeLike = None,
+        include_attrs: Container[str] | bool = False,
+        item: dict = None,
+    ) -> Iterator[str | tuple[str, dict[str, Any]]]:
+        """"""
+
+    @abstractmethod
+    def describe_data(self, data_id: str, product: dict) -> DataDescriptor:
+        """"""

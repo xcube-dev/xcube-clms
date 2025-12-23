@@ -21,17 +21,16 @@
 
 import re
 import tempfile
-import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Final, Literal, Optional, Union
+from typing import Any, Final, Literal, Optional, TypeAlias, Union
 from urllib.parse import urlencode
 
 import fsspec
-import numpy as np
 import requests
 import xarray as xr
 from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
+from shapely import wkt
 from xcube.core.store import (
     DATASET_TYPE,
     DataStoreError,
@@ -57,7 +56,6 @@ from .constants import (
 _RESULTS = "Results/"
 _GEO_FILE_EXTS = (".tif", ".tiff")
 _PORTAL_TYPE = {"portal_type": "DataSet"}
-_FULL_SCHEMA = "fullobjects"
 _ORIGINAL_FILENAME_KEY = "orig_filename"
 _NAME_KEY = "name"
 _FILENAME_KEY = "filename"
@@ -67,6 +65,7 @@ _PREFERRED_CHUNK_SIZE: Final = 2000
 
 
 ResponseType = Literal["json", "text", "bytes"]
+DateLike: TypeAlias = datetime | date | str
 
 
 # Using the auxiliary functions below from xcube-stac
@@ -204,13 +203,14 @@ def build_api_url(
         A complete API URL string.
     """
     params = {}
+    _FULL_SCHEMA = "fullobjects"
     if datasets_request:
         params = _PORTAL_TYPE
         params[_FULL_SCHEMA] = "1"
     if extra_params:
         params.update(extra_params)
     if params:
-        query_params = urlencode(params)
+        query_params = urlencode(params, doseq=True)
         return f"{url}/{api_endpoint}/?{query_params}"
     return f"{url}/{api_endpoint}"
 
@@ -299,9 +299,8 @@ def fetch_all_datasets() -> list[dict[str, Any]]:
     """
     LOG.info(f"Fetching datasets metadata from {CLMS_API_URL}")
     datasets_info = []
-    response_data = make_api_request(
-        build_api_url(CLMS_API_URL, SEARCH_ENDPOINT, datasets_request=True)
-    )
+    url = build_api_url(CLMS_API_URL, SEARCH_ENDPOINT, datasets_request=True)
+    response_data = make_api_request(url)
     while True:
         response = get_response_of_type(response_data, "json")
         datasets_info.extend(response.get(ITEMS_KEY, []))
@@ -319,7 +318,10 @@ def get_extracted_component(
     item_type: Literal["item", "product"] = "product",
 ) -> dict[str, Any] | None:
     """Extracts either an item or product from the list of datasets
-    available
+    available.
+
+    Product: The whole schema of the data product offering.
+    Item: Schema to download one specific file.
 
     Args:
         datasets_info: Complete list of metadata of all datasets from CLMS API.
@@ -340,15 +342,21 @@ def get_extracted_component(
                 clms_data_product_id, dataset_filename = data_id.split(
                     DATA_ID_SEPARATOR
                 )
-                return [
-                    item
-                    for product in datasets_info
-                    if product[CLMS_DATA_ID_KEY] == clms_data_product_id
-                    for item in product.get(DOWNLOADABLE_FILES_KEY, {}).get(
+
+                matching_items = []
+
+                for product in datasets_info:
+                    if product[CLMS_DATA_ID_KEY] != clms_data_product_id:
+                        continue
+
+                    downloadable_files = product.get(DOWNLOADABLE_FILES_KEY, {}).get(
                         ITEMS_KEY, []
                     )
-                    if item.get("file") == dataset_filename
-                ]
+
+                    for item in downloadable_files:
+                        if item.get("file") == dataset_filename:
+                            matching_items.append(item)
+                return matching_items
 
             for product in datasets_info:
                 if product[CLMS_DATA_ID_KEY] == data_id:
@@ -506,7 +514,8 @@ def download_zip_data(
 
                 else:
                     raise FileNotFoundError(
-                        "No file found in the downloaded zip file to load"
+                        f"No {_GEO_FILE_EXTS} file found in the downloaded zip file to "
+                        f"load"
                     )
 
 
@@ -601,7 +610,7 @@ def cleanup_dir(folder_path: Path | str, fs=None, keep_extension=None):
     LOG.debug("Cleaning up finished")
 
 
-def get_tile_size(tile_size):
+def get_tile_size(tile_size: tuple[int, int] | int | None):
     if tile_size is None:
         tile_size = (_PREFERRED_CHUNK_SIZE, _PREFERRED_CHUNK_SIZE)
     elif isinstance(tile_size, int):
@@ -612,30 +621,7 @@ def get_tile_size(tile_size):
     return tile_size
 
 
-def extract_and_filter_dates(urls, time_range):
-    date_pattern = re.compile(r"(\d{8})")
-
-    start_date = datetime.strptime(time_range[0], "%Y-%m-%d")
-    end_date = datetime.strptime(time_range[1], "%Y-%m-%d")
-
-    dated_urls = []
-    for url in urls:
-        match = date_pattern.search(url)
-        if match:
-            date_str = match.group(1)
-            date_obj = datetime.strptime(date_str, "%Y%m%d")
-            dated_urls.append((date_obj, url))
-
-    filtered_sorted = [
-        url
-        for date_obj, url in sorted(dated_urls)
-        if start_date <= date_obj <= end_date
-    ]
-
-    return filtered_sorted
-
-
-def detect_format(url):
+def detect_format(url: str):
     if url.endswith(".nc"):
         return "netcdf"
     elif url.endswith((".tif", ".tiff")):
@@ -644,83 +630,62 @@ def detect_format(url):
         return "unknown"
 
 
-def open_mfdataset_with_retry(
-    paths: list[str],
-    engine: str = "netcdf4",
-    batch_size: int = 20,
-    max_retries: int = 10,
-    base_delay: float = 1.0,
-    max_delay: float = 300.0,
-    backoff_factor: float = 2.5,
-    **kwargs,
-) -> xr.Dataset | list[xr.Dataset]:
+def normalize_time_range(time_range: tuple[DateLike, DateLike]):
     """
-    Open multiple files with xarray.open_mfdataset with robust error handling
-    for rate limiting and network issues.
+    Normalize date/datetime inputs (objects or strings) to 'YYYY-MM-DD'.
+    Preserves None values.
     """
+    normalized = []
 
-    def exponential_backoff(attempt: int) -> float:
-        delay = min(base_delay * (backoff_factor**attempt), max_delay)
-        jitter = delay * np.random.random()
-        return delay + jitter
-
-    def open_batch_with_retry(batch_paths: list[str]) -> xr.Dataset | None:
-        for attempt in range(max_retries):
-            try:
-                LOG.debug(
-                    f"Attempting to open batch of {len(batch_paths)} files (attempt {attempt + 1}/{max_retries})"
-                )
-
-                ds = xr.open_mfdataset(batch_paths, engine=engine, **kwargs)
-                LOG.debug(f"Successfully opened batch of {len(batch_paths)} files")
-                return ds
-
-            except Exception as e:
-                LOG.warning(f"Attempt {attempt + 1} failed: {type(e).__name__}: {e}")
-
-                if attempt == max_retries - 1:
-                    LOG.error(f"All {max_retries} attempts failed for batch")
-                    raise e
-
-                delay = exponential_backoff(attempt)
-                LOG.debug(f"Waiting {delay:.1f} seconds...")
-
-                time.sleep(delay)
-
-        return None
-
-    datasets = []
-    total_files = len(paths)
-
-    LOG.debug(f"Processing {total_files} files in batches of {batch_size}")
-
-    for i in range(0, total_files, batch_size):
-        batch_end = min(i + batch_size, total_files)
-        batch_paths = paths[i:batch_end]
-        batch_num = (i // batch_size) + 1
-        total_batches = (total_files + batch_size - 1) // batch_size
-
-        LOG.debug(
-            f"Processing batch {batch_num}/{total_batches} (files {i + 1}-{batch_end})"
-        )
-
-        try:
-            ds = open_batch_with_retry(batch_paths)
-            if ds is not None:
-                datasets.append(ds)
-
-        except Exception as e:
-            LOG.error(f"Failed to process batch {batch_num}: {str(e)}")
+    for value in time_range:
+        if value is None:
+            normalized.append(None)
             continue
 
-    if not datasets:
-        raise RuntimeError("No datasets could be opened successfully")
+        if isinstance(value, datetime):
+            normalized.append(value.date().isoformat())
+            continue
 
-    LOG.debug(f"Successfully opened {len(datasets)} batches, combining...")
+        if isinstance(value, date):
+            normalized.append(value.isoformat())
+            continue
 
-    try:
-        combined_ds = xr.concat(datasets, dim="time")
-        LOG.debug("Successfully combined all datasets")
-        return combined_ds
-    except Exception as e:
-        raise e
+        if isinstance(value, str):
+            v = value
+
+            if v.endswith("Z"):
+                v = v[:-1]
+
+            try:
+                dt = datetime.fromisoformat(v)
+                normalized.append(dt.date().isoformat())
+                continue
+            except ValueError:
+                raise ValueError(f"Invalid date string: {value}")
+
+        raise TypeError(f"Expected date, datetime, str, or None; got {type(value)}")
+
+    return normalized
+
+
+def to_bbox(
+    geometry: tuple[float, float, float, float] | str,
+) -> tuple[float, float, float, float]:
+    if isinstance(geometry, tuple) and is_valid_bbox(geometry):
+        return geometry
+
+    if isinstance(geometry, str):
+        poly = wkt.loads(geometry)
+        return poly.bounds
+
+    raise ValueError(f"Unsupported geometry format: {geometry}, {type(geometry)}")
+
+
+def is_valid_bbox(bbox: tuple[float, float, float, float]) -> bool:
+    minx, miny, maxx, maxy = bbox
+    return (
+        -180 <= minx <= 180
+        and -180 <= maxx <= 180
+        and -90 <= miny <= 90
+        and -90 <= maxy <= 90
+    )
