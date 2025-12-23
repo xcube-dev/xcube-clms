@@ -352,9 +352,9 @@ class EeaProductHandler(ProductHandler):
         )
         response = get_response_of_type(response_data, "json")
         task_ids = response.get(_TASK_IDS_KEY)
-        assert len(task_ids) == 1, (
-            f"Expected API response with 1 task_id, got {len(task_ids)}"
-        )
+        assert (
+            len(task_ids) == 1
+        ), f"Expected API response with 1 task_id, got {len(task_ids)}"
         task_id = task_ids[0].get(_TASK_ID_KEY)
         LOG.debug(f"Download Requested with Task ID : {task_id}")
         return [task_id]

@@ -22,8 +22,7 @@
 from typing import Any, Callable
 
 from xcube.core.store import PreloadedDataStore
-from xcube.core.store.preload import (ExecutorPreloadHandle, PreloadHandle,
-                                      PreloadState)
+from xcube.core.store.preload import ExecutorPreloadHandle, PreloadHandle, PreloadState
 
 from .constants import DOWNLOAD_FOLDER
 from .utils import cleanup_dir

@@ -27,12 +27,10 @@ import pandas as pd
 import xarray as xr
 from xcube.core.store import DataStoreError
 
-from xcube_clms.product_handlers.cdse import (
-    CdseProductHandler,
-    _append_nc_file,
-    _generate_daily_ssm_paths,
-    _get_min_max_date,
-)
+from xcube_clms.product_handlers.cdse import (CdseProductHandler,
+                                              _append_nc_file,
+                                              _generate_daily_ssm_paths,
+                                              _get_min_max_date)
 
 
 class TestCdseProductHandler(unittest.TestCase):

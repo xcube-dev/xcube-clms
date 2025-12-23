@@ -28,19 +28,13 @@ import fsspec
 import numpy as np
 import pytest
 import xarray as xr
-from requests import HTTPError, JSONDecodeError, RequestException, Response, Timeout
+from requests import (HTTPError, JSONDecodeError, RequestException, Response,
+                      Timeout)
 from xcube.core.store import DataStoreError
 
-from xcube_clms.utils import (
-    build_api_url,
-    cleanup_dir,
-    download_zip_data,
-    get_response_of_type,
-    get_spatial_dims,
-    is_valid_bbox,
-    make_api_request,
-    to_bbox,
-)
+from xcube_clms.utils import (build_api_url, cleanup_dir, download_zip_data,
+                              get_response_of_type, get_spatial_dims,
+                              is_valid_bbox, make_api_request, to_bbox)
 
 url = "http://example.com/api"
 

@@ -33,19 +33,13 @@ import xarray as xr
 from rasterio.transform import from_origin
 from xcube.core.store import DataStoreError, PreloadState
 
-from xcube_clms.constants import (
-    CLMS_API_URL,
-    DATA_ID_SEPARATOR,
-    DOWNLOAD_ENDPOINT,
-    TASK_STATUS_ENDPOINT,
-    TIME_TO_EXPIRE,
-)
-from xcube_clms.product_handlers.eea import _UNDEFINED, EeaProductHandler, has_expired
-from xcube_clms.utils import (
-    find_geo_in_dir,
-    get_authorization_header,
-    get_dataset_download_info,
-)
+from xcube_clms.constants import (CLMS_API_URL, DATA_ID_SEPARATOR,
+                                  DOWNLOAD_ENDPOINT, TASK_STATUS_ENDPOINT,
+                                  TIME_TO_EXPIRE)
+from xcube_clms.product_handlers.eea import (_UNDEFINED, EeaProductHandler,
+                                             has_expired)
+from xcube_clms.utils import (find_geo_in_dir, get_authorization_header,
+                              get_dataset_download_info)
 
 LOG = logging.getLogger(__name__)
 

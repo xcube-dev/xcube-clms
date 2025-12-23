@@ -29,13 +29,23 @@ import rasterio
 import rioxarray
 import xarray as xr
 from dotenv import load_dotenv
-from xcube.core.store import (DataDescriptor, DatasetDescriptor, DataStore,
-                              DataStoreError, DataTypeLike)
+from xcube.core.store import (
+    DataDescriptor,
+    DatasetDescriptor,
+    DataStore,
+    DataStoreError,
+    DataTypeLike,
+)
 from xcube.util.jsonschema import JsonDateSchema, JsonObjectSchema
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import (CRS_KEY, DATASET_DOWNLOAD_INFORMATION,
-                                  ITEMS_KEY, LOG, NAME)
+from xcube_clms.constants import (
+    CRS_KEY,
+    DATASET_DOWNLOAD_INFORMATION,
+    ITEMS_KEY,
+    LOG,
+    NAME,
+)
 from xcube_clms.product_handler import ProductHandler
 from xcube_clms.utils import detect_format, normalize_time_range, to_bbox
 
