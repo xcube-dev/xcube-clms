@@ -165,7 +165,7 @@ class CdseProductHandler(ProductHandler):
             for i, path in enumerate(urls):
                 ds = rioxarray.open_rasterio(
                     path,
-                    chunks=dict(y=1000, x=1000),
+                    chunks="auto",
                     driver="netCDF",
                 )
                 final_ds_list.append(ds)
