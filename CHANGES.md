@@ -7,6 +7,8 @@
     * Daily Surface Soil Moisture
 * Improved the store instantiation to be done instantly instead of requesting
   all the metadata of dataset catalogue during init.
+* `describe_data()` now also shows the `bbox` from the metadata the CLMS API
+  returns.
 
 ## Changes in 1.2.0
 
