@@ -44,7 +44,7 @@ class ClmsDataStoreTest(unittest.TestCase):
             "token_uri": "",
             "user_id": "",
         }
-        self.eea_data_id = "clc-backbone-2021|CLMS_CLCplus_RASTER_2021"
+        self.eea_data_id = "forest-type-2015|FTY_2015_100m_eu_03035_d02_Full"
         self.cdse_data_id = "daily-surface-soil-moisture-v1.0"
 
         # Comment these lines when running pytest vcr in record mode and add
@@ -128,7 +128,8 @@ class ClmsDataStoreTest(unittest.TestCase):
             "data_id": self.eea_data_id,
             "data_type": "dataset",
             "crs": "EPSG:3035",
-            "time_range": ("2020-10-01", "2022-03-31"),
+            "time_range": ("2014-01-01", "2016-12-31"),
+            "bbox": [-31.2684, 27.6375, 44.8212, 71.1855],
         }
         self.assertIsInstance(descriptor, DatasetDescriptor)
         self.assertDictEqual(descriptor.to_dict(), expected_descriptor)

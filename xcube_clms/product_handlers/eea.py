@@ -9,29 +9,58 @@ import rasterio
 import rioxarray
 import xarray as xr
 from xcube.core.chunk import chunk_dataset
-from xcube.core.store import (DataDescriptor, DatasetDescriptor, DataStore,
-                              DataStoreError, DataTypeLike, PreloadHandle,
-                              PreloadState)
+from xcube.core.store import (
+    DataDescriptor,
+    DatasetDescriptor,
+    DataStore,
+    DataStoreError,
+    DataTypeLike,
+    PreloadHandle,
+    PreloadState,
+)
 from xcube.util.jsonschema import JsonObjectSchema
 
 from xcube_clms.api_token_handler import ClmsApiTokenHandler
-from xcube_clms.constants import (ACCEPT_HEADER, CANCELLED, CLMS_API_URL,
-                                  CLMS_DATA_ID_KEY, COMPLETE,
-                                  CONTENT_TYPE_HEADER, CRS_KEY,
-                                  DATA_ID_SEPARATOR, DOWNLOAD_ENDPOINT,
-                                  DOWNLOAD_FOLDER, DOWNLOADABLE_FILES_KEY,
-                                  FILE_KEY, FORMAT_KEY, ID_KEY, ITEM_KEY,
-                                  ITEMS_KEY, LOG, PENDING, PRODUCT_KEY,
-                                  RETRY_TIMEOUT, TASK_STATUS_ENDPOINT,
-                                  TIME_TO_EXPIRE, UID_KEY)
+from xcube_clms.constants import (
+    ACCEPT_HEADER,
+    CANCELLED,
+    CLMS_API_URL,
+    CLMS_DATA_ID_KEY,
+    COMPLETE,
+    CONTENT_TYPE_HEADER,
+    CRS_KEY,
+    DATA_ID_SEPARATOR,
+    DOWNLOAD_ENDPOINT,
+    DOWNLOAD_FOLDER,
+    DOWNLOADABLE_FILES_KEY,
+    FILE_KEY,
+    FORMAT_KEY,
+    ID_KEY,
+    ITEM_KEY,
+    ITEMS_KEY,
+    LOG,
+    PENDING,
+    PRODUCT_KEY,
+    RETRY_TIMEOUT,
+    TASK_STATUS_ENDPOINT,
+    TIME_TO_EXPIRE,
+    UID_KEY,
+)
 from xcube_clms.preload import ClmsPreloadHandle
 from xcube_clms.product_handler import ProductHandler
-from xcube_clms.utils import (build_api_url, cleanup_dir, download_zip_data,
-                              find_easting_northing, get_authorization_header,
-                              get_dataset_download_info,
-                              get_extracted_component, get_response_of_type,
-                              get_tile_size, make_api_request,
-                              normalize_time_range)
+from xcube_clms.utils import (
+    build_api_url,
+    cleanup_dir,
+    download_zip_data,
+    find_easting_northing,
+    get_authorization_header,
+    get_dataset_download_info,
+    get_extracted_component,
+    get_response_of_type,
+    get_tile_size,
+    make_api_request,
+    normalize_time_range,
+)
 
 _FILE_ID_KEY = "FileID"
 _DOWNLOAD_URL_KEY = "DownloadURL"
@@ -115,7 +144,19 @@ class EeaProductHandler(ProductHandler):
             LOG.warning(
                 f"Expected 1 crs, got {len(crs)}. Outputting the first element."
             )
-        metadata = dict(time_range=normalized_time_range, crs=crs[0] if crs else None)
+        bboxes = product.get("geographicBoundingBox").get("items")
+        print("bboxes::", bboxes)
+
+        xmin = min(float(b["west"]) for b in bboxes)
+        ymin = min(float(b["south"]) for b in bboxes)
+        xmax = max(float(b["east"]) for b in bboxes)
+        ymax = max(float(b["north"]) for b in bboxes)
+
+        bbox = (xmin, ymin, xmax, ymax)
+
+        metadata = dict(
+            time_range=normalized_time_range, crs=crs[0] if crs else None, bbox=bbox
+        )
         return DatasetDescriptor(data_id, **metadata)
 
     def open_data(
@@ -183,16 +224,16 @@ class EeaProductHandler(ProductHandler):
         )
         return self.cache_store
 
-    def _preload_data(self, handle, data_id):
+    def _preload_data(self, handle: PreloadHandle, data_id: str):
         """Handles the full lifecycle of preloading a single dataset.
 
         This includes initiating the download request, monitoring task status,
         downloading and extracting data, and preprocessing it.
 
         Args:
-            handle (PreloadHandle): The preload handle for managing updates
+            handle: The preload handle for managing updates
             and status.
-            data_id (str): The identifier for the dataset to preload.
+            data_id: The identifier for the dataset to preload.
         """
         status_event = threading.Event()
 
