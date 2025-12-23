@@ -90,7 +90,7 @@ cassettes, testing can be then performed as usual.
 This data store currently only supports some dataset sources from the CLMS API:
 
 - EEA
-- LEGACY
+- CDSE
 
 NOTE: More dataset sources will be supported in newer versions
 
@@ -116,10 +116,15 @@ the request status, downloading the data, extracting and post-processing it.
 The preload mechanism can be used using
 `.preload_data(*data_ids, **preload_params)` on the CLMS data store instance.
 
-### LEGACY
+### CDSE
 
-For datasets available via the `LEGACY` source, they can be lazily loaded
-directly using `open_data(...)`
+For datasets available via the `CDSE` source, they can be lazily loaded
+directly using `open_data(...)`.
+
+Currently we only support the following dataset(s):
+
+- Daily Surface Soil
+  Moisture (https://land.copernicus.eu/en/products/soil-moisture/daily-surface-soil-moisture-v1.0#general_info)
 
 ## CLMS API
 
