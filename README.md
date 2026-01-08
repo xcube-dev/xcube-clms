@@ -49,7 +49,7 @@ will be installed automatically.
 
 ### Create credentials to access the CLMS API
 
-Accessing the CLMS Api requires an EU account to be registered.
+Accessing the CLMS API requires an EU account to be registered.
 Create the credentials as a `.json` file required for the CLMS API following
 the [documentation](https://eea.github.io/clms-api-docs/authentication.html).
 The credentials will be required during the initialization of the CLMS data
