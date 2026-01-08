@@ -1,4 +1,4 @@
-## Changes in 1.3.1 (in development)
+## Changes in 1.3.1
 
 * Update AWS env variable name to have a suffix `CDSE_` to avoid overiding
   user's existing AWS environment variables. Now the users can either export
