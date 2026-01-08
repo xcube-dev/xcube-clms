@@ -1,6 +1,12 @@
 ## Changes in 1.3.1 (in development)
 
-*
+* Update AWS env variable name to have a suffix `CDSE_` to avoid overiding
+  user's existing AWS environment variables. Now the users can either export
+  via terminal or add the following variables to the `.env` file.
+  ```yaml
+  CDSE_AWS_ACCESS_KEY_ID=<your-access-key>
+  CDSE_AWS_SECRET_ACCESS_KEY=<your-secret-key>
+  ```
 
 ## Changes in 1.3.0
 

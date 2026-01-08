@@ -49,41 +49,26 @@ will be installed automatically.
 
 ### Create credentials to access the CLMS API
 
-Create the credentials as a `json` file required for the CLMS API following
+Accessing the CLMS API requires an EU account to be registered.
+Create the credentials as a `.json` file required for the CLMS API following
 the [documentation](https://eea.github.io/clms-api-docs/authentication.html).
 The credentials will be required during the initialization of the CLMS data
-store. Please follow the instructions in the
-`example/notebooks/CLMSDataStoreTutorial.ipynb`,
-on how to pass the credentials from the `json` file to the store.
+store. Please follow the example notebooks shown on how to pass the credentials
+to the store.
 
-## Testing <a name="testing"></a>
+### Getting S3 credentials for CDSE data access
 
-To run the unit test suite:
+Note, this step is only needed, if the the dataset that you require is hosted on
+the CDSE platform. In order to access these data, the library internally acceses
+[EO data via S3 from CDSE](https://documentation.dataspace.copernicus.eu/APIs/S3.html)
+and one needs
+to [generate S3 credentials](https://documentation.dataspace.copernicus.eu/APIs/S3.html#generate-secrets),
+which are required to be exported or added to `.env` file as shown below.
 
-```bash
-pytest
+```yaml
+  CDSE_AWS_ACCESS_KEY_ID=<your-access-key>
+  CDSE_AWS_SECRET_ACCESS_KEY=<your-secret-key>
 ```
-
-## Some notes on the strategy of unit-testing for some tests
-
-The unit test suite
-uses [pytest-recording](https://pypi.org/project/pytest-recording/) to mock
-https requests via the Python
-library requests. During development an actual HTTP request is performed and the
-responses are saved in cassettes/**.yaml files. During testing, only the
-cassettes/**.yaml files are used without an actual HTTP request. During
-development, to save the responses to cassettes/**.yaml, run:
-
-```bash
-pytest -v -s --record-mode new_episodes
-```
-
-Note that --record-mode new_episodes overwrites all cassettes. If one only wants
-to write cassettes which are not saved already, --record-mode once can be used.
-pytest-recording supports all records modes given
-by [VCR.py](https://vcrpy.readthedocs.io/en/latest/usage.html#record-modes.
-After recording the
-cassettes, testing can be then performed as usual.
 
 ## Additional Notes about the data store
 
@@ -126,11 +111,34 @@ Currently we only support the following dataset(s):
 - Daily Surface Soil
   Moisture (https://land.copernicus.eu/en/products/soil-moisture/daily-surface-soil-moisture-v1.0#general_info)
 
-## CLMS API
+## Testing <a name="testing"></a>
 
-- Requires an EU account to register on the CLMS site.
-- Once registered, the user should create an access token json file as
-  described [here](https://eea.github.io/clms-api-docs/authentication.html)
+To run the unit test suite:
+
+```bash
+pytest
+```
+
+## Some notes on the strategy of unit-testing for some tests
+
+The unit test suite
+uses [pytest-recording](https://pypi.org/project/pytest-recording/) to mock
+https requests via the Python
+library requests. During development an actual HTTP request is performed and the
+responses are saved in cassettes/**.yaml files. During testing, only the
+cassettes/**.yaml files are used without an actual HTTP request. During
+development, to save the responses to cassettes/**.yaml, run:
+
+```bash
+pytest -v -s --record-mode new_episodes
+```
+
+Note that --record-mode new_episodes overwrites all cassettes. If one only wants
+to write cassettes which are not saved already, --record-mode once can be used.
+pytest-recording supports all records modes given
+by [VCR.py](https://vcrpy.readthedocs.io/en/latest/usage.html#record-modes.
+After recording the
+cassettes, testing can be then performed as usual.
 
 ## CLMS API issues
 
